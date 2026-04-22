@@ -2,759 +2,1206 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e1a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EnduraIQ">
+<meta name="description" content="AI coaching for endurance athletes. Upload your Garmin data. Get professional coaching insights instantly.">
 <title>EnduraIQ — AI Coaching for Endurance Athletes</title>
-<link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkVuZHVyYUlRIiwKICAic2hvcnRfbmFtZSI6ICJFbmR1cmFJUSIsCiAgInN0YXJ0X3VybCI6ICIvIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMGEwZTFhIiwKICAidGhlbWVfY29sb3IiOiAiIzBhMGUxYSIsCiAgImljb25zIjogW3sic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhOMlp5QjRiV3h1Y3owaWFIUjBjRG92TDNkM2R5NTNNeTV2Y21jdk1qQXdNQzl6ZG1jaUlIWnBaWGRDYjNnOUlqQWdNQ0F4TURBZ01UQXdJajQ4Y21WamRDQjNhV1IwYUQwaU1UQXdJaUJvWldsbmFIUTlJakV3TUNJZ1ptbHNiRDBpSXpBd1pUVmhNQ0l2UGp4MFpYaDBJSGc5SWpVd0lpQjVQU0kxTlNJZ1ptOXVkQzF6YVhwbFBTSXpNQ0lnWm05dWRDMTNaV2xuYUhROUltSnZiR1FpSUdacGJHdzlJaU13WVRCbE1XRWlJSFJsZUhRdFlXNWphRzl5UFNKdGFXUmtiR1VpUGtVOEwzUmxlSFErUEM5emRtYysiLCAic2l6ZXMiOiAiMTkyeDE5MiIsICJ0eXBlIjogImltYWdlL3N2Zyt4bWwifV0KfQ==">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
-  :root {
-    --bg: #0a0e1a;
-    --bg-2: #10162a;
-    --bg-3: #182038;
-    --accent: #00e5a0;
-    --accent-dim: #00b880;
-    --accent-glow: rgba(0, 229, 160, 0.15);
-    --text: #e8eef7;
-    --text-dim: #8a95a8;
-    --border: #1e2844;
-    --danger: #ef4444;
-    --warning: #f59e0b;
-    --zone1: #3b82f6;
-    --zone2: #22c55e;
-    --zone3: #eab308;
-    --zone4: #f97316;
-    --zone5: #ef4444;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
-  html, body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  body::before {
-    content: '';
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-glow), transparent),
-      radial-gradient(ellipse 60% 50% at 80% 100%, rgba(59, 130, 246, 0.08), transparent);
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .app { position: relative; z-index: 1; min-height: 100vh; }
-
-  /* NAV */
-  .nav {
-    position: sticky;
-    top: 0;
-    background: rgba(10, 14, 26, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--border);
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    z-index: 100;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    font-size: 18px;
-    letter-spacing: -0.5px;
-  }
-
-  .logo-mark {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    color: var(--bg);
-    font-size: 16px;
-  }
-
-  .nav-tabs {
-    display: flex;
-    gap: 4px;
-    background: var(--bg-2);
-    border-radius: 10px;
-    padding: 4px;
-  }
-
-  .nav-tab {
-    padding: 8px 14px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-dim);
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    transition: all 0.2s;
-  }
-
-  .nav-tab.active {
-    background: var(--bg-3);
-    color: var(--text);
-  }
-
-  /* MAIN CONTAINER */
-  .container {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 24px 20px 100px;
-  }
-
-  .page { display: none; animation: fadeIn 0.3s; }
-  .page.active { display: block; }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* HERO */
-  .hero {
-    text-align: center;
-    padding: 40px 0 32px;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 20px;
-    background: rgba(0, 229, 160, 0.08);
-    border: 1px solid rgba(0, 229, 160, 0.3);
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 500;
-    margin-bottom: 16px;
-  }
-
-  h1 {
-    font-size: clamp(28px, 7vw, 40px);
-    font-weight: 800;
-    letter-spacing: -1.5px;
-    line-height: 1.1;
-    margin-bottom: 14px;
-  }
-
-  h1 .accent { color: var(--accent); }
-
-  .subhead {
-    color: var(--text-dim);
-    font-size: 15px;
-    line-height: 1.5;
-    max-width: 480px;
-    margin: 0 auto;
-  }
-
-  /* UPLOAD ZONE */
-  .upload-zone {
-    background: var(--bg-2);
-    border: 2px dashed var(--border);
-    border-radius: 16px;
-    padding: 40px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.25s;
-    margin-bottom: 20px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .upload-zone:hover, .upload-zone.dragover {
-    border-color: var(--accent);
-    background: rgba(0, 229, 160, 0.04);
-  }
-
-  .upload-icon {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 16px;
-    border-radius: 50%;
-    background: var(--bg-3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: var(--accent);
-  }
-
-  .upload-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-
-  .upload-hint {
-    color: var(--text-dim);
-    font-size: 13px;
-  }
-
-  .upload-input { display: none; }
-
-  /* CARDS */
-  .card {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 16px;
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 16px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .card-title {
-    font-size: 13px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 600;
-  }
-
-  .workout-name {
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    margin-bottom: 8px;
-  }
-
-  .workout-stats {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    color: var(--text-dim);
-    font-size: 13px;
-  }
-
-  .workout-stats span { display: flex; align-items: center; gap: 4px; }
-
-  .type-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    background: var(--bg-3);
-    margin-top: 4px;
-  }
-
-  .type-badge.easy { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-  .type-badge.aerobic { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  .type-badge.tempo { background: rgba(234, 179, 8, 0.15); color: #eab308; }
-  .type-badge.threshold { background: rgba(249, 115, 22, 0.15); color: #f97316; }
-  .type-badge.vo2 { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-
-  /* ZONE BARS */
-  .zone-bars { margin: 16px 0; }
-
-  .zone-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .zone-label {
-    width: 90px;
-    font-size: 12px;
-    color: var(--text-dim);
-    font-weight: 500;
-  }
-
-  .zone-label-sub { color: var(--text); font-size: 11px; margin-left: 4px; }
-
-  .zone-track {
-    flex: 1;
-    height: 10px;
-    background: var(--bg-3);
-    border-radius: 5px;
-    overflow: hidden;
-  }
-
-  .zone-fill {
-    height: 100%;
-    border-radius: 5px;
-    transition: width 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .zone-pct {
-    width: 36px;
-    text-align: right;
-    font-size: 12px;
-    color: var(--text-dim);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* METRIC BOX */
-  .metric-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .metric-box {
-    background: var(--bg-3);
-    border-radius: 10px;
-    padding: 12px 14px;
-  }
-
-  .metric-label {
-    font-size: 11px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-  }
-
-  .metric-value {
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-  }
-
-  .metric-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-
-  /* COACH BOX */
-  .coach-box {
-    background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(0, 229, 160, 0.02));
-    border: 1px solid rgba(0, 229, 160, 0.2);
-    border-left: 3px solid var(--accent);
-    border-radius: 10px;
-    padding: 14px 16px;
-    margin-top: 16px;
-  }
-
-  .coach-label {
-    font-size: 11px;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-
-  .coach-text { font-size: 14px; line-height: 1.55; }
-
-  /* VERDICT */
-  .verdict {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 500;
-    margin-top: 10px;
-  }
-
-  .verdict.good { background: rgba(34, 197, 94, 0.1); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2); }
-  .verdict.ok { background: rgba(234, 179, 8, 0.1); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.2); }
-  .verdict.bad { background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
-
-  /* EMPTY STATE */
-  .empty {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-dim);
-  }
-
-  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
-
-  /* SETUP PAGE */
-  .section-title {
-    font-size: 12px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 700;
-    margin: 24px 0 10px;
-  }
-
-  .input-group { margin-bottom: 14px; }
-
-  .input-group label {
-    display: block;
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-bottom: 6px;
-  }
-
-  .input-group input {
-    width: 100%;
-    padding: 12px 14px;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 15px;
-    font-family: inherit;
-    outline: none;
-  }
-
-  .input-group input:focus { border-color: var(--accent); }
-
-  .btn {
-    display: inline-block;
-    padding: 12px 22px;
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: inherit;
-    width: 100%;
-    transition: transform 0.15s;
-  }
-
-  .btn:active { transform: scale(0.98); }
-  .btn.secondary { background: var(--bg-3); color: var(--text); }
-
-  .zone-display {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
-    margin-top: 10px;
-    font-size: 13px;
-  }
-
-  .zone-line {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    color: var(--text-dim);
-  }
-
-  .zone-line span:first-child { color: var(--text); font-weight: 500; }
-
-  /* HISTORY */
-  .history-item {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    transition: border-color 0.2s;
-  }
-
-  .history-item:hover { border-color: var(--accent); }
-
-  .history-meta { flex: 1; }
-
-  .history-title {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 4px;
-  }
-
-  .history-sub {
-    color: var(--text-dim);
-    font-size: 12px;
-    display: flex;
-    gap: 10px;
-  }
-
-  .history-sport {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    background: var(--bg-3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    margin-right: 12px;
-  }
-
-  /* TRENDS */
-  .trend-chart {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-
-  .trend-title {
-    font-size: 13px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
-
-  .sport-split {
-    display: flex;
-    gap: 6px;
-    height: 8px;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 8px;
-  }
-
-  .sport-bar {
-    height: 100%;
-    transition: width 1s;
-  }
-
-  .split-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 10px;
-    font-size: 12px;
-    color: var(--text-dim);
-  }
-
-  .legend-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-    margin-right: 5px;
-  }
-
-  /* STAT ROW */
-  .stat-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-  }
-
-  .stat-row:last-child { border-bottom: none; }
-
-  .stat-row-label { color: var(--text-dim); }
-
-  .stat-row-value {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* LOADING */
-  .loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 30px;
-    color: var(--text-dim);
-  }
-
-  .spinner {
-    width: 20px; height: 20px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* FOOTER */
-  .footer {
-    text-align: center;
-    padding: 40px 20px 20px;
-    color: var(--text-dim);
-    font-size: 12px;
-  }
-
-  /* Responsive */
-  @media (max-width: 480px) {
-    .nav-tabs { font-size: 12px; }
-    .nav-tab { padding: 7px 10px; }
-    .container { padding: 16px 14px 80px; }
-    .metric-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .metric-value { font-size: 18px; }
-    .workout-name { font-size: 18px; }
-  }
-
-  @media (max-width: 380px) {
-    .logo span { display: none; }
-    .metric-grid { grid-template-columns: 1fr; }
-  }
+:root {
+  --bg: #0a0e1a;
+  --bg-2: #0f1528;
+  --bg-3: #161e36;
+  --bg-4: #1e2844;
+  --accent: #00e5a0;
+  --accent-dim: #00b880;
+  --accent-soft: rgba(0, 229, 160, 0.1);
+  --accent-border: rgba(0, 229, 160, 0.3);
+  --text: #ecf0f8;
+  --text-dim: #8892a8;
+  --text-mute: #5a6478;
+  --border: #1e2844;
+  --border-light: #2a3556;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #22c55e;
+  --info: #3b82f6;
+  --z1: #3b82f6;
+  --z2: #22c55e;
+  --z3: #eab308;
+  --z4: #f97316;
+  --z5: #ef4444;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% -10%, var(--accent-soft), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(59, 130, 246, 0.06), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app { position: relative; z-index: 1; min-height: 100vh; }
+
+/* NAV */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10, 14, 26, 0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+}
+
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 800; font-size: 17px; letter-spacing: -0.6px;
+  cursor: pointer; user-select: none;
+}
+
+.logo-mark {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; color: var(--bg); font-size: 15px;
+  box-shadow: 0 2px 12px rgba(0, 229, 160, 0.3);
+}
+
+.nav-tabs {
+  display: flex; gap: 2px;
+  background: var(--bg-2);
+  border-radius: 10px; padding: 3px;
+  border: 1px solid var(--border);
+}
+
+.nav-tab {
+  padding: 7px 14px; border-radius: 7px;
+  font-size: 13px; font-weight: 600; color: var(--text-dim);
+  cursor: pointer; background: transparent; border: none;
+  transition: all 0.15s; font-family: inherit;
+  white-space: nowrap;
+}
+
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { background: var(--bg-4); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
+
+.nav-user {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px 6px 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+.nav-user:hover { border-color: var(--border-light); }
+
+.user-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; color: var(--bg);
+}
+
+.container {
+  max-width: 1100px; margin: 0 auto; padding: 32px 24px 100px;
+}
+
+.page { display: none; animation: fadeIn 0.25s ease-out; }
+.page.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═════ LANDING ═════ */
+.hero {
+  text-align: center; padding: 60px 20px 40px;
+  position: relative;
+}
+
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 20px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: 12px; font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.hero-badge .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+h1.hero-h {
+  font-size: clamp(32px, 6vw, 60px);
+  font-weight: 900; letter-spacing: -2px;
+  line-height: 1.02; margin-bottom: 18px;
+}
+
+h1.hero-h .grad {
+  background: linear-gradient(135deg, var(--accent) 0%, #00c4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+  color: var(--text-dim);
+  font-size: clamp(15px, 2vw, 18px);
+  line-height: 1.55; max-width: 580px; margin: 0 auto 32px;
+}
+
+.hero-cta {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 24px;
+  background: var(--accent); color: var(--bg);
+  border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 20px rgba(0, 229, 160, 0.25);
+  white-space: nowrap;
+}
+
+.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0, 229, 160, 0.35); }
+.btn:active { transform: scale(0.98); }
+
+.btn.ghost {
+  background: var(--bg-3); color: var(--text);
+  box-shadow: none; border: 1px solid var(--border-light);
+}
+.btn.ghost:hover { background: var(--bg-4); box-shadow: none; transform: none; }
+
+.btn.full { width: 100%; }
+
+/* FEATURE GRID */
+.features {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 40px 0;
+}
+
+.feature {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.feature:hover { border-color: var(--border-light); transform: translateY(-2px); }
+
+.feature-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--accent-soft);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 14px;
+}
+
+.feature-title { font-weight: 700; font-size: 16px; margin-bottom: 6px; letter-spacing: -0.3px; }
+.feature-desc { color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+
+/* COMPARISON */
+.compare {
+  display: grid; gap: 12px; margin: 40px 0;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.compare-card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px;
+}
+.compare-card.highlight {
+  background: linear-gradient(135deg, rgba(0,229,160,0.06), transparent);
+  border-color: var(--accent-border);
+}
+.compare-icon { font-size: 24px; margin-bottom: 10px; }
+.compare-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.compare-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-4); color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.compare-card.highlight .compare-tag { background: var(--accent); color: var(--bg); }
+.compare-desc { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+
+/* SECTION */
+.section-title {
+  font-size: clamp(24px, 3.5vw, 32px); font-weight: 800;
+  letter-spacing: -1px; margin-bottom: 8px;
+}
+.section-sub { color: var(--text-dim); font-size: 15px; margin-bottom: 28px; max-width: 560px; }
+
+/* ═════ AUTH ═════ */
+.auth-wrap {
+  max-width: 420px; margin: 60px auto 0;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 18px; padding: 32px;
+}
+
+.auth-title {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
+  margin-bottom: 6px; text-align: center;
+}
+.auth-sub { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; text-align: center; }
+
+.field { margin-bottom: 14px; }
+.field label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.field input, .field select {
+  width: 100%; padding: 12px 14px;
+  background: var(--bg-3); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  font-size: 15px; font-family: inherit; outline: none;
+  transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--text-mute); }
+
+.auth-switch {
+  text-align: center; margin-top: 18px; color: var(--text-dim); font-size: 13px;
+}
+.auth-switch a { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
+
+/* ═════ DASHBOARD ═════ */
+.dash-header {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+}
+
+.dash-greeting h2 {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
+}
+.dash-greeting p { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px;
+  position: relative; overflow: hidden;
+}
+
+.stat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent); opacity: 0;
+  transition: opacity 0.3s;
+}
+.stat-card:hover::before { opacity: 1; }
+
+.stat-label {
+  font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: 0.8px; font-weight: 600; margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+}
+.stat-unit { font-size: 14px; color: var(--text-dim); font-weight: 500; margin-left: 3px; }
+.stat-meta { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+.stat-meta.good { color: var(--success); }
+.stat-meta.bad { color: var(--danger); }
+
+/* ═════ CARDS ═════ */
+.panel {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px;
+  margin-bottom: 16px;
+}
+
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px;
+}
+
+.panel-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.panel-sub { font-size: 12px; color: var(--text-dim); }
+
+/* ═════ UPLOAD ═════ */
+.upload-zone {
+  background: var(--bg-2);
+  border: 2px dashed var(--border-light);
+  border-radius: 18px;
+  padding: 50px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(0, 229, 160, 0.03);
+}
+
+.upload-zone.dragover::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at center, var(--accent-soft), transparent 70%);
+}
+
+.upload-icon {
+  width: 64px; height: 64px; margin: 0 auto 18px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--accent);
+  position: relative; z-index: 1;
+}
+
+.upload-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; position: relative; z-index: 1; }
+.upload-hint { color: var(--text-dim); font-size: 14px; position: relative; z-index: 1; }
+.upload-input { display: none; }
+
+/* ═════ ANALYSIS ═════ */
+.analysis-card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 18px; overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.analysis-hero {
+  padding: 24px 24px 20px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.workout-sport {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px; border-radius: 20px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.workout-name {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.6px; margin-bottom: 12px;
+}
+
+.workout-meta {
+  display: flex; gap: 18px; flex-wrap: wrap; color: var(--text-dim); font-size: 14px;
+}
+
+.workout-meta span { display: flex; align-items: center; gap: 5px; }
+
+.type-badge {
+  display: inline-block; padding: 6px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+  margin-top: 12px;
+}
+.type-easy { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.type-aerobic { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.type-tempo { background: rgba(234, 179, 8, 0.15); color: #facc15; }
+.type-threshold { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.type-vo2 { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+.analysis-body { padding: 24px; }
+
+/* CHART SECTIONS */
+.chart-section {
+  margin-bottom: 24px;
+}
+.chart-section:last-child { margin-bottom: 0; }
+
+.chart-label {
+  font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: 0.8px; font-weight: 700; margin-bottom: 14px;
+}
+
+/* DONUT CHART */
+.donut-wrap {
+  display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+}
+
+.donut {
+  width: 160px; height: 160px; flex-shrink: 0; position: relative;
+}
+
+.donut-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+}
+
+.donut-value { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+.donut-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+.donut-legend {
+  flex: 1; min-width: 200px;
+}
+
+.legend-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.legend-label { display: flex; align-items: center; gap: 10px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+.legend-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ZONE BARS (alternate viz) */
+.zone-bars { margin-top: 6px; }
+
+.zone-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+
+.zone-info { width: 120px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.zone-chip { width: 24px; text-align: center; font-weight: 700; font-size: 11px; padding: 2px 0; border-radius: 4px; color: #fff; font-family: 'JetBrains Mono', monospace; }
+.zone-name { color: var(--text-dim); }
+
+.zone-track {
+  flex: 1; height: 10px; background: var(--bg-3); border-radius: 5px; overflow: hidden;
+}
+.zone-fill { height: 100%; border-radius: 5px; transition: width 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.zone-pct { width: 40px; text-align: right; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* METRIC GRID */
+.metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  background: var(--bg-3); border-radius: 12px; padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+.metric-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px; }
+.metric-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+.metric-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+/* DRIFT VIZ */
+.drift-viz {
+  background: var(--bg-3); border-radius: 12px; padding: 16px; margin-bottom: 14px;
+}
+
+.drift-bars {
+  display: flex; align-items: flex-end; gap: 3px; height: 60px; margin: 12px 0;
+}
+.drift-bar {
+  flex: 1; background: linear-gradient(to top, var(--accent), var(--accent-dim));
+  border-radius: 2px 2px 0 0; min-height: 6px;
+  position: relative;
+  transition: height 1s ease-out;
+}
+
+/* VERDICT */
+.verdict {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-radius: 12px;
+  font-size: 14px; font-weight: 500;
+  margin-top: 14px;
+}
+.verdict-icon { font-size: 16px; }
+.verdict.good { background: rgba(34, 197, 94, 0.1); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2); }
+.verdict.ok { background: rgba(234, 179, 8, 0.1); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.2); }
+.verdict.bad { background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+
+/* COACH BOX */
+.coach-box {
+  background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(0, 229, 160, 0.02));
+  border: 1px solid var(--accent-border);
+  border-radius: 14px; padding: 18px 20px;
+  margin-top: 18px;
+  position: relative; overflow: hidden;
+}
+
+.coach-box::before {
+  content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+  background: linear-gradient(to bottom, var(--accent), var(--accent-dim));
+}
+
+.coach-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.coach-text { font-size: 14px; line-height: 1.6; color: var(--text); }
+
+/* HISTORY */
+.history-item {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 16px;
+  cursor: pointer; transition: all 0.15s;
+}
+
+.history-item:hover { border-color: var(--border-light); background: var(--bg-3); }
+
+.history-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+
+.history-info { flex: 1; min-width: 0; }
+.history-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; letter-spacing: -0.2px; }
+.history-meta { color: var(--text-dim); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.history-date {
+  font-size: 12px; color: var(--text-mute);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+
+/* EMPTY */
+.empty {
+  text-align: center; padding: 60px 20px; color: var(--text-dim);
+}
+
+.empty-icon {
+  width: 72px; height: 72px; margin: 0 auto 18px;
+  border-radius: 50%; background: var(--bg-3);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; opacity: 0.6;
+}
+
+.empty-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.empty-desc { font-size: 14px; max-width: 320px; margin: 0 auto; }
+
+/* HELP */
+.help-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.help-card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px;
+}
+
+.help-step {
+  display: flex; gap: 14px; margin-bottom: 16px;
+}
+
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--accent-border);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+
+.step-text { font-size: 14px; line-height: 1.55; }
+.step-text strong { color: var(--text); font-weight: 600; }
+
+/* FAQ */
+.faq-item {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 8px;
+  overflow: hidden;
+}
+.faq-q {
+  padding: 16px 18px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; font-size: 14px;
+}
+.faq-q::after {
+  content: '+'; font-size: 20px; color: var(--text-dim);
+  transition: transform 0.2s;
+}
+.faq-item.open .faq-q::after { transform: rotate(45deg); }
+.faq-a {
+  padding: 0 18px; max-height: 0; overflow: hidden;
+  transition: max-height 0.25s, padding 0.25s;
+  color: var(--text-dim); font-size: 13px; line-height: 1.6;
+}
+.faq-item.open .faq-a { padding: 0 18px 18px; max-height: 400px; }
+
+/* TRENDS */
+.line-chart {
+  width: 100%; height: 160px;
+  background: var(--bg-3); border-radius: 12px; padding: 16px;
+  position: relative;
+}
+
+/* MOBILE */
+@media (max-width: 720px) {
+  .nav { padding: 10px 16px; }
+  .nav-tabs { overflow-x: auto; scrollbar-width: none; flex-shrink: 1; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-user span { display: none; }
+  .container { padding: 20px 16px 80px; }
+  .hero { padding: 32px 12px 30px; }
+  .donut-wrap { flex-direction: column; align-items: stretch; }
+  .donut { margin: 0 auto; }
+  .analysis-hero, .analysis-body { padding: 20px; }
+  .workout-name { font-size: 20px; }
+  .stat-value { font-size: 22px; }
+}
+
+/* LOADING */
+.loading {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 40px; color: var(--text-dim);
+}
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* TOAST */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-3); border: 1px solid var(--accent-border);
+  color: var(--text); padding: 12px 20px;
+  border-radius: 12px; font-size: 14px; font-weight: 500;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 1000; opacity: 0; pointer-events: none;
+  transition: all 0.25s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 
 <body>
 <div class="app">
 
-<nav class="nav">
-  <div class="logo">
-    <div class="logo-mark">E</div>
-    <span>EnduraIQ</span>
+<!-- NAV -->
+<nav class="nav" id="mainNav" style="display:none;">
+  <div class="nav-inner">
+    <div class="logo" onclick="navigate('dashboard')">
+      <div class="logo-mark">E</div>
+      <span>EnduraIQ</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab" data-page="dashboard">Dashboard</button>
+      <button class="nav-tab" data-page="upload">Analyze</button>
+      <button class="nav-tab" data-page="history">History</button>
+      <button class="nav-tab" data-page="trends">Trends</button>
+      <button class="nav-tab" data-page="help">Help</button>
+    </div>
+    <div class="nav-user" onclick="navigate('settings')">
+      <div class="user-avatar" id="navAvatar">A</div>
+      <span id="navName">Account</span>
+    </div>
   </div>
-  <div class="nav-tabs">
-    <button class="nav-tab active" data-page="analyze">Analyze</button>
-    <button class="nav-tab" data-page="history">History</button>
-    <button class="nav-tab" data-page="trends">Trends</button>
-    <button class="nav-tab" data-page="setup">Setup</button>
+</nav>
+
+<!-- LANDING NAV (logged out) -->
+<nav class="nav" id="landingNav">
+  <div class="nav-inner">
+    <div class="logo" onclick="navigate('landing')">
+      <div class="logo-mark">E</div>
+      <span>EnduraIQ</span>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="navigate('login')">Log in</button>
+      <button class="btn" style="padding: 8px 16px; font-size: 13px;" onclick="navigate('signup')">Get started</button>
+    </div>
   </div>
 </nav>
 
 <div class="container">
 
-  <!-- ANALYZE PAGE -->
-  <div class="page active" id="page-analyze">
-    <div class="hero">
-      <div class="badge">AI coaching that actually coaches</div>
-      <h1>Your Garmin records.<br><span class="accent">We coach.</span></h1>
-      <p class="subhead">Upload a workout CSV from Garmin Connect. Get an instant professional coaching read — what the session was, how it went, and what to do next.</p>
+<!-- ═════════ LANDING PAGE ═════════ -->
+<div class="page active" id="page-landing">
+  <div class="hero">
+    <div class="hero-badge"><span class="dot"></span> AI coaching for endurance athletes</div>
+    <h1 class="hero-h">Your Garmin records.<br><span class="grad">EnduraIQ coaches.</span></h1>
+    <p class="hero-sub">Stop staring at charts. Upload your workout data and get professional-grade coaching analysis in seconds — cardiac drift, zone distribution, race projections, and plain-language insights that tell you exactly what to change.</p>
+    <div class="hero-cta">
+      <button class="btn" onclick="navigate('signup')">Start free →</button>
+      <button class="btn ghost" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">See how it works</button>
+    </div>
+    <p style="color: var(--text-mute); font-size: 13px;">Free forever tier · No credit card · Works with any Garmin</p>
+  </div>
+
+  <div class="features" id="how-it-works">
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">Instant analysis</div>
+      <div class="feature-desc">Upload a Garmin CSV and get professional coaching in under 5 seconds. No waiting. No manual work.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎯</div>
+      <div class="feature-title">LTHR-based zones</div>
+      <div class="feature-desc">Personalized to your physiology, not age formulas. The same system Joe Friel and elite coaches use.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">💓</div>
+      <div class="feature-title">Cardiac drift detection</div>
+      <div class="feature-desc">The single best marker of aerobic fitness. We catch what Strava and Garmin miss.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📊</div>
+      <div class="feature-title">Training load tracking</div>
+      <div class="feature-desc">Acute:chronic workload ratio. Know when you're pushing too hard — before injury hits.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🏁</div>
+      <div class="feature-title">Race projections</div>
+      <div class="feature-desc">Realistic race splits based on your actual fitness data. Updates as you improve.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">💡</div>
+      <div class="feature-title">Coaching that coaches</div>
+      <div class="feature-desc">Plain-language insights. No charts to decode. No "nice run!" Just what to do next.</div>
+    </div>
+  </div>
+
+  <div style="margin-top: 60px;">
+    <div class="section-title">The gap nobody filled</div>
+    <div class="section-sub">Every endurance athlete has the same problem. Tools show data. Nobody tells you what it means.</div>
+    <div class="compare">
+      <div class="compare-card">
+        <div class="compare-icon">⌚</div>
+        <div class="compare-name">Garmin</div>
+        <div class="compare-tag">Records</div>
+        <div class="compare-desc">Great at capturing data. Doesn't interpret or coach.</div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-icon">🧡</div>
+        <div class="compare-name">Strava</div>
+        <div class="compare-tag">Summarizes</div>
+        <div class="compare-desc">"Nice run!" — thanks for nothing. No actionable insight.</div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-icon">📈</div>
+        <div class="compare-name">TrainingPeaks</div>
+        <div class="compare-tag">Displays</div>
+        <div class="compare-desc">Numbers without meaning — unless you pay $300/mo for a coach.</div>
+      </div>
+      <div class="compare-card highlight">
+        <div class="compare-icon">🧠</div>
+        <div class="compare-name">EnduraIQ</div>
+        <div class="compare-tag">Coaches</div>
+        <div class="compare-desc">Analyzes your data. Tells you what to change. Like a coach, at $15/mo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-top: 60px; padding: 40px 20px;">
+    <h2 style="font-size: clamp(24px, 4vw, 36px); font-weight: 800; letter-spacing: -1px; margin-bottom: 14px;">Stop guessing. Start being coached.</h2>
+    <p style="color: var(--text-dim); font-size: 15px; max-width: 480px; margin: 0 auto 24px;">Free tier includes unlimited analysis and 7-day history. Upgrade when you need long-term tracking and race planning.</p>
+    <button class="btn" onclick="navigate('signup')">Create free account →</button>
+  </div>
+</div>
+
+<!-- ═════════ SIGNUP / LOGIN ═════════ -->
+<div class="page" id="page-signup">
+  <div class="auth-wrap">
+    <h2 class="auth-title">Create your account</h2>
+    <p class="auth-sub">Free forever · No credit card required</p>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="signupName" placeholder="Alex" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="signupEmail" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="signupPassword" placeholder="At least 6 characters" />
+    </div>
+    <button class="btn full" onclick="doSignup()">Create account</button>
+    <p class="auth-switch">Already have an account? <a onclick="navigate('login')">Log in</a></p>
+  </div>
+</div>
+
+<div class="page" id="page-login">
+  <div class="auth-wrap">
+    <h2 class="auth-title">Welcome back</h2>
+    <p class="auth-sub">Log in to your EnduraIQ account</p>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="Your password" />
+    </div>
+    <button class="btn full" onclick="doLogin()">Log in</button>
+    <p class="auth-switch">Don't have an account? <a onclick="navigate('signup')">Sign up</a></p>
+  </div>
+</div>
+
+<!-- ═════════ DASHBOARD ═════════ -->
+<div class="page" id="page-dashboard">
+  <div class="dash-header">
+    <div class="dash-greeting">
+      <h2 id="greetingText">Welcome back</h2>
+      <p id="greetingSub">Here's your training overview</p>
+    </div>
+    <button class="btn" onclick="navigate('upload')">+ Analyze workout</button>
+  </div>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Recent Workouts</div>
+        <div class="panel-sub" id="recentCount">No workouts yet</div>
+      </div>
+      <button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="navigate('history')">View all →</button>
+    </div>
+    <div id="dashRecent"></div>
+  </div>
+
+  <div class="panel" id="fitnessTrend">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Fitness Trend</div>
+        <div class="panel-sub">Your cardiac drift over time — lower is better</div>
+      </div>
+    </div>
+    <div id="trendChart"></div>
+  </div>
+</div>
+
+<!-- ═════════ UPLOAD / ANALYZE ═════════ -->
+<div class="page" id="page-upload">
+  <div class="section-title">Analyze Workout</div>
+  <p class="section-sub">Upload a Garmin Connect CSV export and get an instant coaching read. Need help exporting? <a style="color: var(--accent); cursor: pointer;" onclick="navigate('help')">See the guide</a>.</p>
+
+  <label class="upload-zone" id="uploadZone">
+    <div class="upload-icon">↑</div>
+    <div class="upload-title">Drop your Garmin CSV here</div>
+    <div class="upload-hint">or tap to choose a file</div>
+    <input type="file" class="upload-input" id="fileInput" accept=".csv">
+  </label>
+
+  <div id="analysisOutput"></div>
+</div>
+
+<!-- ═════════ HISTORY ═════════ -->
+<div class="page" id="page-history">
+  <div class="section-title">Workout History</div>
+  <p class="section-sub" id="historyCount">Every workout you've analyzed</p>
+  <div id="historyList"></div>
+</div>
+
+<!-- ═════════ TRENDS ═════════ -->
+<div class="page" id="page-trends">
+  <div class="section-title">Training Trends</div>
+  <p class="section-sub">Patterns across your recent training. The bigger picture Strava and Garmin don't show you.</p>
+  <div id="trendsContent"></div>
+</div>
+
+<!-- ═════════ HELP ═════════ -->
+<div class="page" id="page-help">
+  <div class="section-title">Help & Getting Started</div>
+  <p class="section-sub">Everything you need to get the most out of EnduraIQ.</p>
+
+  <div class="help-grid">
+    <div class="help-card">
+      <div class="panel-title" style="margin-bottom: 16px;">📥 Exporting from Garmin Connect</div>
+      <div class="help-step">
+        <div class="step-num">1</div>
+        <div class="step-text">Go to <strong>connect.garmin.com</strong> on your computer (browser, not the app).</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">2</div>
+        <div class="step-text">Click <strong>Activities</strong> in the left menu, then click any workout you want to analyze.</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">3</div>
+        <div class="step-text">Click the <strong>⚙️ gear icon</strong> in the top right of the activity page.</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">4</div>
+        <div class="step-text">Click <strong>Export to CSV</strong>. A file downloads to your computer.</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">5</div>
+        <div class="step-text">Go to <strong>Analyze</strong> and upload the CSV. Done.</div>
+      </div>
     </div>
 
-    <label class="upload-zone" id="uploadZone">
-      <div class="upload-icon">↑</div>
-      <div class="upload-title">Drop your Garmin CSV here</div>
-      <div class="upload-hint">or tap to choose a file</div>
-      <input type="file" class="upload-input" id="fileInput" accept=".csv">
-    </label>
-
-    <div id="analysisOutput"></div>
+    <div class="help-card">
+      <div class="panel-title" style="margin-bottom: 16px;">🎯 Finding your LTHR</div>
+      <p style="color: var(--text-dim); font-size: 14px; line-height: 1.6; margin-bottom: 14px;">
+        LTHR (Lactate Threshold Heart Rate) is the single most important number for accurate zones. Here's the standard 30-minute field test:
+      </p>
+      <div class="help-step">
+        <div class="step-num">1</div>
+        <div class="step-text">Warm up thoroughly for <strong>15 minutes</strong>.</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">2</div>
+        <div class="step-text">Do a <strong>30-minute solo time trial</strong> at the hardest pace you can sustain (run or bike, separately).</div>
+      </div>
+      <div class="help-step">
+        <div class="step-num">3</div>
+        <div class="step-text">Your <strong>average HR for the last 20 minutes</strong> is your LTHR.</div>
+      </div>
+      <p style="color: var(--text-dim); font-size: 13px; line-height: 1.6; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+        Don't want to test? Use defaults in Settings. You can update anytime.
+      </p>
+    </div>
   </div>
 
-  <!-- HISTORY PAGE -->
-  <div class="page" id="page-history">
-    <h1 style="font-size: 28px; margin-bottom: 20px;">Workout History</h1>
-    <div id="historyList"></div>
+  <div style="margin-top: 40px;">
+    <div class="panel-title" style="margin-bottom: 16px;">Frequently asked questions</div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What sports does EnduraIQ support?</div><div class="faq-a">Currently: running, cycling, and pool swimming. More sports (rowing, cross-country skiing) coming later.</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Do I need a Garmin watch?</div><div class="faq-a">Any GPS watch that exports CSV works (Garmin, COROS, Polar, Suunto). Garmin is most common and best supported.</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Is my data private?</div><div class="faq-a">Yes. Your data is stored in your browser and on your account only. We never share or sell training data. Ever.</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">How accurate are the analyses?</div><div class="faq-a">The analysis uses published sports science: Friel LTHR zones, cardiac drift research, and acute:chronic workload ratio models. Accuracy depends on the accuracy of YOUR inputs — especially your LTHR. Test it properly.</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What's the difference between EnduraIQ and Strava?</div><div class="faq-a">Strava is a social network for activities. EnduraIQ is a coaching analyzer. We do one thing — turn your data into coaching decisions. They do many things, but coaching isn't one of them.</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Can I connect Garmin automatically?</div><div class="faq-a">Currently no — you upload CSV files manually. Automatic Garmin sync is coming in v2 (pending Garmin developer approval).</div></div>
+
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What does it cost?</div><div class="faq-a">Free tier: unlimited analyses, 7 days of history. Pro ($15/mo, launching later): unlimited history, trend analysis, race planning, injury risk scoring, automatic Garmin sync.</div></div>
   </div>
+</div>
 
-  <!-- TRENDS PAGE -->
-  <div class="page" id="page-trends">
-    <h1 style="font-size: 28px; margin-bottom: 20px;">Training Trends</h1>
-    <div id="trendsContent"></div>
-  </div>
+<!-- ═════════ SETTINGS ═════════ -->
+<div class="page" id="page-settings">
+  <div class="section-title">Profile & Zones</div>
+  <p class="section-sub">Your LTHR is the most important number in training. Set it accurately.</p>
 
-  <!-- SETUP PAGE -->
-  <div class="page" id="page-setup">
-    <h1 style="font-size: 28px; margin-bottom: 8px;">Your Profile</h1>
-    <p class="subhead" style="text-align: left; max-width: none; margin-bottom: 24px;">Your lactate threshold heart rate (LTHR) is the single most important number for accurate zone-based training. Set yours below.</p>
-
-    <div class="section-title">Heart Rate Zones</div>
-
-    <div class="input-group">
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom: 16px;">Heart Rate Zones</div>
+    <div class="field">
       <label>Run LTHR (bpm)</label>
-      <input type="number" id="runLthr" placeholder="e.g. 180" />
+      <input type="number" id="runLthrInput" placeholder="e.g. 180" />
     </div>
-
-    <div class="input-group">
+    <div class="field">
       <label>Bike LTHR (bpm)</label>
-      <input type="number" id="bikeLthr" placeholder="e.g. 165" />
+      <input type="number" id="bikeLthrInput" placeholder="e.g. 165" />
     </div>
-
-    <button class="btn" onclick="saveProfile()">Save Profile</button>
-
+    <button class="btn" onclick="saveProfile()">Save zones</button>
     <div id="zonePreview"></div>
-
-    <div class="section-title">How to find your LTHR</div>
-    <div class="card" style="margin-top: 8px;">
-      <p style="font-size: 14px; line-height: 1.6; color: var(--text-dim);">
-        <strong style="color: var(--text);">30-minute field test:</strong><br>
-        1. Warm up for 15 minutes<br>
-        2. Run or ride all-out for 30 minutes (solo, steady pace)<br>
-        3. Your average HR during the LAST 20 minutes ≈ your LTHR<br><br>
-        Do this separately for running and cycling — they typically differ by 5-10 bpm.
-      </p>
-    </div>
-
-    <div class="section-title">About</div>
-    <div class="card">
-      <p style="font-size: 14px; line-height: 1.6; color: var(--text-dim);">
-        EnduraIQ uses evidence-based sports science: <strong style="color: var(--text);">Friel LTHR zones, cardiac drift analysis, and acute:chronic workload monitoring.</strong> No fluff. Just signal.
-      </p>
-    </div>
   </div>
 
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom: 16px;">Account</div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="accountName" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="accountEmail" readonly style="opacity: 0.5;" />
+    </div>
+    <button class="btn ghost" onclick="doLogout()">Log out</button>
+  </div>
 </div>
 
-<div class="footer">
-  Built by an endurance athlete, for endurance athletes.
 </div>
+
+<div id="toast" class="toast"></div>
 
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════
-// STATE MANAGEMENT
+// STATE
 // ═══════════════════════════════════════════════════════════
-
 let state = {
+  user: null,
   profile: { runLthr: 170, bikeLthr: 165 },
   workouts: [],
 };
 
-async function loadState() {
-  try {
-    const p = await window.storage.get('profile');
-    if (p) state.profile = JSON.parse(p.value);
-    const w = await window.storage.get('workouts');
-    if (w) state.workouts = JSON.parse(w.value);
-  } catch (e) {}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-async function saveState() {
-  try {
-    await window.storage.set('profile', JSON.stringify(state.profile));
-    await window.storage.set('workouts', JSON.stringify(state.workouts));
-  } catch (e) {}
+// ═══════════════════════════════════════════════════════════
+// STORAGE (local-first approach)
+// ═══════════════════════════════════════════════════════════
+// We use localStorage for now. Later this becomes Supabase/API calls.
+
+function storageGet(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+}
+function storageSet(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+function loadUser() {
+  const u = storageGet('eiq_user');
+  if (u) {
+    state.user = u;
+    state.profile = storageGet(`eiq_profile_${u.email}`) || { runLthr: 170, bikeLthr: 165 };
+    state.workouts = storageGet(`eiq_workouts_${u.email}`) || [];
+    return true;
+  }
+  return false;
+}
+
+function saveProfileData() {
+  if (!state.user) return;
+  storageSet(`eiq_profile_${state.user.email}`, state.profile);
+}
+
+function saveWorkouts() {
+  if (!state.user) return;
+  storageSet(`eiq_workouts_${state.user.email}`, state.workouts);
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
+function doSignup() {
+  const name = document.getElementById('signupName').value.trim();
+  const email = document.getElementById('signupEmail').value.trim().toLowerCase();
+  const password = document.getElementById('signupPassword').value;
+  if (!name || !email || !password) return toast('Please fill all fields');
+  if (password.length < 6) return toast('Password must be at least 6 characters');
+  if (!email.includes('@')) return toast('Invalid email');
+
+  // Simple local auth — in production this would be Supabase
+  const users = storageGet('eiq_users') || {};
+  if (users[email]) return toast('Account already exists — try logging in');
+
+  users[email] = { name, email, password, created: new Date().toISOString() };
+  storageSet('eiq_users', users);
+
+  state.user = { name, email };
+  storageSet('eiq_user', state.user);
+  state.profile = { runLthr: 170, bikeLthr: 165 };
+  state.workouts = [];
+  saveProfileData();
+  saveWorkouts();
+
+  toast(`Welcome, ${name}!`);
+  showApp();
+  navigate('dashboard');
+}
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const users = storageGet('eiq_users') || {};
+  if (!users[email]) return toast('No account found with that email');
+  if (users[email].password !== password) return toast('Wrong password');
+
+  state.user = { name: users[email].name, email };
+  storageSet('eiq_user', state.user);
+  state.profile = storageGet(`eiq_profile_${email}`) || { runLthr: 170, bikeLthr: 165 };
+  state.workouts = storageGet(`eiq_workouts_${email}`) || [];
+
+  toast(`Welcome back, ${users[email].name}`);
+  showApp();
+  navigate('dashboard');
+}
+
+function doLogout() {
+  localStorage.removeItem('eiq_user');
+  state.user = null;
+  state.workouts = [];
+  showLanding();
+  navigate('landing');
+}
+
+function showApp() {
+  document.getElementById('mainNav').style.display = 'block';
+  document.getElementById('landingNav').style.display = 'none';
+  // Update nav
+  const initial = state.user.name[0].toUpperCase();
+  document.getElementById('navAvatar').textContent = initial;
+  document.getElementById('navName').textContent = state.user.name.split(' ')[0];
+}
+
+function showLanding() {
+  document.getElementById('mainNav').style.display = 'none';
+  document.getElementById('landingNav').style.display = 'block';
 }
 
 // ═══════════════════════════════════════════════════════════
 // ROUTING
 // ═══════════════════════════════════════════════════════════
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(`page-${page}`);
+  if (target) target.classList.add('active');
+
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.page === page);
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'history') renderHistory();
+  if (page === 'trends') renderTrends();
+  if (page === 'settings') renderSettings();
+}
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const page = tab.dataset.page;
-    document.getElementById(`page-${page}`).classList.add('active');
-    if (page === 'history') renderHistory();
-    if (page === 'trends') renderTrends();
-    if (page === 'setup') renderProfile();
-  });
+  tab.addEventListener('click', () => navigate(tab.dataset.page));
 });
 
 // ═══════════════════════════════════════════════════════════
-// ZONE CALCULATIONS
+// ZONES & CSV PARSING (same core as before, cleaned up)
 // ═══════════════════════════════════════════════════════════
-
 function getZones(lthr) {
   return {
     Z1: [0, Math.floor(lthr * 0.81)],
@@ -772,33 +1219,26 @@ function classifyZone(hr, zones) {
   return 'Z5';
 }
 
-// ═══════════════════════════════════════════════════════════
-// CSV PARSING
-// ═══════════════════════════════════════════════════════════
-
 function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
+  const r = []; let c = ''; let q = false;
   for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') inQuotes = !inQuotes;
-    else if (c === ',' && !inQuotes) { result.push(current); current = ''; }
-    else current += c;
+    const ch = line[i];
+    if (ch === '"') q = !q;
+    else if (ch === ',' && !q) { r.push(c); c = ''; }
+    else c += ch;
   }
-  result.push(current);
-  return result.map(s => s.trim().replace(/^"|"$/g, ''));
+  r.push(c);
+  return r.map(s => s.trim().replace(/^"|"$/g, ''));
 }
 
 function parseCSV(text) {
-  const lines = text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim());
-  return lines.map(parseCSVLine);
+  return text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim()).map(parseCSVLine);
 }
 
 function detectActivity(text) {
-  const first = text.split('\n')[0].toLowerCase();
-  if (first.includes('swim stroke') || first.includes('swolf') || first.includes('lengths')) return 'swim';
-  if (first.includes('avg speed') && !first.includes('avg pace')) return 'bike';
+  const f = text.split('\n')[0].toLowerCase();
+  if (f.includes('swim stroke') || f.includes('swolf') || f.includes('lengths')) return 'swim';
+  if (f.includes('avg speed') && !f.includes('avg pace')) return 'bike';
   return 'run';
 }
 
@@ -812,9 +1252,7 @@ function paceToMin(p) {
 function findCol(header, matchers) {
   for (let i = 0; i < header.length; i++) {
     const h = header[i].toLowerCase().replace(/\n/g, ' ');
-    for (const m of matchers) {
-      if (h.includes(m)) return i;
-    }
+    for (const m of matchers) if (h.includes(m)) return i;
   }
   return -1;
 }
@@ -822,35 +1260,31 @@ function findCol(header, matchers) {
 function parseRunCSV(text) {
   const rows = parseCSV(text);
   if (rows.length < 2) return null;
-  const header = rows[0];
-  const hrIdx = findCol(header, ['avg hr']);
-  const paceIdx = findCol(header, ['avg pace']);
-  const distIdx = findCol(header, ['distance']);
-  const timeIdx = findCol(header, ['cumulative time']);
-  const cadIdx = findCol(header, ['avg run cadence']);
-
+  const h = rows[0];
+  const hrIdx = findCol(h, ['avg hr']);
+  const paceIdx = findCol(h, ['avg pace']);
+  const distIdx = findCol(h, ['distance']);
+  const timeIdx = findCol(h, ['cumulative time']);
+  const cadIdx = findCol(h, ['avg run cadence']);
   if (hrIdx === -1) return null;
-
-  const laps = [];
-  let summary = null;
+  const laps = []; let summary = null;
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const label = row[0];
+    const r = rows[i]; const label = r[0];
     if (label.toLowerCase() === 'summary') {
       summary = {
-        avgHr: parseInt(row[hrIdx]) || 0,
-        time: timeIdx >= 0 ? row[timeIdx] : '',
-        distance: parseFloat(row[distIdx]) || 0,
-        avgPace: paceIdx >= 0 ? row[paceIdx] : '',
-        avgCad: cadIdx >= 0 ? parseInt(row[cadIdx]) || 0 : 0,
+        avgHr: parseInt(r[hrIdx]) || 0,
+        time: timeIdx >= 0 ? r[timeIdx] : '',
+        distance: parseFloat(r[distIdx]) || 0,
+        avgPace: paceIdx >= 0 ? r[paceIdx] : '',
+        avgCad: cadIdx >= 0 ? parseInt(r[cadIdx]) || 0 : 0,
       };
       continue;
     }
-    const hr = parseInt(row[hrIdx]);
+    const hr = parseInt(r[hrIdx]);
     if (hr > 0) {
       const lap = { lap: label, hr };
-      if (paceIdx >= 0) { lap.pace = row[paceIdx]; lap.paceMin = paceToMin(row[paceIdx]); }
-      if (cadIdx >= 0) lap.cad = parseInt(row[cadIdx]) || 0;
+      if (paceIdx >= 0) { lap.pace = r[paceIdx]; lap.paceMin = paceToMin(r[paceIdx]); }
+      if (cadIdx >= 0) lap.cad = parseInt(r[cadIdx]) || 0;
       laps.push(lap);
     }
   }
@@ -860,32 +1294,28 @@ function parseRunCSV(text) {
 function parseBikeCSV(text) {
   const rows = parseCSV(text);
   if (rows.length < 2) return null;
-  const header = rows[0];
-  const hrIdx = findCol(header, ['avg hr']);
-  const speedIdx = findCol(header, ['avg speed']);
-  const distIdx = findCol(header, ['distance']);
-  const timeIdx = findCol(header, ['cumulative time']);
-
+  const h = rows[0];
+  const hrIdx = findCol(h, ['avg hr']);
+  const speedIdx = findCol(h, ['avg speed']);
+  const distIdx = findCol(h, ['distance']);
+  const timeIdx = findCol(h, ['cumulative time']);
   if (hrIdx === -1) return null;
-
-  const laps = [];
-  let summary = null;
+  const laps = []; let summary = null;
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const label = row[0];
+    const r = rows[i]; const label = r[0];
     if (label.toLowerCase() === 'summary') {
       summary = {
-        avgHr: parseInt(row[hrIdx]) || 0,
-        time: timeIdx >= 0 ? row[timeIdx] : '',
-        distance: parseFloat(row[distIdx]) || 0,
-        avgSpeed: parseFloat(row[speedIdx]) || 0,
+        avgHr: parseInt(r[hrIdx]) || 0,
+        time: timeIdx >= 0 ? r[timeIdx] : '',
+        distance: parseFloat(r[distIdx]) || 0,
+        avgSpeed: parseFloat(r[speedIdx]) || 0,
       };
       continue;
     }
-    const hr = parseInt(row[hrIdx]);
+    const hr = parseInt(r[hrIdx]);
     if (hr > 0) {
       const lap = { lap: label, hr };
-      if (speedIdx >= 0) lap.speed = parseFloat(row[speedIdx]) || 0;
+      if (speedIdx >= 0) lap.speed = parseFloat(r[speedIdx]) || 0;
       laps.push(lap);
     }
   }
@@ -895,33 +1325,26 @@ function parseBikeCSV(text) {
 function parseSwimCSV(text) {
   const rows = parseCSV(text);
   if (rows.length < 2) return null;
-  const header = rows[0];
-  const hrIdx = findCol(header, ['avg hr']);
-  const paceIdx = findCol(header, ['avg pace']);
-  const swolfIdx = findCol(header, ['swolf']);
-  const strokeIdx = findCol(header, ['swim stroke']);
-
+  const h = rows[0];
+  const hrIdx = findCol(h, ['avg hr']);
+  const paceIdx = findCol(h, ['avg pace']);
+  const swolfIdx = findCol(h, ['swolf']);
+  const strokeIdx = findCol(h, ['swim stroke']);
   if (hrIdx === -1) return null;
-
-  const sets = [];
-  let summary = null;
+  const sets = []; let summary = null;
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const label = row[1] || '';
-    if (label.toLowerCase() === 'summary') {
-      summary = { avgHr: parseInt(row[hrIdx]) || 0 };
-      continue;
-    }
+    const r = rows[i]; const label = r[1] || '';
+    if (label.toLowerCase() === 'summary') { summary = { avgHr: parseInt(r[hrIdx]) || 0 }; continue; }
     if (strokeIdx >= 0) {
-      const stroke = (row[strokeIdx] || '').toLowerCase();
-      if (stroke === 'rest' || stroke === '--') continue;
+      const stk = (r[strokeIdx] || '').toLowerCase();
+      if (stk === 'rest' || stk === '--') continue;
     }
     if (label.includes('.')) continue;
-    const hr = parseInt(row[hrIdx]);
+    const hr = parseInt(r[hrIdx]);
     if (hr > 0 && label) {
       const s = { set: label, hr };
-      if (paceIdx >= 0) { s.pace = row[paceIdx]; s.paceMin = paceToMin(row[paceIdx]); }
-      if (swolfIdx >= 0) s.swolf = parseInt(row[swolfIdx]) || 0;
+      if (paceIdx >= 0) { s.pace = r[paceIdx]; s.paceMin = paceToMin(r[paceIdx]); }
+      if (swolfIdx >= 0) s.swolf = parseInt(r[swolfIdx]) || 0;
       sets.push(s);
     }
   }
@@ -931,29 +1354,25 @@ function parseSwimCSV(text) {
 // ═══════════════════════════════════════════════════════════
 // ANALYSIS
 // ═══════════════════════════════════════════════════════════
-
 function zoneDistribution(hrs, zones) {
-  const counts = { Z1:0, Z2:0, Z3:0, Z4:0, Z5:0 };
-  hrs.forEach(hr => counts[classifyZone(hr, zones)]++);
+  const c = { Z1:0, Z2:0, Z3:0, Z4:0, Z5:0 };
+  hrs.forEach(hr => c[classifyZone(hr, zones)]++);
   const total = hrs.length;
-  const result = {};
-  for (const k in counts) {
-    result[k] = { count: counts[k], pct: total ? Math.round(counts[k] * 100 / total) : 0 };
-  }
-  return result;
+  const out = {};
+  for (const k in c) out[k] = { count: c[k], pct: total ? Math.round(c[k] * 100 / total) : 0 };
+  return out;
 }
 
 function cardiacDrift(laps) {
-  let analysis;
-  if (laps.length > 5) analysis = laps.slice(1, -2);
-  else if (laps.length > 3) analysis = laps.slice(1);
-  else analysis = laps;
-  if (analysis.length < 2) return { first: 0, second: 0, drift: 0 };
-  const mid = Math.floor(analysis.length / 2);
-  const first = analysis.slice(0, mid).reduce((s, l) => s + l.hr, 0) / mid;
-  const second = analysis.slice(mid).reduce((s, l) => s + l.hr, 0) / (analysis.length - mid);
-  const drift = ((second - first) / first) * 100;
-  return { first, second, drift };
+  let a;
+  if (laps.length > 5) a = laps.slice(1, -2);
+  else if (laps.length > 3) a = laps.slice(1);
+  else a = laps;
+  if (a.length < 2) return { first: 0, second: 0, drift: 0 };
+  const mid = Math.floor(a.length / 2);
+  const first = a.slice(0, mid).reduce((s,l)=>s+l.hr,0) / mid;
+  const second = a.slice(mid).reduce((s,l)=>s+l.hr,0) / (a.length - mid);
+  return { first, second, drift: ((second - first) / first) * 100 };
 }
 
 function classifyRunType(pct) {
@@ -985,48 +1404,30 @@ function analyzeRun(data, lthr) {
   const { first, second, drift } = cardiacDrift(laps);
   const z2Ceil = zones.Z2[1];
 
-  let driftVerdict, driftClass;
-  if (drift < 3) { driftVerdict = 'Excellent aerobic fitness'; driftClass = 'good'; }
-  else if (drift < 5) { driftVerdict = 'Solid aerobic base'; driftClass = 'good'; }
-  else if (drift < 8) { driftVerdict = 'Moderate — need more Zone 2'; driftClass = 'ok'; }
-  else { driftVerdict = 'High drift — aerobic engine needs work'; driftClass = 'bad'; }
+  let dv, dc;
+  if (drift < 3) { dv = 'Excellent aerobic fitness'; dc = 'good'; }
+  else if (drift < 5) { dv = 'Solid aerobic base'; dc = 'good'; }
+  else if (drift < 8) { dv = 'Moderate — build more Zone 2'; dc = 'ok'; }
+  else { dv = 'High drift — aerobic engine needs work'; dc = 'bad'; }
 
-  let coachNote;
+  let coach;
   if (pct < 85) {
     const over = laps.filter(l => l.hr > z2Ceil).length;
-    if (over >= 3) {
-      coachNote = `You exceeded Zone 2 (${z2Ceil} bpm) on ${over} laps. This is the #1 amateur mistake — easy runs that aren't easy. Slow down by 20-30 sec/km. Aerobic gains come from easy effort, not moderate effort.`;
-    } else if (drift > 8) {
-      coachNote = `High cardiac drift on an easy run = weak aerobic base. Ironically, the fix is MORE easy running, not less. Your heart is working hard because your cardiovascular system isn't developed enough yet.`;
-    } else {
-      coachNote = `Well-executed aerobic run. This is where base fitness is built. Boring, but effective.`;
-    }
-  } else if (pct < 91) {
-    coachNote = `Solid aerobic work — sweet spot for base building. Just make sure 80% of your weekly volume stays below Zone 2 ceiling (${z2Ceil} bpm).`;
-  } else if (pct < 96) {
-    coachNote = `Tempo session. These should be "comfortably uncomfortable." Keep to 1-2x per week max — your next 2 days should be easy or rest.`;
-  } else if (pct < 101) {
-    coachNote = `Threshold work — this is race pace territory. Directly improves your lactate threshold, the single best predictor of endurance performance.`;
-  } else {
-    coachNote = `High-intensity session. Major stimulus. Your body now needs 48-72h to adapt — don't stack another hard session before then.`;
-  }
+    if (over >= 3) coach = `You exceeded Zone 2 (${z2Ceil} bpm) on ${over} laps. This is the #1 amateur mistake — easy runs that aren't easy. Slow down by 20-30 sec/km. Aerobic gains come from easy effort, not moderate effort.`;
+    else if (drift > 8) coach = `High cardiac drift on an easy run = weak aerobic base. Ironically, the fix is MORE easy running, not less. Your heart is working hard because your cardiovascular system isn't developed enough yet.`;
+    else coach = `Well-executed aerobic run. This is where base fitness is built. Boring, but effective.`;
+  } else if (pct < 91) coach = `Solid aerobic work — sweet spot for base building. Make sure 80% of your weekly volume stays below Zone 2 ceiling (${z2Ceil} bpm).`;
+  else if (pct < 96) coach = `Tempo session. Should be "comfortably uncomfortable." Keep to 1-2x per week max — your next 2 days should be easy or rest.`;
+  else if (pct < 101) coach = `Threshold work — race pace territory. Directly improves your lactate threshold, the #1 predictor of endurance performance.`;
+  else coach = `High-intensity session. Major stimulus. Your body needs 48-72h to adapt — don't stack another hard session before then.`;
 
   return {
-    sport: 'run',
-    name: 'Run Analysis',
-    icon: '🏃',
-    distance: summary?.distance || 0,
-    time: summary?.time || 'N/A',
-    avgHr,
-    pct,
-    lthr,
-    type,
-    typeClass: cls,
-    zd,
-    drift, first, second, driftVerdict, driftClass,
+    sport: 'run', name: 'Run Analysis', icon: '🏃',
+    distance: summary?.distance || 0, time: summary?.time || 'N/A',
+    avgHr, pct, lthr, type, typeClass: cls,
+    zd, drift, first, second, dv, dc,
     cadence: summary?.avgCad || 0,
-    coachNote,
-    date: new Date().toISOString(),
+    coach, date: new Date().toISOString(),
   };
 }
 
@@ -1043,48 +1444,30 @@ function analyzeBike(data, lthr) {
   const z2Ceil = zones.Z2[1];
   const z3Floor = zones.Z3[0];
 
-  let driftVerdict, driftClass;
-  if (drift < 0) { driftVerdict = 'HR decreased — excellent efficiency'; driftClass = 'good'; }
-  else if (drift < 3) { driftVerdict = 'Minimal drift — solid pacing'; driftClass = 'good'; }
-  else if (drift < 6) { driftVerdict = 'Moderate drift'; driftClass = 'ok'; }
-  else { driftVerdict = 'Significant drift — pacing needs work'; driftClass = 'bad'; }
+  let dv, dc;
+  if (drift < 0) { dv = 'HR decreased — excellent efficiency'; dc = 'good'; }
+  else if (drift < 3) { dv = 'Minimal drift — solid pacing'; dc = 'good'; }
+  else if (drift < 6) { dv = 'Moderate drift'; dc = 'ok'; }
+  else { dv = 'Significant drift — pacing needs work'; dc = 'bad'; }
 
-  let coachNote;
+  let coach;
   const over = laps.filter(l => l.hr >= z3Floor).length;
-  if (pct < 85) {
-    coachNote = `Textbook Zone 2 riding. This IS the foundation for long-course success. Ironman bike should look exactly like this — HR ${zones.Z2[0]}-${z2Ceil}, consistent effort, nothing heroic.`;
-  } else if (pct < 91 && over >= laps.length / 3) {
-    coachNote = `You crept above Zone 2 on ${over} laps. For Ironman training this is too hard — leaves you unable to run off the bike. Slow down early, finish strong. The bike is about conservation.`;
-  } else if (pct < 96) {
-    coachNote = `Sweet spot / tempo work. Great for 70.3 or Olympic training, but too hard for Ironman race pace.`;
-  } else {
-    coachNote = `Hard ride. Builds threshold power but costs recovery. Tomorrow must be truly easy or off the bike.`;
-  }
+  if (pct < 85) coach = `Textbook Zone 2 riding. This IS the foundation for long-course success. Ironman bike should look exactly like this — HR ${zones.Z2[0]}-${z2Ceil}, consistent effort, nothing heroic.`;
+  else if (pct < 91 && over >= laps.length / 3) coach = `You crept above Zone 2 on ${over} laps. For Ironman training this is too hard — leaves you unable to run off the bike. Slow down early, finish strong.`;
+  else if (pct < 96) coach = `Sweet spot / tempo work. Great for 70.3 or Olympic training, but too hard for Ironman race pace.`;
+  else coach = `Hard ride. Builds threshold power but costs recovery. Tomorrow must be truly easy or off the bike.`;
 
   let projection = null;
   if (avgSpeed > 0) {
     const t = 180 / avgSpeed;
-    const h = Math.floor(t);
-    const m = Math.floor((t % 1) * 60);
-    projection = `~${h}h ${String(m).padStart(2, '0')}min for 180km at ${avgSpeed.toFixed(1)} km/h`;
+    projection = `${Math.floor(t)}h ${String(Math.floor((t % 1) * 60)).padStart(2,'0')}m`;
   }
 
   return {
-    sport: 'bike',
-    name: 'Bike Analysis',
-    icon: '🚴',
-    distance: summary?.distance || 0,
-    time: summary?.time || 'N/A',
-    avgHr,
-    avgSpeed,
-    pct,
-    lthr,
-    type,
-    typeClass: cls,
-    zd,
-    drift, first, second, driftVerdict, driftClass,
-    projection,
-    coachNote,
+    sport: 'bike', name: 'Bike Analysis', icon: '🚴',
+    distance: summary?.distance || 0, time: summary?.time || 'N/A',
+    avgHr, avgSpeed, pct, lthr, type, typeClass: cls,
+    zd, drift, first, second, dv, dc, projection, coach,
     date: new Date().toISOString(),
   };
 }
@@ -1095,220 +1478,380 @@ function analyzeSwim(data) {
   const avgHr = Math.round(sets.reduce((s,x)=>s+x.hr,0)/sets.length);
   const drift = ((sets[sets.length-1].hr - sets[0].hr) / sets[0].hr) * 100;
 
-  let driftVerdict, driftClass;
-  if (drift > 15) { driftVerdict = 'High — aerobic swim base is the limiter'; driftClass = 'bad'; }
-  else if (drift > 8) { driftVerdict = 'Moderate — need more continuous volume'; driftClass = 'ok'; }
-  else { driftVerdict = 'Controlled drift'; driftClass = 'good'; }
+  let dv, dc;
+  if (drift > 15) { dv = 'High — aerobic swim base is the limiter'; dc = 'bad'; }
+  else if (drift > 8) { dv = 'Moderate — need more continuous volume'; dc = 'ok'; }
+  else { dv = 'Controlled drift — good fitness'; dc = 'good'; }
 
-  const swolfSets = sets.filter(s => s.swolf > 0);
+  const sw = sets.filter(s => s.swolf > 0);
   let swolfInfo = null;
-  if (swolfSets.length >= 2) {
-    const change = swolfSets[swolfSets.length-1].swolf - swolfSets[0].swolf;
-    swolfInfo = { first: swolfSets[0].swolf, last: swolfSets[swolfSets.length-1].swolf, change };
-  }
+  if (sw.length >= 2) swolfInfo = { first: sw[0].swolf, last: sw[sw.length-1].swolf, change: sw[sw.length-1].swolf - sw[0].swolf };
 
-  let coachNote;
-  if (drift > 15) {
-    coachNote = `The HR jump across your sets is the biggest signal. Your aerobic swim base is underdeveloped — normal for triathletes coming from run/bike. Fix: 2-3x per week continuous 800-1500m swims at easy pace where you CAN hold pace. The goal isn't to get tired — it's to teach your aerobic system to swim.`;
-  } else if (drift > 8) {
-    coachNote = `Add more continuous work. Short interval sets with rest = anaerobic. Long continuous swims = aerobic base (what Ironman needs).`;
-  } else {
-    coachNote = `Strong aerobic swim fitness. You can push pace and volume now. Consider adding threshold sets (4-6x 100m at CSS pace with short rest).`;
-  }
+  let coach;
+  if (drift > 15) coach = `The HR jump across your sets is the biggest signal. Your aerobic swim base is underdeveloped — normal for triathletes from run/bike. Fix: 2-3x/week continuous 800-1500m swims at easy pace where you CAN hold pace.`;
+  else if (drift > 8) coach = `Add more continuous work. Short interval sets = anaerobic. Long continuous swims = aerobic base for Ironman.`;
+  else coach = `Strong aerobic swim fitness. You can push pace and volume now. Consider adding threshold sets (4-6x 100m at CSS with short rest).`;
 
   return {
-    sport: 'swim',
-    name: 'Swim Analysis',
-    icon: '🏊',
-    sets,
-    avgHr,
-    drift,
-    driftVerdict, driftClass,
-    swolfInfo,
-    coachNote,
+    sport: 'swim', name: 'Swim Analysis', icon: '🏊',
+    sets, avgHr, drift, dv, dc, swolfInfo, coach,
     date: new Date().toISOString(),
   };
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDERING
+// VIZ HELPERS
 // ═══════════════════════════════════════════════════════════
+const zoneColors = { Z1: '#3b82f6', Z2: '#22c55e', Z3: '#eab308', Z4: '#f97316', Z5: '#ef4444' };
+const zoneLabels = { Z1: 'Recovery', Z2: 'Aerobic', Z3: 'Tempo', Z4: 'Threshold', Z5: 'VO2max' };
+const zoneLabelsBike = { Z1: 'Recovery', Z2: 'Endurance', Z3: 'Sweet Spot', Z4: 'Threshold', Z5: 'VO2max' };
 
-const zoneLabels = {
-  Z1: 'Recovery',
-  Z2: 'Aerobic',
-  Z3: 'Tempo',
-  Z4: 'Threshold',
-  Z5: 'VO2max',
-};
+function renderDonut(zd) {
+  // SVG donut — dominant zone shown in center
+  const size = 160; const stroke = 22;
+  const r = (size - stroke) / 2;
+  const cx = size / 2; const cy = size / 2;
+  const c = 2 * Math.PI * r;
 
-const zoneLabelsBike = {
-  Z1: 'Recovery',
-  Z2: 'Endurance',
-  Z3: 'Sweet Spot',
-  Z4: 'Threshold',
-  Z5: 'VO2max',
-};
+  let offset = 0;
+  const segments = [];
+  const order = ['Z1','Z2','Z3','Z4','Z5'];
+  for (const z of order) {
+    const pct = zd[z].pct;
+    if (pct === 0) continue;
+    const len = (pct / 100) * c;
+    segments.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${zoneColors[z]}" stroke-width="${stroke}" stroke-dasharray="${len} ${c}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`);
+    offset += len;
+  }
 
-const zoneColors = {
-  Z1: 'var(--zone1)',
-  Z2: 'var(--zone2)',
-  Z3: 'var(--zone3)',
-  Z4: 'var(--zone4)',
-  Z5: 'var(--zone5)',
-};
+  // Find dominant zone
+  let dominant = 'Z2'; let max = 0;
+  for (const z of order) if (zd[z].pct > max) { max = zd[z].pct; dominant = z; }
 
-function renderZoneBars(zd, labels) {
-  return Object.entries(zd).map(([zone, data]) => `
-    <div class="zone-row">
-      <div class="zone-label">${zone} <span class="zone-label-sub">${labels[zone]}</span></div>
-      <div class="zone-track">
-        <div class="zone-fill" style="width: ${data.pct}%; background: ${zoneColors[zone]};"></div>
+  return `
+    <div class="donut">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="${stroke}"/>
+        ${segments.join('')}
+      </svg>
+      <div class="donut-center">
+        <div class="donut-value">${max}%</div>
+        <div class="donut-label">in ${dominant}</div>
       </div>
-      <div class="zone-pct">${data.pct}%</div>
     </div>
-  `).join('');
+  `;
+}
+
+function renderLegend(zd, labels) {
+  const order = ['Z1','Z2','Z3','Z4','Z5'];
+  return `
+    <div class="donut-legend">
+      ${order.map(z => `
+        <div class="legend-row">
+          <div class="legend-label">
+            <div class="legend-dot" style="background: ${zoneColors[z]};"></div>
+            <div>${z} <span style="color: var(--text-dim);">${labels[z]}</span></div>
+          </div>
+          <div class="legend-value">${zd[z].pct}%</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderDriftViz(first, second) {
+  // Simulated 8-point drift visualization
+  const points = 8;
+  const bars = [];
+  for (let i = 0; i < points; i++) {
+    const t = i / (points - 1);
+    const hr = first + (second - first) * t + (Math.random() - 0.5) * 3;
+    const height = Math.max(20, Math.min(95, (hr - first + 10) * 5));
+    bars.push(`<div class="drift-bar" style="height: ${height}%;"></div>`);
+  }
+  return `<div class="drift-bars">${bars.join('')}</div>`;
 }
 
 function renderAnalysis(a) {
-  if (a.sport === 'run') return renderRunAnalysis(a);
-  if (a.sport === 'bike') return renderBikeAnalysis(a);
-  if (a.sport === 'swim') return renderSwimAnalysis(a);
+  if (a.sport === 'run') return renderRun(a);
+  if (a.sport === 'bike') return renderBike(a);
+  if (a.sport === 'swim') return renderSwim(a);
   return '';
 }
 
-function renderRunAnalysis(a) {
+function renderRun(a) {
   return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="workout-name">${a.icon} ${a.name}</div>
-          <div class="workout-stats">
-            <span>📍 ${a.distance.toFixed(2)} km</span>
-            <span>⏱ ${a.time}</span>
-            <span>💓 ${a.avgHr} bpm</span>
+    <div class="analysis-card">
+      <div class="analysis-hero">
+        <div class="workout-sport">${a.icon} Running</div>
+        <div class="workout-name">${a.type}</div>
+        <div class="workout-meta">
+          <span>📍 ${a.distance.toFixed(2)} km</span>
+          <span>⏱ ${a.time}</span>
+          <span>💓 ${a.avgHr} bpm avg</span>
+        </div>
+        <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
+      </div>
+
+      <div class="analysis-body">
+        <div class="chart-section">
+          <div class="chart-label">Heart Rate Zones</div>
+          <div class="donut-wrap">
+            ${renderDonut(a.zd)}
+            ${renderLegend(a.zd, zoneLabels)}
           </div>
-          <div class="type-badge ${a.typeClass}" style="margin-top: 10px;">${a.type} · ${Math.round(a.pct)}% LTHR</div>
         </div>
-      </div>
 
-      <div class="card-title">Zone Distribution</div>
-      <div class="zone-bars">${renderZoneBars(a.zd, zoneLabels)}</div>
-
-      <div class="metric-grid">
-        <div class="metric-box">
-          <div class="metric-label">Cardiac Drift</div>
-          <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
-          <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+        <div class="chart-section">
+          <div class="chart-label">Cardiac Drift</div>
+          ${renderDriftViz(a.first, a.second)}
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Drift</div>
+              <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
+              <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+            </div>
+            ${a.cadence ? `
+              <div class="metric">
+                <div class="metric-label">Cadence</div>
+                <div class="metric-value">${a.cadence}<span style="font-size:12px; color: var(--text-dim);"> spm</span></div>
+                <div class="metric-sub">${a.cadence >= 175 ? '✓ Efficient' : a.cadence >= 170 ? 'Aim for 175+' : 'Low — work on turnover'}</div>
+              </div>` : ''}
+          </div>
+          <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
         </div>
-        ${a.cadence ? `
-        <div class="metric-box">
-          <div class="metric-label">Cadence</div>
-          <div class="metric-value">${a.cadence} <span style="font-size: 14px; color: var(--text-dim);">spm</span></div>
-          <div class="metric-sub">${a.cadence >= 175 ? 'Efficient' : a.cadence >= 170 ? 'Aim for 175+' : 'Low — work on turnover'}</div>
-        </div>` : ''}
-      </div>
 
-      <div class="verdict ${a.driftClass}">${a.driftVerdict}</div>
-
-      <div class="coach-box">
-        <div class="coach-label">💡 Coach's Read</div>
-        <div class="coach-text">${a.coachNote}</div>
+        <div class="coach-box">
+          <div class="coach-title">💡 Coach's Read</div>
+          <div class="coach-text">${a.coach}</div>
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderBikeAnalysis(a) {
+function renderBike(a) {
   return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="workout-name">${a.icon} ${a.name}</div>
-          <div class="workout-stats">
-            <span>📍 ${a.distance.toFixed(1)} km</span>
-            <span>⏱ ${a.time}</span>
-            <span>💓 ${a.avgHr} bpm</span>
-            ${a.avgSpeed ? `<span>⚡ ${a.avgSpeed.toFixed(1)} km/h</span>` : ''}
+    <div class="analysis-card">
+      <div class="analysis-hero">
+        <div class="workout-sport">${a.icon} Cycling</div>
+        <div class="workout-name">${a.type}</div>
+        <div class="workout-meta">
+          <span>📍 ${a.distance.toFixed(1)} km</span>
+          <span>⏱ ${a.time}</span>
+          <span>💓 ${a.avgHr} bpm avg</span>
+          ${a.avgSpeed ? `<span>⚡ ${a.avgSpeed.toFixed(1)} km/h</span>` : ''}
+        </div>
+        <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
+      </div>
+      <div class="analysis-body">
+        <div class="chart-section">
+          <div class="chart-label">Heart Rate Zones</div>
+          <div class="donut-wrap">
+            ${renderDonut(a.zd)}
+            ${renderLegend(a.zd, zoneLabelsBike)}
           </div>
-          <div class="type-badge ${a.typeClass}" style="margin-top: 10px;">${a.type} · ${Math.round(a.pct)}% LTHR</div>
         </div>
-      </div>
-
-      <div class="card-title">Zone Distribution</div>
-      <div class="zone-bars">${renderZoneBars(a.zd, zoneLabelsBike)}</div>
-
-      <div class="metric-grid">
-        <div class="metric-box">
-          <div class="metric-label">Cardiac Drift</div>
-          <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
-          <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+        <div class="chart-section">
+          <div class="chart-label">Cardiac Drift & Projections</div>
+          ${renderDriftViz(a.first, a.second)}
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Drift</div>
+              <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
+              <div class="metric-sub">${Math.round(a.first)} → ${Math.round(a.second)} bpm</div>
+            </div>
+            ${a.projection ? `
+              <div class="metric">
+                <div class="metric-label">Ironman 180km</div>
+                <div class="metric-value" style="font-size: 20px;">${a.projection}</div>
+                <div class="metric-sub">at ${a.avgSpeed.toFixed(1)} km/h</div>
+              </div>` : ''}
+          </div>
+          <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
         </div>
-        ${a.projection ? `
-        <div class="metric-box">
-          <div class="metric-label">Ironman Projection</div>
-          <div class="metric-value" style="font-size: 14px;">${a.projection.split(' for ')[0]}</div>
-          <div class="metric-sub">at current pace</div>
-        </div>` : ''}
-      </div>
-
-      <div class="verdict ${a.driftClass}">${a.driftVerdict}</div>
-
-      <div class="coach-box">
-        <div class="coach-label">💡 Coach's Read</div>
-        <div class="coach-text">${a.coachNote}</div>
+        <div class="coach-box">
+          <div class="coach-title">💡 Coach's Read</div>
+          <div class="coach-text">${a.coach}</div>
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderSwimAnalysis(a) {
+function renderSwim(a) {
   const setsHtml = a.sets.slice(0, 10).map(s => `
-    <div class="stat-row">
-      <span class="stat-row-label">Set ${s.set}</span>
-      <span class="stat-row-value">
+    <div class="legend-row">
+      <div class="legend-label">Set ${s.set}</div>
+      <div class="legend-value">
         ${s.hr} bpm
-        ${s.pace && s.pace !== '--' ? ` · ${s.pace}/100m` : ''}
+        ${s.pace && s.pace !== '--' ? ` · ${s.pace}` : ''}
         ${s.swolf ? ` · SWOLF ${s.swolf}` : ''}
-      </span>
+      </div>
     </div>
   `).join('');
 
   return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="workout-name">${a.icon} ${a.name}</div>
-          <div class="workout-stats">
-            <span>${a.sets.length} sets</span>
-            <span>💓 ${a.avgHr} bpm avg</span>
+    <div class="analysis-card">
+      <div class="analysis-hero">
+        <div class="workout-sport">${a.icon} Swimming</div>
+        <div class="workout-name">Pool Swim</div>
+        <div class="workout-meta">
+          <span>${a.sets.length} sets</span>
+          <span>💓 ${a.avgHr} bpm avg</span>
+        </div>
+      </div>
+      <div class="analysis-body">
+        <div class="chart-section">
+          <div class="chart-label">Set Breakdown</div>
+          ${setsHtml}
+        </div>
+        <div class="chart-section">
+          <div class="chart-label">Drift & Efficiency</div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">HR Drift</div>
+              <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
+              <div class="metric-sub">across all sets</div>
+            </div>
+            ${a.swolfInfo ? `
+              <div class="metric">
+                <div class="metric-label">SWOLF</div>
+                <div class="metric-value">${a.swolfInfo.change >= 0 ? '+' : ''}${a.swolfInfo.change}</div>
+                <div class="metric-sub">${a.swolfInfo.first} → ${a.swolfInfo.last}</div>
+              </div>` : ''}
           </div>
+          <div class="verdict ${a.dc}"><span class="verdict-icon">${a.dc==='good'?'✓':a.dc==='ok'?'!':'✕'}</span> ${a.dv}</div>
+        </div>
+        <div class="coach-box">
+          <div class="coach-title">💡 Coach's Read</div>
+          <div class="coach-text">${a.coach}</div>
         </div>
       </div>
+    </div>
+  `;
+}
 
-      <div class="card-title">Set Breakdown</div>
-      <div>${setsHtml}</div>
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function renderDashboard() {
+  const greeting = state.user ? `Welcome back, ${state.user.name.split(' ')[0]}` : 'Welcome';
+  document.getElementById('greetingText').textContent = greeting;
 
-      <div class="metric-grid" style="margin-top: 16px;">
-        <div class="metric-box">
-          <div class="metric-label">Cardiac Drift</div>
-          <div class="metric-value">${a.drift >= 0 ? '+' : ''}${a.drift.toFixed(1)}%</div>
-          <div class="metric-sub">across all sets</div>
-        </div>
-        ${a.swolfInfo ? `
-        <div class="metric-box">
-          <div class="metric-label">SWOLF Change</div>
-          <div class="metric-value">${a.swolfInfo.change >= 0 ? '+' : ''}${a.swolfInfo.change}</div>
-          <div class="metric-sub">${a.swolfInfo.first} → ${a.swolfInfo.last}</div>
-        </div>` : ''}
+  const count = state.workouts.length;
+  if (count === 0) {
+    document.getElementById('greetingSub').textContent = 'Upload your first workout to get started';
+  } else {
+    document.getElementById('greetingSub').textContent = `${count} workout${count>1?'s':''} analyzed`;
+  }
+
+  // Stats
+  const recent = state.workouts.slice(-7);
+  const runs = recent.filter(w => w.sport === 'run');
+  const bikes = recent.filter(w => w.sport === 'bike');
+  const swims = recent.filter(w => w.sport === 'swim');
+
+  const avgDrift = runs.length ? runs.reduce((s,r) => s + r.drift, 0) / runs.length : null;
+  const totalKm = recent.reduce((s,w) => s + (w.distance || 0), 0);
+
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Workouts (7d)</div>
+      <div class="stat-value">${recent.length}</div>
+      <div class="stat-meta">${runs.length} run · ${bikes.length} bike · ${swims.length} swim</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Distance</div>
+      <div class="stat-value">${totalKm.toFixed(1)}<span class="stat-unit">km</span></div>
+      <div class="stat-meta">last 7 days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Cardiac Drift</div>
+      <div class="stat-value">${avgDrift !== null ? avgDrift.toFixed(1) + '%' : '—'}</div>
+      <div class="stat-meta ${avgDrift!==null && avgDrift < 5 ? 'good' : avgDrift !== null && avgDrift > 8 ? 'bad' : ''}">${avgDrift === null ? 'need data' : avgDrift < 5 ? '✓ strong aerobic' : avgDrift < 8 ? 'building' : 'needs work'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Run LTHR</div>
+      <div class="stat-value">${state.profile.runLthr}</div>
+      <div class="stat-meta">Z2: ${Math.floor(state.profile.runLthr*0.81)}-${Math.floor(state.profile.runLthr*0.9)} bpm</div>
+    </div>
+  `;
+
+  // Recent workouts
+  const rec = document.getElementById('dashRecent');
+  const recentList = state.workouts.slice(-5).reverse();
+  if (recentList.length === 0) {
+    rec.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📊</div>
+        <div class="empty-title">No workouts yet</div>
+        <div class="empty-desc">Upload your first Garmin CSV to see analysis here</div>
       </div>
+    `;
+    document.getElementById('recentCount').textContent = 'Upload your first workout';
+    document.getElementById('fitnessTrend').style.display = 'none';
+  } else {
+    rec.innerHTML = recentList.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
+    document.getElementById('recentCount').textContent = `Showing last ${recentList.length} of ${state.workouts.length}`;
 
-      <div class="verdict ${a.driftClass}">${a.driftVerdict}</div>
+    // Trend chart
+    renderFitnessTrend();
+    document.getElementById('fitnessTrend').style.display = 'block';
+  }
+}
 
-      <div class="coach-box">
-        <div class="coach-label">💡 Coach's Read</div>
-        <div class="coach-text">${a.coachNote}</div>
+function renderFitnessTrend() {
+  const runs = state.workouts.filter(w => w.sport === 'run' && w.drift !== undefined).slice(-10);
+  if (runs.length < 2) {
+    document.getElementById('fitnessTrend').style.display = 'none';
+    return;
+  }
+
+  const w = 560; const h = 120;
+  const padding = 20;
+  const maxDrift = Math.max(...runs.map(r => Math.abs(r.drift))) + 2;
+  const pts = runs.map((r, i) => {
+    const x = padding + (i / (runs.length - 1)) * (w - padding * 2);
+    const y = h/2 - (r.drift / maxDrift) * (h/2 - padding);
+    return { x, y, drift: r.drift };
+  });
+
+  const path = pts.map((p, i) => `${i===0?'M':'L'}${p.x},${p.y}`).join(' ');
+  const area = `${path} L${pts[pts.length-1].x},${h-padding} L${pts[0].x},${h-padding} Z`;
+
+  document.getElementById('trendChart').innerHTML = `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width: 100%;">
+      <defs>
+        <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="${padding}" y1="${h/2}" x2="${w-padding}" y2="${h/2}" stroke="var(--border)" stroke-dasharray="2,4"/>
+      <path d="${area}" fill="url(#trendGrad)"/>
+      <path d="${path}" stroke="var(--accent)" stroke-width="2.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--accent)"/>`).join('')}
+      <text x="${padding}" y="${h-4}" fill="var(--text-mute)" font-size="10">${runs.length} runs ago</text>
+      <text x="${w-padding}" y="${h-4}" fill="var(--text-mute)" font-size="10" text-anchor="end">latest</text>
+    </svg>
+  `;
+}
+
+function renderHistoryItem(w, idx) {
+  const date = new Date(w.date);
+  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const icons = { run: '🏃', bike: '🚴', swim: '🏊' };
+  const sub = w.sport === 'swim' ? `${w.sets.length} sets · ${w.avgHr} bpm`
+    : `${(w.distance || 0).toFixed(1)}km · ${w.time || ''} · ${w.avgHr} bpm`;
+  return `
+    <div class="history-item" onclick="viewHistoryDetail(${idx})">
+      <div class="history-icon">${icons[w.sport]}</div>
+      <div class="history-info">
+        <div class="history-title">${w.type || w.name}</div>
+        <div class="history-meta">${sub}</div>
       </div>
+      <div class="history-date">${dateStr}</div>
     </div>
   `;
 }
@@ -1316,64 +1859,44 @@ function renderSwimAnalysis(a) {
 // ═══════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════
-
 function renderHistory() {
   const list = document.getElementById('historyList');
+  document.getElementById('historyCount').textContent = state.workouts.length === 0
+    ? 'No workouts yet'
+    : `${state.workouts.length} workout${state.workouts.length>1?'s':''} analyzed`;
+
   if (state.workouts.length === 0) {
     list.innerHTML = `
       <div class="empty">
         <div class="empty-icon">📂</div>
-        <p>No workouts yet. Upload your first Garmin CSV to get started.</p>
+        <div class="empty-title">No workouts yet</div>
+        <div class="empty-desc">Upload your first Garmin CSV to build your training history</div>
       </div>
     `;
     return;
   }
 
   const sorted = [...state.workouts].reverse();
-  list.innerHTML = sorted.map((w, i) => {
-    const date = new Date(w.date);
-    const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const icons = { run: '🏃', bike: '🚴', swim: '🏊' };
-    const sub = w.sport === 'swim'
-      ? `${w.sets.length} sets · ${w.avgHr} bpm`
-      : `${w.distance.toFixed(1)}km · ${w.time} · ${w.avgHr} bpm`;
-    return `
-      <div class="history-item" onclick="showHistoryDetail(${sorted.length - 1 - i})">
-        <div class="history-sport">${icons[w.sport]}</div>
-        <div class="history-meta">
-          <div class="history-title">${w.type || w.name}</div>
-          <div class="history-sub">
-            <span>${dateStr}</span>
-            <span>${sub}</span>
-          </div>
-        </div>
-        <div style="color: var(--text-dim);">→</div>
-      </div>
-    `;
-  }).join('');
+  list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
 }
 
-function showHistoryDetail(idx) {
+function viewHistoryDetail(idx) {
   const w = state.workouts[idx];
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelector('[data-page="analyze"]').classList.add('active');
-  document.getElementById('page-analyze').classList.add('active');
+  navigate('upload');
   document.getElementById('analysisOutput').innerHTML = renderAnalysis(w);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ═══════════════════════════════════════════════════════════
 // TRENDS
 // ═══════════════════════════════════════════════════════════
-
 function renderTrends() {
-  const container = document.getElementById('trendsContent');
+  const el = document.getElementById('trendsContent');
   if (state.workouts.length < 3) {
-    container.innerHTML = `
+    el.innerHTML = `
       <div class="empty">
-        <div class="empty-icon">📊</div>
-        <p>Need at least 3 workouts to show trends.<br>You have ${state.workouts.length}.</p>
+        <div class="empty-icon">📈</div>
+        <div class="empty-title">Need ${3 - state.workouts.length} more workout${(3-state.workouts.length)>1?'s':''}</div>
+        <div class="empty-desc">Trends unlock after 3 analyzed workouts. You currently have ${state.workouts.length}.</div>
       </div>
     `;
     return;
@@ -1383,192 +1906,265 @@ function renderTrends() {
   const sportCounts = { run: 0, bike: 0, swim: 0 };
   recent.forEach(w => sportCounts[w.sport]++);
   const total = recent.length;
-
   const runs = recent.filter(w => w.sport === 'run' && w.drift !== undefined);
   const avgDrift = runs.length ? runs.reduce((s,r) => s+r.drift, 0) / runs.length : null;
 
-  // 80/20 analysis
-  const landWorkouts = recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && w.pct !== undefined);
-  const easy = landWorkouts.filter(w => w.pct < 85).length;
-  const hard = landWorkouts.filter(w => w.pct >= 91).length;
-  const easyPct = landWorkouts.length ? Math.round(easy * 100 / landWorkouts.length) : 0;
-  const hardPct = landWorkouts.length ? Math.round(hard * 100 / landWorkouts.length) : 0;
+  const landW = recent.filter(w => (w.sport === 'run' || w.sport === 'bike') && w.pct !== undefined);
+  const easy = landW.filter(w => w.pct < 85).length;
+  const hard = landW.filter(w => w.pct >= 91).length;
+  const easyPct = landW.length ? Math.round(easy * 100 / landW.length) : 0;
+  const hardPct = landW.length ? Math.round(hard * 100 / landW.length) : 0;
+  const medPct = 100 - easyPct - hardPct;
 
-  let ratioVerdict, ratioClass;
-  if (easyPct >= 75) { ratioVerdict = 'Following 80/20 principle'; ratioClass = 'good'; }
-  else if (easyPct >= 60) { ratioVerdict = 'Too much moderate intensity (gray zone)'; ratioClass = 'ok'; }
-  else { ratioVerdict = 'Too much high intensity'; ratioClass = 'bad'; }
+  let rv, rc;
+  if (easyPct >= 75) { rv = '✓ Following 80/20 principle'; rc = 'good'; }
+  else if (easyPct >= 60) { rv = 'Too much moderate intensity (gray zone)'; rc = 'ok'; }
+  else { rv = 'Too much high intensity'; rc = 'bad'; }
 
-  const sportColors = { run: '#3b82f6', bike: '#f97316', swim: '#22c55e' };
-  const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊' };
+  // Build a sport distribution donut
+  const totalS = Object.values(sportCounts).reduce((a,b) => a+b, 0);
+  const sportZd = {
+    Z1: { pct: Math.round(sportCounts.run*100/totalS), count: sportCounts.run },
+    Z2: { pct: Math.round(sportCounts.bike*100/totalS), count: sportCounts.bike },
+    Z3: { pct: Math.round(sportCounts.swim*100/totalS), count: sportCounts.swim },
+    Z4: { pct: 0, count: 0 }, Z5: { pct: 0, count: 0 },
+  };
 
-  container.innerHTML = `
-    <div class="trend-chart">
-      <div class="trend-title">Sport Distribution · Last ${total} workouts</div>
-      <div class="sport-split">
-        ${Object.entries(sportCounts).map(([s, c]) => c > 0 ? `
-          <div class="sport-bar" style="width: ${c*100/total}%; background: ${sportColors[s]};"></div>
-        ` : '').join('')}
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Training Mix</div>
+          <div class="panel-sub">Last ${recent.length} workouts</div>
+        </div>
       </div>
-      <div class="split-legend">
-        ${Object.entries(sportCounts).map(([s, c]) => `
-          <div><span class="legend-dot" style="background: ${sportColors[s]};"></span>${sportEmojis[s]} ${s} · ${c} (${Math.round(c*100/total)}%)</div>
-        `).join('')}
+      <div class="donut-wrap">
+        ${renderSportDonut(sportCounts, totalS)}
+        <div class="donut-legend">
+          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#3b82f6;"></div>🏃 Running</div><div class="legend-value">${sportCounts.run}</div></div>
+          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#f97316;"></div>🚴 Cycling</div><div class="legend-value">${sportCounts.bike}</div></div>
+          <div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#22c55e;"></div>🏊 Swimming</div><div class="legend-value">${sportCounts.swim}</div></div>
+        </div>
       </div>
     </div>
 
     ${avgDrift !== null ? `
-    <div class="trend-chart">
-      <div class="trend-title">Average Run Cardiac Drift</div>
-      <div style="font-size: 32px; font-weight: 800; margin-bottom: 6px;">${avgDrift.toFixed(1)}%</div>
-      <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}">
-        ${avgDrift < 5 ? '✅ Strong aerobic fitness' : avgDrift < 8 ? '⚠️ Building — add more Z2' : '🔴 Needs work'}
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Average Run Cardiac Drift</div>
+          <div class="panel-sub">The best indicator of aerobic fitness</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 48px; font-weight: 800; letter-spacing: -1.5px; font-family: 'JetBrains Mono', monospace;">${avgDrift.toFixed(1)}%</div>
+          <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 10px;">
+            <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
+            ${avgDrift < 5 ? 'Excellent aerobic base' : avgDrift < 8 ? 'Building aerobic fitness' : 'Aerobic engine needs work'}
+          </div>
+        </div>
       </div>
     </div>` : ''}
 
-    ${landWorkouts.length > 0 ? `
-    <div class="trend-chart">
-      <div class="trend-title">Intensity Distribution (80/20 Check)</div>
-      <div class="stat-row">
-        <span class="stat-row-label">🟢 Easy / Zone 2</span>
-        <span class="stat-row-value">${easyPct}%</span>
+    ${landW.length > 0 ? `
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Intensity Distribution (80/20 Rule)</div>
+          <div class="panel-sub">Elite athletes spend ~80% of training easy</div>
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-row-label">🟡 Moderate / Aerobic</span>
-        <span class="stat-row-value">${100 - easyPct - hardPct}%</span>
+      <div class="zone-bars">
+        <div class="zone-row">
+          <div class="zone-info"><div class="zone-chip" style="background: var(--z2);">Ez</div><span class="zone-name">Easy / Z2</span></div>
+          <div class="zone-track"><div class="zone-fill" style="width: ${easyPct}%; background: var(--z2);"></div></div>
+          <div class="zone-pct">${easyPct}%</div>
+        </div>
+        <div class="zone-row">
+          <div class="zone-info"><div class="zone-chip" style="background: var(--z3);">Mo</div><span class="zone-name">Moderate</span></div>
+          <div class="zone-track"><div class="zone-fill" style="width: ${medPct}%; background: var(--z3);"></div></div>
+          <div class="zone-pct">${medPct}%</div>
+        </div>
+        <div class="zone-row">
+          <div class="zone-info"><div class="zone-chip" style="background: var(--z5);">Hd</div><span class="zone-name">Hard / Thresh+</span></div>
+          <div class="zone-track"><div class="zone-fill" style="width: ${hardPct}%; background: var(--z5);"></div></div>
+          <div class="zone-pct">${hardPct}%</div>
+        </div>
       </div>
-      <div class="stat-row">
-        <span class="stat-row-label">🔴 Hard / Threshold+</span>
-        <span class="stat-row-value">${hardPct}%</span>
-      </div>
-      <div class="verdict ${ratioClass}" style="margin-top: 12px;">${ratioVerdict}</div>
+      <div class="verdict ${rc}" style="margin-top: 16px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
     </div>` : ''}
   `;
 }
 
-// ═══════════════════════════════════════════════════════════
-// PROFILE
-// ═══════════════════════════════════════════════════════════
+function renderSportDonut(counts, total) {
+  const size = 160; const stroke = 22;
+  const r = (size - stroke) / 2;
+  const cx = size / 2; const cy = size / 2;
+  const c = 2 * Math.PI * r;
+  const colors = { run: '#3b82f6', bike: '#f97316', swim: '#22c55e' };
+  let offset = 0;
+  const segs = [];
+  for (const sp of ['run', 'bike', 'swim']) {
+    const pct = counts[sp] / total;
+    if (pct === 0) continue;
+    const len = pct * c;
+    segs.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[sp]}" stroke-width="${stroke}" stroke-dasharray="${len} ${c}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`);
+    offset += len;
+  }
+  return `
+    <div class="donut">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="${stroke}"/>
+        ${segs.join('')}
+      </svg>
+      <div class="donut-center">
+        <div class="donut-value">${total}</div>
+        <div class="donut-label">workouts</div>
+      </div>
+    </div>
+  `;
+}
 
-function renderProfile() {
-  document.getElementById('runLthr').value = state.profile.runLthr || '';
-  document.getElementById('bikeLthr').value = state.profile.bikeLthr || '';
+// ═══════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════
+function renderSettings() {
+  document.getElementById('runLthrInput').value = state.profile.runLthr || '';
+  document.getElementById('bikeLthrInput').value = state.profile.bikeLthr || '';
+  document.getElementById('accountName').value = state.user?.name || '';
+  document.getElementById('accountEmail').value = state.user?.email || '';
   updateZonePreview();
 }
 
 function updateZonePreview() {
-  const runLthr = parseInt(document.getElementById('runLthr').value) || 0;
-  const bikeLthr = parseInt(document.getElementById('bikeLthr').value) || 0;
+  const runLthr = parseInt(document.getElementById('runLthrInput').value) || 0;
+  const bikeLthr = parseInt(document.getElementById('bikeLthrInput').value) || 0;
   let html = '';
   if (runLthr > 0) {
     const z = getZones(runLthr);
     html += `
-      <div class="zone-display">
-        <div style="color: var(--text); font-weight: 600; margin-bottom: 8px;">Run Zones (LTHR ${runLthr})</div>
-        <div class="zone-line"><span>Z1 Recovery</span><span>&lt;${z.Z1[1]} bpm</span></div>
-        <div class="zone-line"><span>Z2 Aerobic</span><span>${z.Z2[0]}-${z.Z2[1]} bpm</span></div>
-        <div class="zone-line"><span>Z3 Tempo</span><span>${z.Z3[0]}-${z.Z3[1]} bpm</span></div>
-        <div class="zone-line"><span>Z4 Threshold</span><span>${z.Z4[0]}-${z.Z4[1]} bpm</span></div>
-        <div class="zone-line"><span>Z5 VO2max</span><span>&gt;${z.Z5[0]} bpm</span></div>
+      <div style="background: var(--bg-3); border-radius: 10px; padding: 14px; margin-top: 14px;">
+        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Run Zones (LTHR ${runLthr})</div>
+        <div style="font-size: 12px; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px;">
+          <div style="display:flex; justify-content:space-between;"><span>Z1 Recovery</span><span><${z.Z1[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z2 Aerobic</span><span>${z.Z2[0]}-${z.Z2[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z3 Tempo</span><span>${z.Z3[0]}-${z.Z3[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z4 Threshold</span><span>${z.Z4[0]}-${z.Z4[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z5 VO2max</span><span>>${z.Z5[0]} bpm</span></div>
+        </div>
       </div>
     `;
   }
   if (bikeLthr > 0) {
     const z = getZones(bikeLthr);
     html += `
-      <div class="zone-display">
-        <div style="color: var(--text); font-weight: 600; margin-bottom: 8px;">Bike Zones (LTHR ${bikeLthr})</div>
-        <div class="zone-line"><span>Z1 Recovery</span><span>&lt;${z.Z1[1]} bpm</span></div>
-        <div class="zone-line"><span>Z2 Endurance</span><span>${z.Z2[0]}-${z.Z2[1]} bpm</span></div>
-        <div class="zone-line"><span>Z3 Sweet Spot</span><span>${z.Z3[0]}-${z.Z3[1]} bpm</span></div>
-        <div class="zone-line"><span>Z4 Threshold</span><span>${z.Z4[0]}-${z.Z4[1]} bpm</span></div>
-        <div class="zone-line"><span>Z5 VO2max</span><span>&gt;${z.Z5[0]} bpm</span></div>
+      <div style="background: var(--bg-3); border-radius: 10px; padding: 14px; margin-top: 10px;">
+        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Bike Zones (LTHR ${bikeLthr})</div>
+        <div style="font-size: 12px; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px;">
+          <div style="display:flex; justify-content:space-between;"><span>Z1 Recovery</span><span><${z.Z1[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z2 Endurance</span><span>${z.Z2[0]}-${z.Z2[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z3 Sweet Spot</span><span>${z.Z3[0]}-${z.Z3[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z4 Threshold</span><span>${z.Z4[0]}-${z.Z4[1]} bpm</span></div>
+          <div style="display:flex; justify-content:space-between;"><span>Z5 VO2max</span><span>>${z.Z5[0]} bpm</span></div>
+        </div>
       </div>
     `;
   }
   document.getElementById('zonePreview').innerHTML = html;
 }
 
-async function saveProfile() {
-  const runLthr = parseInt(document.getElementById('runLthr').value) || 170;
-  const bikeLthr = parseInt(document.getElementById('bikeLthr').value) || 165;
+function saveProfile() {
+  const runLthr = parseInt(document.getElementById('runLthrInput').value) || 170;
+  const bikeLthr = parseInt(document.getElementById('bikeLthrInput').value) || 165;
+  const name = document.getElementById('accountName').value.trim();
   state.profile = { runLthr, bikeLthr };
-  await saveState();
+  if (name && state.user) {
+    state.user.name = name;
+    storageSet('eiq_user', state.user);
+    const users = storageGet('eiq_users') || {};
+    if (users[state.user.email]) {
+      users[state.user.email].name = name;
+      storageSet('eiq_users', users);
+    }
+    showApp();
+  }
+  saveProfileData();
   updateZonePreview();
-  alert('Profile saved! Your zones are set.');
+  toast('Profile saved');
 }
 
 // Live zone preview
-['runLthr', 'bikeLthr'].forEach(id => {
-  document.getElementById(id).addEventListener('input', updateZonePreview);
+document.addEventListener('DOMContentLoaded', () => {
+  ['runLthrInput', 'bikeLthrInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateZonePreview);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════
-// FILE UPLOAD
+// UPLOAD
 // ═══════════════════════════════════════════════════════════
+function initUpload() {
+  const zone = document.getElementById('uploadZone');
+  const input = document.getElementById('fileInput');
+  const output = document.getElementById('analysisOutput');
 
-const uploadZone = document.getElementById('uploadZone');
-const fileInput = document.getElementById('fileInput');
-const output = document.getElementById('analysisOutput');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
 
-uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  uploadZone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files.length) handleFile(e.target.files[0]);
-});
-
-async function handleFile(file) {
-  if (!file.name.endsWith('.csv')) {
-    output.innerHTML = `<div class="card"><p style="color: var(--danger);">Please upload a CSV file from Garmin Connect.</p></div>`;
-    return;
-  }
-
-  output.innerHTML = `<div class="card"><div class="loading"><div class="spinner"></div>Analyzing ${file.name}...</div></div>`;
-
-  const text = await file.text();
-  const activityType = detectActivity(text);
-  let data, analysis;
-
-  try {
-    if (activityType === 'swim') {
-      data = parseSwimCSV(text);
-      if (data) analysis = analyzeSwim(data);
-    } else if (activityType === 'bike') {
-      data = parseBikeCSV(text);
-      if (data) analysis = analyzeBike(data, state.profile.bikeLthr);
-    } else {
-      data = parseRunCSV(text);
-      if (data) analysis = analyzeRun(data, state.profile.runLthr);
-    }
-
-    if (!analysis) {
-      output.innerHTML = `<div class="card"><p style="color: var(--danger);">Couldn't parse this file. Make sure it's a Garmin Connect CSV export.</p></div>`;
+  async function handleFile(file) {
+    if (!file.name.endsWith('.csv')) {
+      output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Please upload a CSV file from Garmin Connect.</p></div>`;
       return;
     }
-
-    output.innerHTML = renderAnalysis(analysis);
-    state.workouts.push(analysis);
-    await saveState();
-
-  } catch (err) {
-    output.innerHTML = `<div class="card"><p style="color: var(--danger);">Error: ${err.message}</p></div>`;
+    output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><div class="loading"><div class="spinner"></div>Analyzing ${file.name}...</div></div>`;
+    try {
+      const text = await file.text();
+      const atype = detectActivity(text);
+      let data, analysis;
+      if (atype === 'swim') { data = parseSwimCSV(text); if (data) analysis = analyzeSwim(data); }
+      else if (atype === 'bike') { data = parseBikeCSV(text); if (data) analysis = analyzeBike(data, state.profile.bikeLthr); }
+      else { data = parseRunCSV(text); if (data) analysis = analyzeRun(data, state.profile.runLthr); }
+      if (!analysis) {
+        output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Couldn't parse this file. Make sure it's a Garmin Connect CSV export.</p></div>`;
+        return;
+      }
+      output.innerHTML = renderAnalysis(analysis);
+      state.workouts.push(analysis);
+      saveWorkouts();
+      toast('Workout saved to history');
+    } catch (err) {
+      output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Error: ${err.message}</p></div>`;
+    }
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FAQ
+// ═══════════════════════════════════════════════════════════
+function toggleFaq(el) {
+  el.parentElement.classList.toggle('open');
 }
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
-
-(async () => {
-  await loadState();
-})();
-
+if (loadUser()) {
+  showApp();
+  navigate('dashboard');
+} else {
+  showLanding();
+  navigate('landing');
+}
+initUpload();
 </script>
 </body>
 </html>
