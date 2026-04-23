@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
 :root {
@@ -1058,6 +1059,13 @@ h1.hero-h .grad {
 
 <script>
 // ═══════════════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://jubbxlnrwzgixbqlhjdd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZjFD_3xIjywpxrU9Vp-ImQ_WiNidr2L';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
 let state = {
@@ -1070,46 +1078,75 @@ function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  setTimeout(() => t.classList.remove('show'), 2800);
 }
 
 // ═══════════════════════════════════════════════════════════
-// STORAGE (local-first approach)
+// DATABASE (Supabase)
 // ═══════════════════════════════════════════════════════════
-// We use localStorage for now. Later this becomes Supabase/API calls.
-
-function storageGet(key) {
-  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
-}
-function storageSet(key, val) {
-  localStorage.setItem(key, JSON.stringify(val));
-}
-
-function loadUser() {
-  const u = storageGet('eiq_user');
-  if (u) {
-    state.user = u;
-    state.profile = storageGet(`eiq_profile_${u.email}`) || { runLthr: 170, bikeLthr: 165 };
-    state.workouts = storageGet(`eiq_workouts_${u.email}`) || [];
-    return true;
+async function loadProfile() {
+  if (!state.user) return;
+  const { data, error } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('id', state.user.id)
+    .single();
+  if (data) {
+    state.profile = {
+      runLthr: data.run_lthr || 170,
+      bikeLthr: data.bike_lthr || 165,
+    };
+    if (data.name) state.user.name = data.name;
   }
-  return false;
 }
 
-function saveProfileData() {
+async function saveProfileData() {
   if (!state.user) return;
-  storageSet(`eiq_profile_${state.user.email}`, state.profile);
+  const { error } = await sb
+    .from('profiles')
+    .update({
+      run_lthr: state.profile.runLthr,
+      bike_lthr: state.profile.bikeLthr,
+      name: state.user.name,
+    })
+    .eq('id', state.user.id);
+  if (error) console.error('Profile save error:', error);
 }
 
-function saveWorkouts() {
+async function loadWorkouts() {
   if (!state.user) return;
-  storageSet(`eiq_workouts_${state.user.email}`, state.workouts);
+  const { data, error } = await sb
+    .from('workouts')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .order('created_at', { ascending: true });
+  if (data) {
+    state.workouts = data.map(w => ({ ...w.workout_data, _dbId: w.id }));
+  }
+}
+
+async function saveWorkout(workout) {
+  if (!state.user) return;
+  const { data, error } = await sb
+    .from('workouts')
+    .insert({
+      user_id: state.user.id,
+      sport: workout.sport,
+      workout_data: workout,
+    })
+    .select()
+    .single();
+  if (data) {
+    workout._dbId = data.id;
+  } else if (error) {
+    console.error('Workout save error:', error);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUTH
+// AUTH (Supabase)
 // ═══════════════════════════════════════════════════════════
-function doSignup() {
+async function doSignup() {
   const name = document.getElementById('signupName').value.trim();
   const email = document.getElementById('signupEmail').value.trim().toLowerCase();
   const password = document.getElementById('signupPassword').value;
@@ -1117,57 +1154,114 @@ function doSignup() {
   if (password.length < 6) return toast('Password must be at least 6 characters');
   if (!email.includes('@')) return toast('Invalid email');
 
-  // Simple local auth — in production this would be Supabase
-  const users = storageGet('eiq_users') || {};
-  if (users[email]) return toast('Account already exists — try logging in');
+  toast('Creating your account...');
 
-  users[email] = { name, email, password, created: new Date().toISOString() };
-  storageSet('eiq_users', users);
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { name },
+      emailRedirectTo: window.location.origin,
+    },
+  });
 
-  state.user = { name, email };
-  storageSet('eiq_user', state.user);
-  state.profile = { runLthr: 170, bikeLthr: 165 };
-  state.workouts = [];
-  saveProfileData();
-  saveWorkouts();
+  if (error) {
+    if (error.message.includes('already registered')) return toast('Account already exists — try logging in');
+    return toast('Signup failed: ' + error.message);
+  }
 
+  // If email confirmation is required, user won't have a session yet
+  if (!data.session) {
+    showEmailVerifyScreen(email);
+    return;
+  }
+
+  // Otherwise, they're logged in immediately
+  state.user = { id: data.user.id, email, name };
+  await loadProfile();
+  await loadWorkouts();
   toast(`Welcome, ${name}!`);
   showApp();
   navigate('dashboard');
 }
 
-function doLogin() {
+async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const password = document.getElementById('loginPassword').value;
-  const users = storageGet('eiq_users') || {};
-  if (!users[email]) return toast('No account found with that email');
-  if (users[email].password !== password) return toast('Wrong password');
+  if (!email || !password) return toast('Please enter email and password');
 
-  state.user = { name: users[email].name, email };
-  storageSet('eiq_user', state.user);
-  state.profile = storageGet(`eiq_profile_${email}`) || { runLthr: 170, bikeLthr: 165 };
-  state.workouts = storageGet(`eiq_workouts_${email}`) || [];
+  toast('Logging in...');
 
-  toast(`Welcome back, ${users[email].name}`);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    if (error.message.toLowerCase().includes('email not confirmed')) {
+      return showEmailVerifyScreen(email);
+    }
+    return toast('Login failed: ' + error.message);
+  }
+
+  state.user = {
+    id: data.user.id,
+    email: data.user.email,
+    name: data.user.user_metadata?.name || 'Athlete',
+  };
+  await loadProfile();
+  await loadWorkouts();
+  toast(`Welcome back, ${state.user.name}`);
   showApp();
   navigate('dashboard');
 }
 
-function doLogout() {
-  localStorage.removeItem('eiq_user');
+async function doLogout() {
+  await sb.auth.signOut();
   state.user = null;
   state.workouts = [];
+  state.profile = { runLthr: 170, bikeLthr: 165 };
   showLanding();
   navigate('landing');
+}
+
+function showEmailVerifyScreen(email) {
+  const wrap = document.querySelector('#page-signup .auth-wrap');
+  if (wrap) {
+    wrap.innerHTML = `
+      <h2 class="auth-title">Check your email</h2>
+      <p class="auth-sub">We sent a verification link to<br><strong style="color: var(--text);">${email}</strong></p>
+      <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 20px 0; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+        1. Open your email inbox<br>
+        2. Click the verification link from EnduraIQ<br>
+        3. You'll be brought back here — then log in
+      </div>
+      <button class="btn full" onclick="navigate('login')">I verified — let me log in</button>
+      <p class="auth-switch" style="margin-top: 14px;">Didn't get an email? Check spam, or <a onclick="navigate('signup'); setTimeout(()=>location.reload(), 100)">try again</a></p>
+    `;
+  }
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-signup').classList.add('active');
+}
+
+async function checkSession() {
+  const { data } = await sb.auth.getSession();
+  if (data.session) {
+    state.user = {
+      id: data.session.user.id,
+      email: data.session.user.email,
+      name: data.session.user.user_metadata?.name || 'Athlete',
+    };
+    await loadProfile();
+    await loadWorkouts();
+    return true;
+  }
+  return false;
 }
 
 function showApp() {
   document.getElementById('mainNav').style.display = 'block';
   document.getElementById('landingNav').style.display = 'none';
-  // Update nav
-  const initial = state.user.name[0].toUpperCase();
+  const initial = (state.user.name || 'A')[0].toUpperCase();
   document.getElementById('navAvatar').textContent = initial;
-  document.getElementById('navName').textContent = state.user.name.split(' ')[0];
+  document.getElementById('navName').textContent = (state.user.name || 'Athlete').split(' ')[0];
 }
 
 function showLanding() {
@@ -2074,22 +2168,16 @@ function updateZonePreview() {
   document.getElementById('zonePreview').innerHTML = html;
 }
 
-function saveProfile() {
+async function saveProfile() {
   const runLthr = parseInt(document.getElementById('runLthrInput').value) || 170;
   const bikeLthr = parseInt(document.getElementById('bikeLthrInput').value) || 165;
   const name = document.getElementById('accountName').value.trim();
   state.profile = { runLthr, bikeLthr };
   if (name && state.user) {
     state.user.name = name;
-    storageSet('eiq_user', state.user);
-    const users = storageGet('eiq_users') || {};
-    if (users[state.user.email]) {
-      users[state.user.email].name = name;
-      storageSet('eiq_users', users);
-    }
     showApp();
   }
-  saveProfileData();
+  await saveProfileData();
   updateZonePreview();
   toast('Profile saved');
 }
@@ -2139,7 +2227,7 @@ function initUpload() {
       }
       output.innerHTML = renderAnalysis(analysis);
       state.workouts.push(analysis);
-      saveWorkouts();
+      await saveWorkout(analysis);
       toast('Workout saved to history');
     } catch (err) {
       output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Error: ${err.message}</p></div>`;
@@ -2157,13 +2245,16 @@ function toggleFaq(el) {
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
-if (loadUser()) {
-  showApp();
-  navigate('dashboard');
-} else {
-  showLanding();
-  navigate('landing');
-}
+(async function init() {
+  const loggedIn = await checkSession();
+  if (loggedIn) {
+    showApp();
+    navigate('dashboard');
+  } else {
+    showLanding();
+    navigate('landing');
+  }
+})();
 initUpload();
 </script>
 </body>
