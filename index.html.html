@@ -57,7 +57,9 @@ body {
   overflow-x: hidden;
   font-feature-settings: 'ss01', 'cv11';
   -webkit-font-smoothing: antialiased;
+  padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
+  background-color: var(--bg);
 }
 
 /* Background ambient orbs — animated */
@@ -99,19 +101,27 @@ body {
   66% { transform: translate(-30px, 40px) scale(0.95); }
 }
 
-.app { position: relative; z-index: 1; min-height: 100vh; }
+.app { position: relative; z-index: 1; min-height: 100vh; width: 100%; overflow-x: hidden; }
 
 /* NAV */
 .nav {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(10, 14, 26, 0.92);
+  background: rgba(10, 14, 26, 0.95);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border);
-  padding: calc(12px + var(--safe-top)) 20px 12px;
+  padding: 12px 20px;
   padding-left: max(20px, var(--safe-left));
   padding-right: max(20px, var(--safe-right));
-  margin-top: calc(-1 * var(--safe-top));
+}
+
+/* Safe-area backdrop — covers the camera notch area with solid bg */
+.safe-area-top {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--safe-top);
+  background: var(--bg);
+  z-index: 200;
+  pointer-events: none;
 }
 
 .nav-inner {
@@ -190,9 +200,12 @@ body {
   padding: 28px 20px 100px;
   padding-left: max(20px, var(--safe-left));
   padding-right: max(20px, var(--safe-right));
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-.page { display: none; animation: fadeIn 0.25s ease-out; }
+.page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; position: relative; }
 .page.active { display: block; }
 
 @keyframes fadeIn {
@@ -584,6 +597,8 @@ h1.hero-h .grad {
 .source-tab.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 
 .upload-zone {
+  display: block;
+  width: 100%;
   background: var(--bg-2);
   border: 2px dashed var(--border-light);
   border-radius: 18px;
@@ -594,6 +609,7 @@ h1.hero-h .grad {
   margin-bottom: 20px;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .upload-zone:hover, .upload-zone.dragover {
@@ -1224,6 +1240,7 @@ h1.hero-h .grad {
 </head>
 
 <body>
+<div class="safe-area-top"></div>
 <div class="bg-orbs">
   <div class="bg-orb one"></div>
   <div class="bg-orb two"></div>
