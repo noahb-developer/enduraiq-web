@@ -1174,6 +1174,67 @@ h1.hero-h .grad {
   .calendar { padding: 10px; }
 }
 
+.cal-day.has-workout { cursor: pointer; }
+.cal-day.has-workout:hover { border-color: var(--accent); background: rgba(0, 229, 160, 0.04); }
+
+/* Workout Details Side Panel */
+.workout-panel-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 250;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.workout-panel-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.workout-panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 420px; max-width: 90vw;
+  background: var(--bg-2);
+  border-left: 1px solid var(--border);
+  z-index: 300;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+.workout-panel.open { transform: translateX(0); box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5); }
+
+.workout-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.workout-panel-title {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.3px;
+}
+.workout-panel-close {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text); font-size: 20px; cursor: pointer;
+  font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.workout-panel-close:hover { border-color: var(--border-light); }
+
+.workout-panel-body {
+  flex: 1; overflow-y: auto; padding: 20px;
+  padding-left: max(20px, var(--safe-left));
+  padding-right: max(20px, var(--safe-right));
+}
+
+@media (max-width: 720px) {
+  .workout-panel { width: 100%; max-width: 100%; }
+}
+
 /* LOADING */
 .loading {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -1640,6 +1701,16 @@ h1.hero-h .grad {
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- Workout Details Side Panel -->
+<div class="workout-panel-backdrop" id="workoutPanelBackdrop" onclick="closeWorkoutPanel()"></div>
+<div class="workout-panel" id="workoutPanel">
+  <div class="workout-panel-header">
+    <div class="workout-panel-title">Workout Details</div>
+    <button class="workout-panel-close" onclick="closeWorkoutPanel()">×</button>
+  </div>
+  <div class="workout-panel-body" id="workoutPanelBody"></div>
+</div>
 
 </div>
 
@@ -3082,9 +3153,23 @@ async function sendChatMsg() {
   msgs.scrollTop = msgs.scrollHeight;
 
   try {
-    // Get context
+    // Get context: profile, this week's plan, recent completed workouts
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     const recent = state.workouts.slice(-5).reverse();
+
+    // Get this week's planned workouts (and a bit beyond for "what's tomorrow/next" questions)
+    const todayDate = new Date();
+    const weekStart = new Date(todayDate);
+    weekStart.setDate(weekStart.getDate() - 3);
+    const weekEnd = new Date(todayDate);
+    weekEnd.setDate(weekEnd.getDate() + 10);
+
+    const { data: plannedWorkouts } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', weekStart.toISOString().split('T')[0])
+      .lte('scheduled_date', weekEnd.toISOString().split('T')[0])
+      .order('scheduled_date', { ascending: true });
 
     // Get past chat history
     const { data: history } = await sb.from('coach_messages')
@@ -3098,7 +3183,7 @@ async function sendChatMsg() {
       content: h.content,
     }));
 
-    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent });
+    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent, plannedWorkouts: plannedWorkouts || [] });
 
     // Remove thinking indicator
     const thinking = document.getElementById('thinkingMsg');
@@ -3203,6 +3288,8 @@ async function renderPlan() {
   renderCalendarGrid(planned || []);
 }
 
+let currentPlannedWorkouts = {};
+
 function renderCalendarGrid(plannedWorkouts) {
   const grid = document.getElementById('calGrid');
   if (!grid) return;
@@ -3210,37 +3297,132 @@ function renderCalendarGrid(plannedWorkouts) {
   const month = calMonth.getMonth();
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-  // 0 = Sunday in JS, we want Mon = 0
   let startCol = (firstDay.getDay() + 6) % 7;
 
   const today = new Date();
   const isToday = (d) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
 
-  // Map planned workouts by date
-  const byDate = {};
+  // Map planned workouts by date + store in memory for panel lookup
+  currentPlannedWorkouts = {};
   plannedWorkouts.forEach(pw => {
-    if (!byDate[pw.scheduled_date]) byDate[pw.scheduled_date] = [];
-    byDate[pw.scheduled_date].push(pw);
+    if (!currentPlannedWorkouts[pw.scheduled_date]) currentPlannedWorkouts[pw.scheduled_date] = [];
+    currentPlannedWorkouts[pw.scheduled_date].push(pw);
   });
 
+  const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', rest: '💤', strength: '💪' };
+
   let html = '';
-  // Empty cells before month starts
   for (let i = 0; i < startCol; i++) html += `<div class="cal-day empty"></div>`;
-  // Days of month
   for (let d = 1; d <= lastDay.getDate(); d++) {
     const date = new Date(year, month, d);
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const dayWorkouts = byDate[dateStr] || [];
+    const dayWorkouts = currentPlannedWorkouts[dateStr] || [];
     const todayCls = isToday(date) ? 'today' : '';
+    const hasWorkout = dayWorkouts.length > 0;
     html += `
-      <div class="cal-day ${todayCls}">
+      <div class="cal-day ${todayCls} ${hasWorkout ? 'has-workout' : ''}" ${hasWorkout ? `onclick="openWorkoutPanel('${dateStr}')"` : ''}>
         <div class="cal-date">${d}</div>
-        ${dayWorkouts.map(w => `<div class="cal-workout ${w.sport || 'rest'} ${w.completed ? 'completed' : ''}">${w.workout_type || w.sport}</div>`).join('')}
+        ${dayWorkouts.map(w => {
+          const emoji = sportEmojis[w.sport] || '';
+          const label = w.workout_type || w.sport;
+          return `<div class="cal-workout ${w.sport || 'rest'} ${w.completed ? 'completed' : ''}">${emoji} ${label}</div>`;
+        }).join('')}
       </div>
     `;
   }
 
   grid.innerHTML = html;
+}
+
+function openWorkoutPanel(dateStr) {
+  const workouts = currentPlannedWorkouts[dateStr] || [];
+  if (workouts.length === 0) return;
+
+  const panel = document.getElementById('workoutPanel');
+  const body = document.getElementById('workoutPanelBody');
+
+  const date = new Date(dateStr + 'T12:00:00');
+  const dateLabel = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const sportEmojis = { run: '🏃', bike: '🚴', swim: '🏊', rest: '💤', strength: '💪' };
+  const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', rest: 'Rest day', strength: 'Strength' };
+
+  body.innerHTML = `
+    <div style="margin-bottom: 20px;">
+      <div style="color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600;">${dateLabel}</div>
+    </div>
+    ${workouts.map(w => `
+      <div class="panel" style="margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+          <div style="font-size: 32px;">${sportEmojis[w.sport] || '⚡'}</div>
+          <div>
+            <div style="font-size: 18px; font-weight: 700; letter-spacing: -0.3px;">${sportLabels[w.sport] || w.sport}</div>
+            <div style="font-size: 13px; color: var(--text-dim); text-transform: capitalize;">${w.workout_type || ''}${w.completed ? ' · ✓ completed' : ''}</div>
+          </div>
+        </div>
+
+        ${w.description ? `
+          <div class="coach-box" style="margin-top: 0;">
+            <div class="coach-title">📋 Session Details</div>
+            <div class="coach-text">${w.description}</div>
+          </div>
+        ` : ''}
+
+        <div class="metrics" style="margin-top: 14px;">
+          ${w.duration_minutes ? `
+            <div class="metric">
+              <div class="metric-label">Duration</div>
+              <div class="metric-value">${w.duration_minutes}<span style="font-size: 13px; color: var(--text-dim);"> min</span></div>
+            </div>
+          ` : ''}
+          ${w.distance_km ? `
+            <div class="metric">
+              <div class="metric-label">Distance</div>
+              <div class="metric-value">${w.distance_km}<span style="font-size: 13px; color: var(--text-dim);"> km</span></div>
+            </div>
+          ` : ''}
+          ${w.intensity_target ? `
+            <div class="metric" style="grid-column: 1 / -1;">
+              <div class="metric-label">Intensity Target</div>
+              <div class="metric-value" style="font-size: 15px; font-family: inherit; font-weight: 600;">${w.intensity_target}</div>
+            </div>
+          ` : ''}
+        </div>
+
+        <button class="btn" style="width: 100%; margin-top: 16px;" onclick="askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this workout</button>
+      </div>
+    `).join('')}
+  `;
+
+  panel.classList.add('open');
+  document.getElementById('workoutPanelBackdrop').classList.add('open');
+}
+
+function closeWorkoutPanel() {
+  document.getElementById('workoutPanel').classList.remove('open');
+  document.getElementById('workoutPanelBackdrop').classList.remove('open');
+}
+
+function askCoachAboutWorkout(workoutId) {
+  // Find the workout
+  let found = null;
+  for (const dateStr in currentPlannedWorkouts) {
+    const w = currentPlannedWorkouts[dateStr].find(x => x.id === workoutId);
+    if (w) { found = { ...w, date: dateStr }; break; }
+  }
+  if (!found) return;
+
+  closeWorkoutPanel();
+  navigate('coach');
+  // Pre-fill chat with a question about this workout
+  setTimeout(() => {
+    const input = document.getElementById('chatInput');
+    if (input) {
+      const date = new Date(found.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+      input.value = `Tell me about my ${found.workout_type || ''} ${found.sport} on ${date}. Why is it scheduled and how should I approach it?`;
+      input.focus();
+    }
+  }, 300);
 }
 
 function changeMonth(delta) {
