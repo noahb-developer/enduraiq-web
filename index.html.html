@@ -2902,17 +2902,35 @@ async function intakeNext() {
   }
 }
 
+// Helper that calls our Coach edge function
+async function callCoach(action, payload) {
+  const { data: session } = await sb.auth.getSession();
+  const token = session?.session?.access_token;
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/coach`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token || SUPABASE_KEY}`,
+      'apikey': SUPABASE_KEY,
+    },
+    body: JSON.stringify({ action, payload }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Coach function failed');
+  return data.result;
+}
+
 async function completeIntake() {
   const el = document.getElementById('coachContent');
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
-        <h2>Saving your profile…</h2>
-        <p>Coach is preparing your space. One moment.</p>
+        <h2>Building your plan…</h2>
+        <p>Coach is analyzing your profile and designing your periodized training plan. This takes about 15-30 seconds.</p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>Processing</div>
+    <div class="loading"><div class="spinner"></div>Generating plan with Claude AI</div>
   `;
 
   // Save intake to Supabase
@@ -2932,37 +2950,83 @@ async function completeIntake() {
   };
 
   const { error } = await sb.from('athlete_intake').upsert(payload, { onConflict: 'user_id' });
-
   if (error) {
     toast('Save failed: ' + error.message);
     console.error(error);
     return;
   }
 
-  toast('Profile saved');
-  // Re-render Coach to show chat
-  renderCoach();
+  // Now generate plan with Claude
+  try {
+    const plan = await callCoach('generate_plan', { intake: payload });
+
+    // Store plan in training_plans
+    const { data: planRow } = await sb.from('training_plans').insert({
+      user_id: state.user.id,
+      plan_data: plan,
+      current_phase: plan.phase || 'base',
+      active: true,
+    }).select().single();
+
+    // Create planned_workouts rows from the plan
+    if (plan.workouts && Array.isArray(plan.workouts)) {
+      const today = new Date();
+      const rows = plan.workouts.map(w => {
+        const d = new Date(today);
+        d.setDate(d.getDate() + (w.date_offset_days || 0));
+        return {
+          user_id: state.user.id,
+          plan_id: planRow?.id || null,
+          scheduled_date: d.toISOString().split('T')[0],
+          sport: w.sport || 'run',
+          workout_type: w.workout_type || 'easy',
+          duration_minutes: w.duration_minutes || null,
+          distance_km: w.distance_km || null,
+          description: w.description || '',
+          intensity_target: w.intensity_target || '',
+        };
+      });
+      await sb.from('planned_workouts').insert(rows);
+    }
+
+    toast('Plan ready!');
+    renderCoach();
+  } catch (err) {
+    console.error('Plan generation failed:', err);
+    toast('Plan generation failed: ' + err.message);
+    // Still show the profile even if plan gen failed
+    renderCoach();
+  }
 }
 
-function renderCoachChat(el, intake) {
+async function renderCoachChat(el, intake) {
+  // Load past messages
+  const { data: history } = await sb.from('coach_messages')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .order('created_at', { ascending: true })
+    .limit(50);
+
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>Coach</h2>
-        <p>Your AI endurance coach. Ready to chat about your training.</p>
+        <p>Your AI endurance coach. Ask anything about your training, a workout, or how to improve.</p>
       </div>
     </div>
 
-    <div class="coach-stub">
-      <div class="stub-icon">i</div>
-      <div>
-        <h4>Coach AI activates next session</h4>
-        <p>Your profile is saved. The conversation engine connects to Claude in the next update — Coach will then build your full periodized plan, comment on every workout, and answer questions here. For now, here's a summary of what you told me.</p>
+    <div class="coach-chat">
+      <div class="chat-messages" id="chatMessages">
+        ${(history && history.length > 0) ? history.map(m => renderMsg(m.role, m.content)).join('') : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="Ask Coach anything..." onkeydown="if(event.key==='Enter')sendChatMsg()" />
+        <button class="btn" onclick="sendChatMsg()">Send</button>
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" style="margin-top: 16px;">
       <div class="panel-header"><div><div class="panel-title">Your Athlete Profile</div><div class="panel-sub">Edit anytime by retaking the intake</div></div></div>
       <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;">
         ${intake.goal_event ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Goal</span><strong>${formatGoal(intake.goal_event)}</strong></div>` : ''}
@@ -2975,6 +3039,88 @@ function renderCoachChat(el, intake) {
       <button class="btn ghost" style="margin-top:16px;" onclick="retakeIntake()">Retake intake</button>
     </div>
   `;
+
+  // Scroll chat to bottom
+  const chatEl = document.getElementById('chatMessages');
+  if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function renderMsg(role, content) {
+  const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
+  return `
+    <div class="chat-msg ${role === 'coach' ? '' : 'user'}">
+      <div class="msg-avatar">${avatar}</div>
+      <div class="msg-bubble">${escapeHtml(content)}</div>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const msgs = document.getElementById('chatMessages');
+  if (!input || !msgs) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.disabled = true;
+
+  // Append user msg immediately
+  msgs.innerHTML += renderMsg('user', text);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Save user msg to db
+  await sb.from('coach_messages').insert({
+    user_id: state.user.id, role: 'user', content: text, context_type: 'general_chat',
+  });
+
+  // Append thinking indicator
+  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">Thinking...</span></div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+
+  try {
+    // Get context
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    const recent = state.workouts.slice(-5).reverse();
+
+    // Get past chat history
+    const { data: history } = await sb.from('coach_messages')
+      .select('role, content')
+      .eq('user_id', state.user.id)
+      .order('created_at', { ascending: true })
+      .limit(20);
+
+    const messages = (history || []).map(h => ({
+      role: h.role === 'coach' ? 'assistant' : 'user',
+      content: h.content,
+    }));
+
+    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent });
+
+    // Remove thinking indicator
+    const thinking = document.getElementById('thinkingMsg');
+    if (thinking) thinking.remove();
+
+    // Append reply
+    msgs.innerHTML += renderMsg('coach', reply);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // Save coach msg
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat',
+    });
+  } catch (err) {
+    const thinking = document.getElementById('thinkingMsg');
+    if (thinking) thinking.remove();
+    msgs.innerHTML += renderMsg('coach', 'Sorry, something went wrong. Try again in a moment.');
+    console.error(err);
+  }
+
+  input.disabled = false;
+  input.focus();
 }
 
 function formatGoal(g) {
@@ -3030,14 +3176,6 @@ async function renderPlan() {
   el.innerHTML = `
     <div class="section-title">Your Training Plan</div>
     <p class="section-sub">Coach generates this calendar from your goals. Updates automatically as you train.</p>
-
-    <div class="coach-stub">
-      <div class="stub-icon">i</div>
-      <div>
-        <h4>Plan generation coming next session</h4>
-        <p>The calendar UI is ready. Once Coach AI is connected, it'll fill this calendar with periodized workouts based on your goal date and current fitness — and adjust automatically as you upload completed sessions.</p>
-      </div>
-    </div>
 
     <div class="plan-header">
       <div class="plan-month">
@@ -3221,6 +3359,27 @@ function initUpload() {
       state.workouts.push(analysis);
       await saveWorkout(analysis);
       toast('Workout saved');
+
+      // Get Coach commentary
+      try {
+        const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+        const commentaryEl = document.createElement('div');
+        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text" id="commentaryText"><span style="opacity: 0.6;">Coach is reviewing your session...</span></div></div>`;
+        output.appendChild(commentaryEl);
+
+        const commentary = await callCoach('workout_commentary', { workout: analysis, intake });
+        document.getElementById('commentaryText').textContent = commentary;
+
+        // Save commentary as a coach message
+        await sb.from('coach_messages').insert({
+          user_id: state.user.id,
+          role: 'coach',
+          content: commentary,
+          context_type: 'workout_commentary',
+        });
+      } catch (cerr) {
+        console.error('Commentary failed:', cerr);
+      }
     } catch (err) {
       output.innerHTML = `<div class="analysis-card" style="padding: 20px;"><p style="color: var(--danger);">Error: ${err.message}</p></div>`;
     }
