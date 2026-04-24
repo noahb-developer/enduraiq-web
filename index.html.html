@@ -1051,11 +1051,24 @@ h1.hero-h .grad {
 
 .chat-msg .msg-bubble {
   padding: 10px 14px; border-radius: 14px;
-  background: var(--bg-3); font-size: 14px; line-height: 1.5;
+  background: var(--bg-3); font-size: 14px; line-height: 1.55;
 }
 .chat-msg.user .msg-bubble {
   background: var(--accent); color: var(--bg);
 }
+
+/* Markdown formatting inside chat bubbles */
+.chat-msg .msg-bubble strong { font-weight: 700; color: var(--text); }
+.chat-msg.user .msg-bubble strong { color: var(--bg); }
+.chat-msg .msg-bubble em { font-style: italic; }
+.chat-msg .msg-bubble ul, .chat-msg .msg-bubble ol {
+  margin: 8px 0 8px 20px; padding: 0;
+}
+.chat-msg .msg-bubble li { margin-bottom: 4px; line-height: 1.5; }
+.chat-msg .msg-bubble li::marker { color: var(--text-dim); }
+.chat-msg.user .msg-bubble li::marker { color: rgba(10, 14, 26, 0.6); }
+.chat-msg .msg-bubble p:first-child { margin-top: 0; }
+.chat-msg .msg-bubble p:last-child { margin-bottom: 0; }
 
 .chat-input-row {
   display: flex; gap: 8px; padding: 14px;
@@ -1234,6 +1247,69 @@ h1.hero-h .grad {
 @media (max-width: 720px) {
   .workout-panel { width: 100%; max-width: 100%; }
 }
+
+/* Modal (confirm, import) */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 400;
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 20px;
+  padding-top: max(20px, var(--safe-top));
+  padding-bottom: max(20px, var(--safe-bottom));
+}
+.modal-backdrop.open { display: flex; animation: fadeIn 0.2s; }
+
+.modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  width: 100%; max-width: 460px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: modalPop 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.modal-close {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text); font-size: 18px; cursor: pointer;
+  font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.modal-close:hover { border-color: var(--border-light); }
+
+.modal-body {
+  padding: 20px 24px 4px;
+  overflow-y: auto;
+  font-size: 14px; line-height: 1.55;
+}
+.modal-body ul li { line-height: 1.7; }
+
+.modal-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-actions .btn { width: auto; padding: 10px 20px; }
 
 /* LOADING */
 .loading {
@@ -1710,6 +1786,49 @@ h1.hero-h .grad {
     <button class="workout-panel-close" onclick="closeWorkoutPanel()">×</button>
   </div>
   <div class="workout-panel-body" id="workoutPanelBody"></div>
+</div>
+
+<!-- Confirmation Modal (Reset / Regenerate) -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="confirmTitle">Confirm</div>
+      <button class="modal-close" onclick="closeConfirmModal()">×</button>
+    </div>
+    <div class="modal-body" id="confirmBody"></div>
+    <div style="padding: 0 24px 16px;">
+      <input type="text" id="confirmInput" placeholder="" style="width: 100%; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; font-family: 'JetBrains Mono', monospace; font-weight: 600; outline: none; letter-spacing: 1px;" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn" id="confirmActionBtn" style="background: var(--danger); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.25);">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Plan Modal -->
+<div class="modal-backdrop" id="importModal">
+  <div class="modal" style="max-width: 560px;">
+    <div class="modal-header">
+      <div class="modal-title">📥 Import Existing Plan</div>
+      <button class="modal-close" onclick="closeImportModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 14px; color: var(--text-dim); font-size: 14px; line-height: 1.55;">Paste your existing training plan below and Coach will structure it into your calendar. Works with plans from another coach, training app, or AI.</p>
+      <p style="margin-bottom: 10px; color: var(--text-dim); font-size: 13px;">Tips for best results:</p>
+      <ul style="margin: 0 0 14px 20px; color: var(--text-dim); font-size: 13px; line-height: 1.6;">
+        <li>Include at least one week of workouts</li>
+        <li>Use labels like "Monday", "Tuesday" or days from now</li>
+        <li>Include sport (run/bike/swim), duration, intensity if possible</li>
+        <li>Keep it under 4 weeks worth</li>
+      </ul>
+      <textarea id="importText" placeholder="Example:&#10;Monday: 45 min easy run, Z2&#10;Tuesday: Rest&#10;Wednesday: 6x400m intervals with 2 min rest&#10;Thursday: 60 min bike, Z2&#10;Friday: Rest&#10;Saturday: Long run, 90 min, easy pace&#10;Sunday: Swim 2000m, mixed sets&#10;&#10;(Paste your own plan here)" style="width: 100%; min-height: 220px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; resize: vertical; line-height: 1.5;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeImportModal()">Cancel</button>
+      <button class="btn" onclick="submitImport()">Import plan →</button>
+    </div>
+  </div>
 </div>
 
 </div>
@@ -3030,35 +3149,7 @@ async function completeIntake() {
   // Now generate plan with Claude
   try {
     const plan = await callCoach('generate_plan', { intake: payload });
-
-    // Store plan in training_plans
-    const { data: planRow } = await sb.from('training_plans').insert({
-      user_id: state.user.id,
-      plan_data: plan,
-      current_phase: plan.phase || 'base',
-      active: true,
-    }).select().single();
-
-    // Create planned_workouts rows from the plan
-    if (plan.workouts && Array.isArray(plan.workouts)) {
-      const today = new Date();
-      const rows = plan.workouts.map(w => {
-        const d = new Date(today);
-        d.setDate(d.getDate() + (w.date_offset_days || 0));
-        return {
-          user_id: state.user.id,
-          plan_id: planRow?.id || null,
-          scheduled_date: d.toISOString().split('T')[0],
-          sport: w.sport || 'run',
-          workout_type: w.workout_type || 'easy',
-          duration_minutes: w.duration_minutes || null,
-          distance_km: w.distance_km || null,
-          description: w.description || '',
-          intensity_target: w.intensity_target || '',
-        };
-      });
-      await sb.from('planned_workouts').insert(rows);
-    }
+    await savePlanToDb(plan, state.user.id);
 
     toast('Plan ready!');
     renderCoach();
@@ -3107,7 +3198,25 @@ async function renderCoachChat(el, intake) {
         ${intake.available_days ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Training days</span><strong>${intake.available_days.length} days/week</strong></div>` : ''}
         ${intake.injuries && intake.injuries !== 'none' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:var(--text-dim);">Injuries noted</span><strong style="text-align:right;max-width:60%;">${intake.injuries}</strong></div>` : ''}
       </div>
-      <button class="btn ghost" style="margin-top:16px;" onclick="retakeIntake()">Retake intake</button>
+      <button class="btn ghost" style="margin-top:16px; width: 100%;" onclick="navigate('settings')">Edit profile & zones →</button>
+    </div>
+
+    <div class="panel" style="margin-top: 16px; border-color: rgba(239, 68, 68, 0.15);">
+      <div class="panel-header"><div><div class="panel-title">Plan Management</div><div class="panel-sub">Change or reset your current plan</div></div></div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button class="btn ghost" style="width: 100%; justify-content: flex-start;" onclick="openImportModal()">
+          📥&nbsp;&nbsp;Import existing plan
+          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Already have a plan elsewhere?</span>
+        </button>
+        <button class="btn ghost" style="width: 100%; justify-content: flex-start;" onclick="openResetModal('regenerate')">
+          🔄&nbsp;&nbsp;Generate new plan
+          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Keep profile, new plan</span>
+        </button>
+        <button class="btn ghost" style="width: 100%; justify-content: flex-start; border-color: rgba(239, 68, 68, 0.25); color: #f87171;" onclick="openResetModal('full')">
+          🗑&nbsp;&nbsp;Reset everything
+          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Clear profile + plan</span>
+        </button>
+      </div>
     </div>
   `;
 
@@ -3118,12 +3227,44 @@ async function renderCoachChat(el, intake) {
 
 function renderMsg(role, content) {
   const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
+  const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
   return `
     <div class="chat-msg ${role === 'coach' ? '' : 'user'}">
       <div class="msg-avatar">${avatar}</div>
-      <div class="msg-bubble">${escapeHtml(content)}</div>
+      <div class="msg-bubble">${formatted}</div>
     </div>
   `;
+}
+
+function formatMarkdown(text) {
+  let html = escapeHtml(text);
+  // Bold **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic *text* (but not inside bold)
+  html = html.replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+  // Numbered list items: lines starting with "1. ", "2. " etc.
+  // Convert sequences of numbered items into <ol>
+  html = html.replace(/(?:^|\n)((?:\d+\.\s+.+(?:\n|$))+)/g, (match, listBlock) => {
+    const items = listBlock.trim().split(/\n/).map(line => {
+      const itemText = line.replace(/^\d+\.\s+/, '');
+      return `<li>${itemText}</li>`;
+    }).join('');
+    return `<ol>${items}</ol>`;
+  });
+  // Bullet list items: lines starting with "- " or "• "
+  html = html.replace(/(?:^|\n)((?:[-•]\s+.+(?:\n|$))+)/g, (match, listBlock) => {
+    const items = listBlock.trim().split(/\n/).map(line => {
+      const itemText = line.replace(/^[-•]\s+/, '');
+      return `<li>${itemText}</li>`;
+    }).join('');
+    return `<ul>${items}</ul>`;
+  });
+  // Line breaks (convert remaining newlines to <br>)
+  html = html.replace(/\n/g, '<br>');
+  // Clean up <br> that end up right before/after block elements
+  html = html.replace(/<br>\s*(<(?:ul|ol|li))/g, '$1');
+  html = html.replace(/(<\/(?:ul|ol|li)>)\s*<br>/g, '$1');
+  return html;
 }
 
 function escapeHtml(s) {
@@ -3213,12 +3354,199 @@ function formatGoal(g) {
   return map[g] || g;
 }
 
+// ═══════════════════════════════════════════════════════════
+// PLAN MANAGEMENT — Reset / Regenerate / Import
+// ═══════════════════════════════════════════════════════════
+
+function openResetModal(type) {
+  // type: 'regenerate' (keep profile, new plan) or 'full' (clear everything)
+  const modal = document.getElementById('confirmModal');
+  const title = document.getElementById('confirmTitle');
+  const body = document.getElementById('confirmBody');
+  const input = document.getElementById('confirmInput');
+  const confirmBtn = document.getElementById('confirmActionBtn');
+
+  if (type === 'regenerate') {
+    title.textContent = 'Generate a new plan?';
+    body.innerHTML = `
+      <p style="margin-bottom: 14px;">This will <strong style="color: var(--warning);">delete your current plan</strong> and build a new one using your existing profile info.</p>
+      <ul style="margin: 0 0 14px 20px; color: var(--text-dim); font-size: 13px; line-height: 1.7;">
+        <li>Your profile stays the same</li>
+        <li>All upcoming planned workouts will be erased</li>
+        <li>Completed workouts stay in your history</li>
+        <li>This cannot be undone</li>
+      </ul>
+      <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 10px;">Type <strong style="color: var(--text);">REGENERATE</strong> below to confirm:</p>
+    `;
+    input.value = '';
+    input.placeholder = 'Type REGENERATE';
+    input.style.display = 'block';
+    confirmBtn.textContent = 'Generate new plan';
+    confirmBtn.onclick = () => confirmAction('regenerate');
+  } else {
+    title.textContent = 'Reset everything?';
+    body.innerHTML = `
+      <p style="margin-bottom: 14px;">This will <strong style="color: var(--danger);">completely erase</strong>:</p>
+      <ul style="margin: 0 0 14px 20px; color: var(--text-dim); font-size: 13px; line-height: 1.7;">
+        <li>Your athlete profile</li>
+        <li>Your current training plan</li>
+        <li>All upcoming planned workouts</li>
+        <li>Your chat history with Coach</li>
+      </ul>
+      <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">Completed workouts stay in your history. This cannot be undone.</p>
+      <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 10px;">Type <strong style="color: var(--danger);">RESET</strong> below to confirm:</p>
+    `;
+    input.value = '';
+    input.placeholder = 'Type RESET';
+    input.style.display = 'block';
+    confirmBtn.textContent = 'Reset everything';
+    confirmBtn.onclick = () => confirmAction('full');
+  }
+
+  modal.classList.add('open');
+  input.focus();
+}
+
+async function confirmAction(type) {
+  const input = document.getElementById('confirmInput');
+  const expected = type === 'regenerate' ? 'REGENERATE' : 'RESET';
+  if (input.value.trim().toUpperCase() !== expected) {
+    toast(`Please type ${expected} to confirm`);
+    return;
+  }
+
+  closeConfirmModal();
+
+  if (type === 'regenerate') {
+    // Delete planned workouts + active plan, keep intake
+    toast('Clearing old plan...');
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+    await sb.from('training_plans').delete().eq('user_id', state.user.id);
+    // Now trigger plan regeneration
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    if (!intake) { toast('No profile found'); return; }
+
+    const el = document.getElementById('coachContent');
+    el.innerHTML = `
+      <div class="coach-hero">
+        <div class="coach-avatar">🧠</div>
+        <div class="coach-intro">
+          <h2>Building your new plan…</h2>
+          <p>Generating with Claude AI. Takes about 10-20 seconds.</p>
+        </div>
+      </div>
+      <div class="loading"><div class="spinner"></div>Working</div>
+    `;
+    try {
+      const plan = await callCoach('generate_plan', { intake });
+      await savePlanToDb(plan, state.user.id);
+      toast('New plan ready!');
+      renderCoach();
+    } catch (err) {
+      toast('Plan generation failed: ' + err.message);
+      renderCoach();
+    }
+  } else if (type === 'full') {
+    toast('Resetting everything...');
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+    await sb.from('training_plans').delete().eq('user_id', state.user.id);
+    await sb.from('coach_messages').delete().eq('user_id', state.user.id);
+    await sb.from('athlete_intake').update({ completed: false }).eq('user_id', state.user.id);
+    intakeAnswers = {};
+    intakeStep = 0;
+    toast('Reset complete');
+    renderCoach();
+  }
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModal').classList.remove('open');
+}
+
+// Helper: save a plan (and create planned_workouts rows)
+async function savePlanToDb(plan, userId) {
+  const { data: planRow } = await sb.from('training_plans').insert({
+    user_id: userId,
+    plan_data: plan,
+    current_phase: plan.phase || 'base',
+    active: true,
+  }).select().single();
+
+  if (plan.workouts && Array.isArray(plan.workouts)) {
+    const today = new Date();
+    const rows = plan.workouts.map(w => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + (w.date_offset_days || 0));
+      return {
+        user_id: userId,
+        plan_id: planRow?.id || null,
+        scheduled_date: d.toISOString().split('T')[0],
+        sport: w.sport || 'run',
+        workout_type: w.workout_type || 'easy',
+        duration_minutes: w.duration_minutes || null,
+        distance_km: w.distance_km || null,
+        description: w.description || '',
+        intensity_target: w.intensity_target || '',
+      };
+    });
+    if (rows.length > 0) await sb.from('planned_workouts').insert(rows);
+  }
+}
+
+// ─── Import Plan ───
+function openImportModal() {
+  const modal = document.getElementById('importModal');
+  document.getElementById('importText').value = '';
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('importText').focus(), 150);
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('open');
+}
+
+async function submitImport() {
+  const text = document.getElementById('importText').value.trim();
+  if (!text || text.length < 30) {
+    toast('Please paste at least a week of your plan');
+    return;
+  }
+
+  closeImportModal();
+
+  const el = document.getElementById('coachContent');
+  el.innerHTML = `
+    <div class="coach-hero">
+      <div class="coach-avatar">🧠</div>
+      <div class="coach-intro">
+        <h2>Importing your plan…</h2>
+        <p>Coach is reading your plan and structuring it. Takes about 15-30 seconds.</p>
+      </div>
+    </div>
+    <div class="loading"><div class="spinner"></div>Parsing plan with Claude AI</div>
+  `;
+
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    // Clear existing plan first
+    await sb.from('planned_workouts').delete().eq('user_id', state.user.id);
+    await sb.from('training_plans').delete().eq('user_id', state.user.id);
+
+    const plan = await callCoach('import_plan', { rawText: text, intake });
+    await savePlanToDb(plan, state.user.id);
+    toast('Plan imported!');
+    renderCoach();
+  } catch (err) {
+    console.error('Import failed:', err);
+    toast('Import failed: ' + err.message);
+    renderCoach();
+  }
+}
+
 async function retakeIntake() {
-  intakeAnswers = {};
-  intakeStep = 0;
-  // Mark as not completed so renderCoach shows intake again
-  await sb.from('athlete_intake').update({ completed: false }).eq('user_id', state.user.id);
-  renderCoach();
+  // Legacy — now opens the full reset modal instead
+  openResetModal('full');
 }
 
 // ═══════════════════════════════════════════════════════════
