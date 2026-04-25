@@ -1740,19 +1740,19 @@ h1.hero-h .grad {
   z-index: 0;
 }
 
-/* Grid overlay — checkered pattern that fades at edges */
+/* Topo map overlay — thin elegant contour lines that fade at edges */
 .lv2-grid {
   position: absolute !important;
   inset: 0 !important;
   pointer-events: none;
   z-index: 4 !important;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px) !important;
-  background-size: 64px 64px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 800' preserveAspectRatio='xMidYMid slice'><g fill='none' stroke='white' stroke-width='0.7' stroke-opacity='0.18'><path d='M-50,420 C100,380 200,440 350,400 C500,360 620,420 850,380'/><path d='M-50,460 C100,420 220,480 380,440 C520,400 640,460 850,420'/><path d='M-50,500 C120,460 240,520 400,480 C540,440 660,500 850,460'/><path d='M-50,540 C140,500 260,560 420,520 C560,480 680,540 850,500'/><path d='M-50,580 C160,540 280,600 440,560 C580,520 700,580 850,540'/><path d='M-50,360 C100,330 220,380 380,350 C520,320 640,370 850,340'/><path d='M-50,320 C120,290 240,340 400,310 C540,280 660,330 850,300'/><path d='M-50,280 C140,250 260,300 420,270 C580,240 700,290 850,260'/><path d='M-50,240 C160,210 280,260 440,230 C600,200 720,250 850,220'/><path d='M-50,200 C180,170 300,220 460,190 C620,160 740,210 850,180'/><path d='M-50,160 C200,130 320,180 480,150 C640,120 760,170 850,140'/><path d='M-50,120 C220,90 340,140 500,110 C660,80 780,130 850,100'/><path d='M-50,80 C240,50 360,100 520,70 C680,40 800,90 850,60'/><path d='M-50,620 C180,580 300,640 460,600 C620,560 740,620 850,580'/><path d='M-50,660 C200,620 320,680 480,640 C640,600 760,660 850,620'/><path d='M-50,700 C220,660 340,720 500,680 C660,640 780,700 850,660'/><path d='M-50,740 C240,700 360,760 520,720 C680,680 800,740 850,700'/></g><g fill='none' stroke='white' stroke-width='1.2' stroke-opacity='0.28'><path d='M-50,440 C110,400 230,460 390,420 C530,380 650,440 850,400'/><path d='M-50,300 C130,270 250,320 410,290 C550,260 670,310 850,280'/><path d='M-50,600 C190,560 310,620 470,580 C630,540 750,600 850,560'/></g></svg>");
+  background-size: 700px 700px;
+  background-repeat: repeat;
   background-position: center center;
   -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
   mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
+  opacity: 0.85;
 }
 
 /* Noise grain overlay */
