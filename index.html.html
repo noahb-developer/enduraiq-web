@@ -1736,15 +1736,17 @@ h1.hero-h .grad {
 
 /* Grid overlay — checkered pattern that fades at edges */
 .lv2-grid {
-  position: absolute; inset: 0;
+  position: absolute;
+  inset: 0;
   pointer-events: none;
   z-index: 1;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 20%, transparent 90%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 20%, transparent 90%);
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
 }
 
 /* Noise grain overlay */
@@ -1878,13 +1880,13 @@ h1.hero-h .grad {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: 130px 24px 60px;
+  padding: 90px 24px 60px;
   text-align: center;
   position: relative;
 }
 
 @media (max-width: 720px) {
-  .lv2-hero { padding: 100px 18px 40px; }
+  .lv2-hero { padding: 70px 18px 40px; }
 }
 
 .lv2-hero-eyebrow {
