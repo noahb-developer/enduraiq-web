@@ -1740,11 +1740,11 @@ h1.hero-h .grad {
   pointer-events: none;
   z-index: 1;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 30%, transparent 80%);
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 20%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 20%, transparent 90%);
 }
 
 /* Noise grain overlay */
@@ -1852,8 +1852,20 @@ h1.hero-h .grad {
 .lv2-nav-signup:hover::before { transform: translateX(100%); }
 .lv2-nav-signup:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0, 255, 163, 0.3); }
 
-@media (max-width: 600px) {
-  .lv2-nav-login { display: none; }
+@media (max-width: 720px) {
+  .lv2-nav { padding: calc(14px + var(--safe-top)) 14px 14px; }
+  .lv2-nav-cta { gap: 6px; }
+  .lv2-nav-cta button {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+  .lv2-brand { font-size: 19px; }
+  .lv2-brand-mark { width: 20px; height: 20px; }
+  .lv2-brand-mark::after { inset: 3px; }
+}
+
+@media (max-width: 380px) {
+  .lv2-nav-cta button { padding: 7px 12px; font-size: 11px; }
 }
 
 .landing-v2 h1, .landing-v2 h2, .landing-v2 h3, .landing-v2 p, .landing-v2 span, .landing-v2 div {
@@ -1862,14 +1874,17 @@ h1.hero-h .grad {
 
 /* HERO */
 .lv2-hero {
-  min-height: 88vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  padding: 80px 24px 40px;
+  padding: 130px 24px 60px;
   text-align: center;
   position: relative;
+}
+
+@media (max-width: 720px) {
+  .lv2-hero { padding: 100px 18px 40px; }
 }
 
 .lv2-hero-eyebrow {
