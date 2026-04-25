@@ -1977,8 +1977,15 @@ async function loadProfile() {
   if (!state.user) return;
   const { data } = await sb.from('profiles').select('*').eq('id', state.user.id).single();
   if (data) {
-    state.profile = { runLthr: data.run_lthr || 170, bikeLthr: data.bike_lthr || 165 };
+    state.profile = {
+      runLthr: data.run_lthr || 170,
+      bikeLthr: data.bike_lthr || 165,
+      avatarUrl: data.avatar_url || null,
+      bio: data.bio || '',
+      displayName: data.display_name || data.name || null,
+    };
     if (data.name) state.user.name = data.name;
+    if (data.display_name) state.user.name = data.display_name;
   }
 }
 
@@ -3641,7 +3648,7 @@ async function sendChatMsg() {
       content: h.content,
     }));
 
-    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent, plannedWorkouts: plannedWorkouts || [] });
+    const reply = await callCoach('chat', { messages, intake, recentWorkouts: recent, plannedWorkouts: plannedWorkouts || [], profile: state.profile });
 
     // Remove thinking indicator
     const thinking = document.getElementById('thinkingMsg');
@@ -4131,12 +4138,31 @@ async function renderSettings() {
   }
 
   el.innerHTML = `
-    <!-- Account Section -->
+    <!-- Profile Card -->
     <div class="panel">
-      <div class="panel-title" style="margin-bottom: 16px;">Account</div>
+      <div class="panel-title" style="margin-bottom: 16px;">Profile</div>
+      <div style="display: flex; gap: 18px; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap;">
+        <div style="position: relative; flex-shrink: 0;">
+          <div class="user-avatar" id="settingsAvatar" style="width: 80px; height: 80px; font-size: 32px; ${state.profile?.avatarUrl ? `background-image: url('${state.profile.avatarUrl}'); background-size: cover; background-position: center;` : ''}">
+            ${state.profile?.avatarUrl ? '' : (state.user?.name?.[0]?.toUpperCase() || 'A')}
+          </div>
+          <button onclick="document.getElementById('avatarFileInput').click()" style="position: absolute; bottom: -4px; right: -4px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--bg); border: 2px solid var(--bg); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Upload avatar">📷</button>
+          <input type="file" id="avatarFileInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)" />
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+          <div style="font-weight: 700; font-size: 16px; margin-bottom: 2px;">${state.user?.name || 'Athlete'}</div>
+          <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 10px;">${state.user?.email || ''}</div>
+          ${state.profile?.avatarUrl ? `<button class="btn ghost" style="padding: 6px 12px; font-size: 12px;" onclick="removeAvatar()">Remove photo</button>` : ''}
+        </div>
+      </div>
       <div class="field">
         <label>Display name</label>
-        <input type="text" id="settingsName" value="${state.user?.name || ''}" />
+        <input type="text" id="settingsName" value="${state.user?.name || ''}" placeholder="How others will see you" />
+      </div>
+      <div class="field">
+        <label>Bio (optional)</label>
+        <textarea id="settingsBio" placeholder="A short description about yourself, your goals, your training style..." style="width: 100%; min-height: 70px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical; line-height: 1.5;" maxlength="280">${state.profile?.bio || ''}</textarea>
+        <div style="font-size: 11px; color: var(--text-mute); margin-top: 4px; text-align: right;" id="bioCharCount">${(state.profile?.bio || '').length}/280</div>
       </div>
       <div class="field">
         <label>Email</label>
@@ -4256,6 +4282,15 @@ async function renderSettings() {
     if (inp) inp.addEventListener('input', updateZonePreview);
   });
 
+  // Bio character counter
+  const bioInput = document.getElementById('settingsBio');
+  const bioCount = document.getElementById('bioCharCount');
+  if (bioInput && bioCount) {
+    bioInput.addEventListener('input', () => {
+      bioCount.textContent = `${bioInput.value.length}/280`;
+    });
+  }
+
   // Wire up units toggle to re-render the form
   const unitsSelect = document.getElementById('settingsUnits');
   if (unitsSelect) {
@@ -4356,12 +4391,20 @@ async function saveAllSettings(silent = false) {
   state.profile = { ...state.profile, runLthr, bikeLthr };
   if (name && state.user) state.user.name = name;
 
+  // Bio
+  const bio = document.getElementById('settingsBio')?.value.trim() || '';
+
+  // Update profile state
+  state.profile = { ...state.profile, runLthr, bikeLthr, bio };
+  if (name && state.user) state.user.name = name;
+
   // Save profile
   await sb.from('profiles').update({
     run_lthr: runLthr,
     bike_lthr: bikeLthr,
     name: name,
     display_name: name,
+    bio: bio,
   }).eq('id', state.user.id);
 
   // Save intake fields
@@ -4385,6 +4428,79 @@ async function saveAllSettings(silent = false) {
 
 // Legacy alias
 async function saveProfile() { return saveAllSettings(); }
+
+// ─── Avatar Upload ───
+async function handleAvatarUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Validate
+  if (!file.type.startsWith('image/')) {
+    toast('Please upload an image file');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Image too large. Max 5 MB.');
+    return;
+  }
+
+  toast('Uploading...');
+
+  try {
+    // File path: {user_id}/avatar.{ext}
+    const ext = file.name.split('.').pop().toLowerCase();
+    const path = `${state.user.id}/avatar.${ext}`;
+
+    // Delete any existing avatar first (different extensions)
+    const { data: existing } = await sb.storage.from('avatars').list(state.user.id);
+    if (existing && existing.length > 0) {
+      const oldPaths = existing.map(f => `${state.user.id}/${f.name}`);
+      await sb.storage.from('avatars').remove(oldPaths);
+    }
+
+    // Upload
+    const { error: uploadError } = await sb.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) throw uploadError;
+
+    // Get public URL
+    const { data: urlData } = sb.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = urlData.publicUrl + '?t=' + Date.now(); // cache buster
+
+    // Save URL to profile
+    await sb.from('profiles').update({ avatar_url: avatarUrl }).eq('id', state.user.id);
+
+    state.profile.avatarUrl = avatarUrl;
+    showApp();
+    renderSettings();
+    toast('Profile photo updated');
+  } catch (err) {
+    console.error('Avatar upload failed:', err);
+    toast('Upload failed: ' + (err.message || 'try again'));
+  }
+}
+
+async function removeAvatar() {
+  if (!state.user) return;
+  toast('Removing photo...');
+  try {
+    const { data: existing } = await sb.storage.from('avatars').list(state.user.id);
+    if (existing && existing.length > 0) {
+      const paths = existing.map(f => `${state.user.id}/${f.name}`);
+      await sb.storage.from('avatars').remove(paths);
+    }
+    await sb.from('profiles').update({ avatar_url: null }).eq('id', state.user.id);
+    state.profile.avatarUrl = null;
+    showApp();
+    renderSettings();
+    toast('Photo removed');
+  } catch (err) {
+    console.error('Remove failed:', err);
+    toast('Remove failed: ' + err.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // UPLOAD
