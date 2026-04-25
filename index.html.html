@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -117,6 +117,9 @@ body {
 
 /* Hide app's ambient orbs when on landing page — landing has its own background system */
 body.on-landing .bg-orbs { display: none; }
+/* Hide BOTH navs on landing — landing v2 has its own embedded lv2-nav */
+body.on-landing #mainNav,
+body.on-landing #landingNav { display: none !important; }
 
 @keyframes float {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -1739,14 +1742,14 @@ h1.hero-h .grad {
 
 /* Grid overlay — checkered pattern that fades at edges */
 .lv2-grid {
-  position: absolute;
-  inset: 0;
+  position: absolute !important;
+  inset: 0 !important;
   pointer-events: none;
-  z-index: 3;
+  z-index: 4 !important;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px);
-  background-size: 64px 64px;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px) !important;
+  background-size: 64px 64px !important;
   background-position: center center;
   -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
   mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
@@ -1768,7 +1771,11 @@ h1.hero-h .grad {
   66% { transform: translate(-60px, 80px) scale(0.9) rotate(240deg); }
 }
 
-.landing-v2 > * { position: relative; z-index: 2; }
+.landing-v2 > nav,
+.landing-v2 > section,
+.landing-v2 > .lv2-live-card,
+.landing-v2 > .lv2-marquee,
+.landing-v2 > .lv2-footer { position: relative; z-index: 5; }
 
 /* Landing-specific top nav */
 .lv2-nav {
@@ -3309,6 +3316,7 @@ function showLanding() {
   document.getElementById('mainNav').style.display = 'none';
   // Hide the old landingNav too — landing v2 has its own embedded nav
   document.getElementById('landingNav').style.display = 'none';
+  document.body.classList.add('on-landing');
 }
 
 // ═══════════════════════════════════════════════════════════
