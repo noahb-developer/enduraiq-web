@@ -2861,6 +2861,47 @@ let intakeStep = 0;
 
 const intakeQuestions = [
   {
+    id: 'unit_preference',
+    question: "Which units do you prefer?",
+    context: "We'll use these for weight, distance, and pace throughout the app.",
+    type: 'single',
+    options: [
+      { value: 'metric', emoji: '📏', label: 'Metric (kg, km)' },
+      { value: 'imperial', emoji: '📐', label: 'Imperial (lbs, mi)' },
+    ],
+  },
+  {
+    id: 'sex',
+    question: "What's your biological sex?",
+    context: "This affects training zones, recovery, and nutrition recommendations. Used only for coaching accuracy.",
+    type: 'single',
+    options: [
+      { value: 'male', emoji: '♂', label: 'Male' },
+      { value: 'female', emoji: '♀', label: 'Female' },
+      { value: 'prefer_not', emoji: '·', label: 'Prefer not to say' },
+    ],
+  },
+  {
+    id: 'age',
+    question: "How old are you?",
+    context: "Age affects max heart rate estimates and recovery needs.",
+    type: 'number',
+    placeholder: 'e.g. 28',
+    min: 13, max: 100,
+  },
+  {
+    id: 'weight',
+    question: "What's your current weight?",
+    context: "Used for power-to-weight calculations and pacing recommendations.",
+    type: 'weight',
+  },
+  {
+    id: 'height',
+    question: "What's your height?",
+    context: "Used for stride length and pace calculations.",
+    type: 'height',
+  },
+  {
     id: 'goal_event',
     question: "What are you training for?",
     context: "Coach will build your plan around this goal.",
@@ -3021,6 +3062,45 @@ function renderIntakeStep() {
     inputHtml = `
       <input type="date" id="intakeInput" value="${current}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;color-scheme:dark;" />
     `;
+  } else if (q.type === 'number') {
+    const current = intakeAnswers[q.id] || '';
+    inputHtml = `
+      <input type="number" id="intakeInput" value="${current}" placeholder="${q.placeholder || ''}" min="${q.min || 0}" max="${q.max || 999}" style="width:100%;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+    `;
+  } else if (q.type === 'weight') {
+    const isImperial = intakeAnswers.unit_preference === 'imperial';
+    const current = intakeAnswers[q.id] || '';
+    const placeholder = isImperial ? 'e.g. 165' : 'e.g. 75';
+    const unit = isImperial ? 'lbs' : 'kg';
+    inputHtml = `
+      <div style="display:flex;gap:10px;align-items:stretch;">
+        <input type="number" id="intakeInput" value="${current}" placeholder="${placeholder}" min="20" max="500" step="0.1" style="flex:1;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+        <div style="display:flex;align-items:center;padding:0 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text-dim);font-size:14px;font-weight:600;">${unit}</div>
+      </div>
+    `;
+  } else if (q.type === 'height') {
+    const isImperial = intakeAnswers.unit_preference === 'imperial';
+    const current = intakeAnswers[q.id] || '';
+    if (isImperial) {
+      // Two fields: feet + inches
+      const ft = intakeAnswers.height_ft || '';
+      const inches = intakeAnswers.height_in || '';
+      inputHtml = `
+        <div style="display:flex;gap:10px;align-items:stretch;">
+          <input type="number" id="intakeInputFt" value="${ft}" placeholder="5" min="3" max="8" style="flex:1;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+          <div style="display:flex;align-items:center;padding:0 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text-dim);font-size:14px;font-weight:600;">ft</div>
+          <input type="number" id="intakeInputIn" value="${inches}" placeholder="10" min="0" max="11" style="flex:1;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+          <div style="display:flex;align-items:center;padding:0 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text-dim);font-size:14px;font-weight:600;">in</div>
+        </div>
+      `;
+    } else {
+      inputHtml = `
+        <div style="display:flex;gap:10px;align-items:stretch;">
+          <input type="number" id="intakeInput" value="${current}" placeholder="e.g. 178" min="100" max="250" style="flex:1;padding:14px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;" />
+          <div style="display:flex;align-items:center;padding:0 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;color:var(--text-dim);font-size:14px;font-weight:600;">cm</div>
+        </div>
+      `;
+    }
   } else if (q.type === 'text') {
     const current = intakeAnswers[q.id] || '';
     inputHtml = `
@@ -3067,10 +3147,28 @@ function intakeBack() {
 async function intakeNext() {
   const q = intakeQuestions[intakeStep];
 
-  // Capture text/date input values
-  if (q.type === 'date' || q.type === 'text') {
+  // Capture text/date/number/weight input values
+  if (q.type === 'date' || q.type === 'text' || q.type === 'number' || q.type === 'weight') {
     const input = document.getElementById('intakeInput');
     if (input) intakeAnswers[q.id] = input.value;
+  }
+
+  // Capture height — different shape for imperial vs metric
+  if (q.type === 'height') {
+    if (intakeAnswers.unit_preference === 'imperial') {
+      const ft = document.getElementById('intakeInputFt');
+      const inches = document.getElementById('intakeInputIn');
+      if (ft && inches) {
+        intakeAnswers.height_ft = ft.value;
+        intakeAnswers.height_in = inches.value;
+        // Convert to cm for storage
+        const totalIn = (parseFloat(ft.value) || 0) * 12 + (parseFloat(inches.value) || 0);
+        intakeAnswers.height = totalIn > 0 ? Math.round(totalIn * 2.54) : '';
+      }
+    } else {
+      const input = document.getElementById('intakeInput');
+      if (input) intakeAnswers.height = input.value;
+    }
   }
 
   // Validate
@@ -3079,6 +3177,15 @@ async function intakeNext() {
   }
   if (q.type === 'multi' && (!intakeAnswers[q.id] || intakeAnswers[q.id].length === 0)) {
     return toast('Please pick at least one');
+  }
+  if (q.type === 'number' && !intakeAnswers[q.id]) {
+    return toast('Please enter a number');
+  }
+  if (q.type === 'weight' && !intakeAnswers[q.id]) {
+    return toast('Please enter your weight');
+  }
+  if (q.type === 'height' && !intakeAnswers.height) {
+    return toast('Please enter your height');
   }
   if (q.type === 'text' && !intakeAnswers[q.id]) {
     intakeAnswers[q.id] = 'none';
@@ -3123,6 +3230,17 @@ async function completeIntake() {
     <div class="loading"><div class="spinner"></div>Generating plan with Claude AI</div>
   `;
 
+  // Convert weight/height to metric for storage if needed
+  const isImperial = intakeAnswers.unit_preference === 'imperial';
+  let weight_kg = null;
+  if (intakeAnswers.weight) {
+    weight_kg = isImperial
+      ? parseFloat(intakeAnswers.weight) * 0.453592
+      : parseFloat(intakeAnswers.weight);
+    weight_kg = Math.round(weight_kg * 10) / 10;
+  }
+  const height_cm = intakeAnswers.height ? parseFloat(intakeAnswers.height) : null;
+
   // Save intake to Supabase
   const payload = {
     user_id: state.user.id,
@@ -3135,6 +3253,11 @@ async function completeIntake() {
     has_pool_access: (intakeAnswers.equipment || []).includes('pool'),
     has_bike_trainer: (intakeAnswers.equipment || []).includes('trainer'),
     injuries: intakeAnswers.injuries || null,
+    age: intakeAnswers.age ? parseInt(intakeAnswers.age) : null,
+    sex: intakeAnswers.sex || null,
+    weight_kg: weight_kg,
+    height_cm: height_cm,
+    unit_preference: intakeAnswers.unit_preference || 'metric',
     completed: true,
     updated_at: new Date().toISOString(),
   };
@@ -3189,11 +3312,15 @@ async function renderCoachChat(el, intake) {
     </div>
 
     <div class="panel" style="margin-top: 16px;">
-      <div class="panel-header"><div><div class="panel-title">Your Athlete Profile</div><div class="panel-sub">Edit anytime by retaking the intake</div></div></div>
+      <div class="panel-header"><div><div class="panel-title">Your Athlete Profile</div><div class="panel-sub">Edit anytime in Settings</div></div></div>
       <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;">
         ${intake.goal_event ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Goal</span><strong>${formatGoal(intake.goal_event)}</strong></div>` : ''}
         ${intake.race_date ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Race date</span><strong>${new Date(intake.race_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
         ${intake.experience_level ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Experience</span><strong style="text-transform:capitalize;">${intake.experience_level}</strong></div>` : ''}
+        ${intake.age ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Age</span><strong>${intake.age}</strong></div>` : ''}
+        ${intake.sex && intake.sex !== 'prefer_not' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Sex</span><strong style="text-transform:capitalize;">${intake.sex}</strong></div>` : ''}
+        ${intake.weight_kg ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Weight</span><strong>${formatWeight(intake.weight_kg, intake.unit_preference)}</strong></div>` : ''}
+        ${intake.height_cm ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Height</span><strong>${formatHeight(intake.height_cm, intake.unit_preference)}</strong></div>` : ''}
         ${intake.current_weekly_hours ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Weekly hours</span><strong>${intake.current_weekly_hours} hours</strong></div>` : ''}
         ${intake.available_days ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">Training days</span><strong>${intake.available_days.length} days/week</strong></div>` : ''}
         ${intake.injuries && intake.injuries !== 'none' ? `<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:var(--text-dim);">Injuries noted</span><strong style="text-align:right;max-width:60%;">${intake.injuries}</strong></div>` : ''}
@@ -3352,6 +3479,26 @@ async function sendChatMsg() {
 function formatGoal(g) {
   const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', general: 'General Fitness' };
   return map[g] || g;
+}
+
+function formatWeight(kg, unitPref) {
+  if (!kg) return '';
+  if (unitPref === 'imperial') {
+    const lbs = Math.round(kg / 0.453592);
+    return `${lbs} lbs`;
+  }
+  return `${kg} kg`;
+}
+
+function formatHeight(cm, unitPref) {
+  if (!cm) return '';
+  if (unitPref === 'imperial') {
+    const totalIn = cm / 2.54;
+    const ft = Math.floor(totalIn / 12);
+    const inches = Math.round(totalIn % 12);
+    return `${ft}' ${inches}"`;
+  }
+  return `${cm} cm`;
 }
 
 // ═══════════════════════════════════════════════════════════
