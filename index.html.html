@@ -151,48 +151,148 @@ body {
   50% { box-shadow: 0 4px 30px rgba(0, 229, 160, 0.6); }
 }
 
-.nav-tabs {
-  display: flex; gap: 2px;
-  background: var(--bg-2);
-  border-radius: 10px; padding: 3px;
-  border: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  flex-shrink: 1;
-  max-width: 100%;
+/* Hamburger button */
+.hamburger {
+  width: 38px; height: 38px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer; flex-shrink: 0;
+  transition: all 0.15s;
+  padding: 0;
 }
-.nav-tabs::-webkit-scrollbar { display: none; }
-
-.nav-tab {
-  padding: 7px 12px; border-radius: 7px;
-  font-size: 13px; font-weight: 600; color: var(--text-dim);
-  cursor: pointer; background: transparent; border: none;
-  transition: all 0.15s; font-family: inherit;
-  white-space: nowrap; flex-shrink: 0;
+.hamburger:hover { border-color: var(--accent-border); }
+.hamburger span {
+  display: block; width: 16px; height: 2px;
+  background: var(--text); border-radius: 2px;
+  transition: all 0.25s;
 }
 
-.nav-tab:hover { color: var(--text); }
-.nav-tab.active { background: var(--bg-4); color: var(--text); }
-
-.nav-user {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 10px 5px 5px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 30px;
-  cursor: pointer;
-  font-size: 13px;
+/* Avatar button (top-right) */
+.nav-user-btn {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 50%; padding: 3px;
+  cursor: pointer; flex-shrink: 0;
   transition: border-color 0.15s;
-  flex-shrink: 0;
+  display: flex;
 }
-.nav-user:hover { border-color: var(--border-light); }
+.nav-user-btn:hover { border-color: var(--accent-border); }
 
 .user-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 11px; color: var(--bg);
+  font-weight: 700; font-size: 13px; color: var(--bg);
+  background-size: cover; background-position: center;
+}
+
+/* Slide-down menu panel */
+.nav-menu-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.nav-menu-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.nav-menu-panel {
+  position: fixed;
+  top: calc(var(--safe-top) + 60px);
+  left: 12px; right: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  z-index: 95;
+  padding: 8px;
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  max-height: calc(100vh - var(--safe-top) - 80px);
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  max-width: 380px;
+  margin: 0 auto;
+}
+.nav-menu-panel.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+.nav-menu-items {
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.nav-menu-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 16px;
+  background: transparent; border: none;
+  color: var(--text); font-family: inherit;
+  font-size: 15px; font-weight: 600;
+  cursor: pointer; text-align: left;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.nav-menu-item:hover { background: var(--bg-3); }
+.nav-menu-item.active { background: var(--accent-soft); color: var(--accent); }
+
+.nav-menu-icon {
+  font-size: 18px; width: 28px; text-align: center;
+  flex-shrink: 0;
+}
+
+/* Avatar dropdown menu */
+.avatar-menu {
+  position: fixed;
+  top: calc(var(--safe-top) + 60px);
+  right: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  z-index: 95;
+  padding: 6px;
+  min-width: 220px;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  transform-origin: top right;
+}
+.avatar-menu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+.avatar-menu-header {
+  padding: 12px 14px 10px;
+  font-size: 12px; color: var(--text-dim);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.avatar-menu-header strong {
+  color: var(--text); font-size: 14px; font-weight: 700;
+}
+
+.avatar-menu-divider {
+  height: 1px; background: var(--border); margin: 4px 0;
+}
+
+.avatar-menu-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 11px 14px;
+  background: transparent; border: none;
+  color: var(--text); font-family: inherit;
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; text-align: left;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.avatar-menu-item:hover { background: var(--bg-3); }
+.avatar-menu-item.danger { color: #f87171; }
+.avatar-menu-item.danger:hover { background: rgba(239, 68, 68, 0.08); }
+
+.avatar-menu-icon {
+  font-size: 15px; width: 20px; text-align: center;
+  flex-shrink: 0;
 }
 
 .container {
@@ -1342,12 +1442,6 @@ h1.hero-h .grad {
 /* MOBILE */
 @media (max-width: 720px) {
   .nav { padding: 10px 14px; }
-  .nav-tabs { gap: 0; }
-  .nav-tab { padding: 7px 10px; font-size: 12px; }
-  .nav-user span { display: none; }
-  .nav-user { padding: 4px; border-radius: 30px; }
-  .user-avatar { width: 26px; height: 26px; }
-  .logo span { display: inline; }
   .container { padding: 16px 14px 80px; }
   .landing-hero { padding: 40px 12px 30px; }
   .donut-wrap { flex-direction: column; align-items: stretch; }
@@ -1387,25 +1481,72 @@ h1.hero-h .grad {
 
 <nav class="nav" id="mainNav" style="display:none;">
   <div class="nav-inner">
+    <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
     <div class="logo" onclick="navigate('dashboard')">
       <div class="logo-mark">E</div>
       <span>EnduraIQ</span>
     </div>
-    <div class="nav-tabs">
-      <button class="nav-tab" data-page="dashboard">Dashboard</button>
-      <button class="nav-tab" data-page="coach">Coach</button>
-      <button class="nav-tab" data-page="plan">Plan</button>
-      <button class="nav-tab" data-page="upload">Analyze</button>
-      <button class="nav-tab" data-page="history">History</button>
-      <button class="nav-tab" data-page="trends">Trends</button>
-      <button class="nav-tab" data-page="help">Help</button>
-    </div>
-    <div class="nav-user" onclick="navigate('settings')">
+    <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
       <div class="user-avatar" id="navAvatar">A</div>
-      <span id="navName">Account</span>
-    </div>
+    </button>
   </div>
 </nav>
+
+<!-- Slide-down nav menu panel -->
+<div class="nav-menu-backdrop" id="navMenuBackdrop" onclick="closeNavMenu()"></div>
+<div class="nav-menu-panel" id="navMenuPanel">
+  <div class="nav-menu-items">
+    <button class="nav-menu-item" data-page="dashboard" onclick="navigateAndCloseMenu('dashboard')">
+      <span class="nav-menu-icon">📊</span>
+      <span class="nav-menu-label">Dashboard</span>
+    </button>
+    <button class="nav-menu-item" data-page="coach" onclick="navigateAndCloseMenu('coach')">
+      <span class="nav-menu-icon">🧠</span>
+      <span class="nav-menu-label">Coach</span>
+    </button>
+    <button class="nav-menu-item" data-page="plan" onclick="navigateAndCloseMenu('plan')">
+      <span class="nav-menu-icon">📅</span>
+      <span class="nav-menu-label">Plan</span>
+    </button>
+    <button class="nav-menu-item" data-page="upload" onclick="navigateAndCloseMenu('upload')">
+      <span class="nav-menu-icon">📤</span>
+      <span class="nav-menu-label">Analyze</span>
+    </button>
+    <button class="nav-menu-item" data-page="history" onclick="navigateAndCloseMenu('history')">
+      <span class="nav-menu-icon">📂</span>
+      <span class="nav-menu-label">History</span>
+    </button>
+    <button class="nav-menu-item" data-page="trends" onclick="navigateAndCloseMenu('trends')">
+      <span class="nav-menu-icon">📈</span>
+      <span class="nav-menu-label">Trends</span>
+    </button>
+    <button class="nav-menu-item" data-page="help" onclick="navigateAndCloseMenu('help')">
+      <span class="nav-menu-icon">💡</span>
+      <span class="nav-menu-label">Help</span>
+    </button>
+  </div>
+</div>
+
+<!-- Avatar dropdown menu -->
+<div class="avatar-menu" id="avatarMenu">
+  <div class="avatar-menu-header" id="avatarMenuHeader"></div>
+  <div class="avatar-menu-divider"></div>
+  <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('settings')">
+    <span class="avatar-menu-icon">⚙</span>
+    <span>Settings</span>
+  </button>
+  <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('coach')">
+    <span class="avatar-menu-icon">👤</span>
+    <span>Profile</span>
+  </button>
+  <div class="avatar-menu-divider"></div>
+  <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); doLogout();">
+    <span class="avatar-menu-icon">↪</span>
+    <span>Log out</span>
+  </button>
+</div>
 
 <nav class="nav" id="landingNav">
   <div class="nav-inner">
@@ -1743,35 +1884,10 @@ h1.hero-h .grad {
 
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
-  <div class="section-title">Profile & Zones</div>
-  <p class="section-sub">Your LTHR is the most important number in training. Set it accurately.</p>
+  <div class="section-title">Settings</div>
+  <p class="section-sub">Edit your profile, training zones, and preferences.</p>
 
-  <div class="panel">
-    <div class="panel-title" style="margin-bottom: 16px;">Heart Rate Zones</div>
-    <div class="field">
-      <label>Run LTHR (bpm)</label>
-      <input type="number" id="runLthrInput" placeholder="e.g. 180" />
-    </div>
-    <div class="field">
-      <label>Bike LTHR (bpm)</label>
-      <input type="number" id="bikeLthrInput" placeholder="e.g. 165" />
-    </div>
-    <button class="btn" onclick="saveProfile()">Save zones</button>
-    <div id="zonePreview"></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-title" style="margin-bottom: 16px;">Account</div>
-    <div class="field">
-      <label>Name</label>
-      <input type="text" id="accountName" />
-    </div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="accountEmail" readonly style="opacity: 0.5;" />
-    </div>
-    <button class="btn ghost" onclick="doLogout()">Log out</button>
-  </div>
+  <div id="settingsContent"></div>
 </div>
 
 </div>
@@ -1984,8 +2100,16 @@ function showApp() {
   document.getElementById('mainNav').style.display = 'block';
   document.getElementById('landingNav').style.display = 'none';
   const initial = (state.user.name || 'A')[0].toUpperCase();
-  document.getElementById('navAvatar').textContent = initial;
-  document.getElementById('navName').textContent = (state.user.name || 'Athlete').split(' ')[0];
+  const avatarEl = document.getElementById('navAvatar');
+  if (avatarEl) {
+    if (state.profile?.avatarUrl) {
+      avatarEl.style.backgroundImage = `url('${state.profile.avatarUrl}')`;
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = '';
+      avatarEl.textContent = initial;
+    }
+  }
 }
 
 function showLanding() {
@@ -2000,7 +2124,7 @@ function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
   if (target) target.classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
+  document.querySelectorAll('.nav-menu-item').forEach(t => t.classList.toggle('active', t.dataset.page === page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
@@ -2010,7 +2134,73 @@ function navigate(page) {
   if (page === 'settings') renderSettings();
 }
 
-document.querySelectorAll('.nav-tab').forEach(tab => tab.addEventListener('click', () => navigate(tab.dataset.page)));
+// Hamburger menu controls
+function toggleNavMenu() {
+  const panel = document.getElementById('navMenuPanel');
+  const backdrop = document.getElementById('navMenuBackdrop');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) closeNavMenu();
+  else {
+    panel.classList.add('open');
+    backdrop.classList.add('open');
+    closeAvatarMenu();
+  }
+}
+
+function closeNavMenu() {
+  document.getElementById('navMenuPanel').classList.remove('open');
+  document.getElementById('navMenuBackdrop').classList.remove('open');
+}
+
+function navigateAndCloseMenu(page) {
+  closeNavMenu();
+  navigate(page);
+}
+
+// Avatar dropdown menu
+function toggleAvatarMenu(event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('avatarMenu');
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) closeAvatarMenu();
+  else {
+    // Update header with current user info
+    const header = document.getElementById('avatarMenuHeader');
+    if (header && state.user) {
+      header.innerHTML = `<strong>${state.user.name || 'Athlete'}</strong><span>${state.user.email || ''}</span>`;
+    }
+    menu.classList.add('open');
+    closeNavMenu();
+  }
+}
+
+function closeAvatarMenu() {
+  document.getElementById('avatarMenu').classList.remove('open');
+}
+
+function navigateAndCloseAvatarMenu(page) {
+  closeAvatarMenu();
+  navigate(page);
+}
+
+// Close menus on outside click
+document.addEventListener('click', (e) => {
+  const avatarMenu = document.getElementById('avatarMenu');
+  const avatarBtn = document.querySelector('.nav-user-btn');
+  if (avatarMenu && avatarMenu.classList.contains('open')) {
+    if (!avatarMenu.contains(e.target) && !avatarBtn?.contains(e.target)) {
+      closeAvatarMenu();
+    }
+  }
+});
+
+// Close menus on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeNavMenu();
+    closeAvatarMenu();
+  }
+});
 
 // Source tabs
 document.querySelectorAll('.source-tab').forEach(tab => {
@@ -3914,17 +4104,177 @@ function goToday() {
 // ═══════════════════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════════════════
-function renderSettings() {
-  document.getElementById('runLthrInput').value = state.profile.runLthr || '';
-  document.getElementById('bikeLthrInput').value = state.profile.bikeLthr || '';
-  document.getElementById('accountName').value = state.user?.name || '';
-  document.getElementById('accountEmail').value = state.user?.email || '';
+async function renderSettings() {
+  const el = document.getElementById('settingsContent');
+  if (!el || !state.user) return;
+
+  // Load current intake data
+  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+  const isImperial = intake?.unit_preference === 'imperial';
+
+  // Format weight & height for current units
+  let weightDisplay = '';
+  if (intake?.weight_kg) {
+    weightDisplay = isImperial ? Math.round(intake.weight_kg / 0.453592) : intake.weight_kg;
+  }
+
+  let heightFt = '', heightIn = '', heightCm = '';
+  if (intake?.height_cm) {
+    if (isImperial) {
+      const totalIn = intake.height_cm / 2.54;
+      heightFt = Math.floor(totalIn / 12);
+      heightIn = Math.round(totalIn % 12);
+    } else {
+      heightCm = intake.height_cm;
+    }
+  }
+
+  el.innerHTML = `
+    <!-- Account Section -->
+    <div class="panel">
+      <div class="panel-title" style="margin-bottom: 16px;">Account</div>
+      <div class="field">
+        <label>Display name</label>
+        <input type="text" id="settingsName" value="${state.user?.name || ''}" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="settingsEmail" value="${state.user?.email || ''}" readonly style="opacity: 0.5;" />
+      </div>
+    </div>
+
+    <!-- Personal Info -->
+    <div class="panel">
+      <div class="panel-title" style="margin-bottom: 16px;">Personal Info</div>
+      <div class="field">
+        <label>Units</label>
+        <select id="settingsUnits" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+          <option value="metric" ${!isImperial ? 'selected' : ''}>Metric (kg, cm, km)</option>
+          <option value="imperial" ${isImperial ? 'selected' : ''}>Imperial (lbs, ft/in, mi)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Sex</label>
+        <select id="settingsSex" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+          <option value="" ${!intake?.sex ? 'selected' : ''}>Prefer not to say</option>
+          <option value="male" ${intake?.sex === 'male' ? 'selected' : ''}>Male</option>
+          <option value="female" ${intake?.sex === 'female' ? 'selected' : ''}>Female</option>
+          <option value="prefer_not" ${intake?.sex === 'prefer_not' ? 'selected' : ''}>Prefer not to say</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Age</label>
+        <input type="number" id="settingsAge" value="${intake?.age || ''}" placeholder="e.g. 28" min="13" max="100" />
+      </div>
+      <div class="field">
+        <label>Weight (${isImperial ? 'lbs' : 'kg'})</label>
+        <input type="number" id="settingsWeight" value="${weightDisplay}" placeholder="${isImperial ? 'e.g. 165' : 'e.g. 75'}" step="0.1" />
+      </div>
+      <div class="field">
+        <label>Height</label>
+        ${isImperial ? `
+          <div style="display: flex; gap: 8px;">
+            <div style="flex: 1; display: flex; gap: 4px; align-items: center;">
+              <input type="number" id="settingsHeightFt" value="${heightFt}" placeholder="5" min="3" max="8" style="flex: 1;" />
+              <span style="color: var(--text-dim); font-size: 13px;">ft</span>
+            </div>
+            <div style="flex: 1; display: flex; gap: 4px; align-items: center;">
+              <input type="number" id="settingsHeightIn" value="${heightIn}" placeholder="10" min="0" max="11" style="flex: 1;" />
+              <span style="color: var(--text-dim); font-size: 13px;">in</span>
+            </div>
+          </div>
+        ` : `
+          <input type="number" id="settingsHeightCm" value="${heightCm}" placeholder="e.g. 178" min="100" max="250" />
+        `}
+      </div>
+    </div>
+
+    <!-- Training Goals -->
+    <div class="panel">
+      <div class="panel-title" style="margin-bottom: 16px;">Training Goals</div>
+      <div class="field">
+        <label>Primary goal</label>
+        <select id="settingsGoal" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+          <option value="general" ${intake?.goal_event === 'general' ? 'selected' : ''}>General Fitness</option>
+          <option value="5k" ${intake?.goal_event === '5k' ? 'selected' : ''}>5K</option>
+          <option value="10k" ${intake?.goal_event === '10k' ? 'selected' : ''}>10K</option>
+          <option value="half_marathon" ${intake?.goal_event === 'half_marathon' ? 'selected' : ''}>Half Marathon</option>
+          <option value="marathon" ${intake?.goal_event === 'marathon' ? 'selected' : ''}>Marathon</option>
+          <option value="olympic_tri" ${intake?.goal_event === 'olympic_tri' ? 'selected' : ''}>Olympic Triathlon</option>
+          <option value="70_3" ${intake?.goal_event === '70_3' ? 'selected' : ''}>70.3 / Half Ironman</option>
+          <option value="ironman" ${intake?.goal_event === 'ironman' ? 'selected' : ''}>Ironman</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Race date</label>
+        <input type="date" id="settingsRaceDate" value="${intake?.race_date || ''}" style="color-scheme: dark;" />
+      </div>
+      <div class="field">
+        <label>Experience level</label>
+        <select id="settingsExperience" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
+          <option value="beginner" ${intake?.experience_level === 'beginner' ? 'selected' : ''}>Beginner (under 1 year)</option>
+          <option value="intermediate" ${intake?.experience_level === 'intermediate' ? 'selected' : ''}>Intermediate (1-3 years)</option>
+          <option value="advanced" ${intake?.experience_level === 'advanced' ? 'selected' : ''}>Advanced (3+ years)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Weekly hours available</label>
+        <input type="number" id="settingsHours" value="${intake?.current_weekly_hours || ''}" placeholder="e.g. 8" min="1" max="30" step="0.5" />
+      </div>
+      <div class="field">
+        <label>Injuries / health notes</label>
+        <textarea id="settingsInjuries" placeholder="None, or list any current issues" style="width: 100%; min-height: 60px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical;">${intake?.injuries || ''}</textarea>
+      </div>
+    </div>
+
+    <!-- Heart Rate Zones -->
+    <div class="panel">
+      <div class="panel-title" style="margin-bottom: 16px;">Heart Rate Zones</div>
+      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.55;">Your LTHR is the most important number in training. Test it properly with a 30-min time trial.</p>
+      <div class="field">
+        <label>Run LTHR (bpm)</label>
+        <input type="number" id="settingsRunLthr" value="${state.profile.runLthr || ''}" placeholder="e.g. 180" />
+      </div>
+      <div class="field">
+        <label>Bike LTHR (bpm)</label>
+        <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
+      </div>
+      <div id="zonePreview"></div>
+    </div>
+
+    <!-- Save / Logout -->
+    <div style="display: flex; gap: 10px; margin-top: 24px;">
+      <button class="btn" style="flex: 1;" onclick="saveAllSettings()">Save changes</button>
+      <button class="btn ghost" onclick="doLogout()">Log out</button>
+    </div>
+  `;
+
+  // Wire up live zone preview updates
+  ['settingsRunLthr', 'settingsBikeLthr'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener('input', updateZonePreview);
+  });
+
+  // Wire up units toggle to re-render the form
+  const unitsSelect = document.getElementById('settingsUnits');
+  if (unitsSelect) {
+    unitsSelect.addEventListener('change', async () => {
+      const newUnits = unitsSelect.value;
+      // Save current values first
+      await saveAllSettings(true);
+      // Update intake to new units
+      await sb.from('athlete_intake').update({ unit_preference: newUnits }).eq('user_id', state.user.id);
+      renderSettings();
+    });
+  }
+
   updateZonePreview();
 }
 
 function updateZonePreview() {
-  const runLthr = parseInt(document.getElementById('runLthrInput').value) || 0;
-  const bikeLthr = parseInt(document.getElementById('bikeLthrInput').value) || 0;
+  const runLthr = parseInt(document.getElementById('settingsRunLthr')?.value) || 0;
+  const bikeLthr = parseInt(document.getElementById('settingsBikeLthr')?.value) || 0;
   let html = '';
   if (runLthr > 0) {
     const z = getZones(runLthr);
@@ -3956,26 +4306,85 @@ function updateZonePreview() {
       </div>
     `;
   }
-  document.getElementById('zonePreview').innerHTML = html;
+  const preview = document.getElementById('zonePreview');
+  if (preview) preview.innerHTML = html;
 }
 
-async function saveProfile() {
-  const runLthr = parseInt(document.getElementById('runLthrInput').value) || 170;
-  const bikeLthr = parseInt(document.getElementById('bikeLthrInput').value) || 165;
-  const name = document.getElementById('accountName').value.trim();
-  state.profile = { runLthr, bikeLthr };
-  if (name && state.user) { state.user.name = name; showApp(); }
-  await saveProfileData();
-  updateZonePreview();
-  toast('Profile saved');
+async function saveAllSettings(silent = false) {
+  if (!state.user) return;
+
+  // Account
+  const name = document.getElementById('settingsName')?.value.trim();
+
+  // Personal
+  const units = document.getElementById('settingsUnits')?.value || 'metric';
+  const sex = document.getElementById('settingsSex')?.value || null;
+  const age = parseInt(document.getElementById('settingsAge')?.value) || null;
+  const weightInput = parseFloat(document.getElementById('settingsWeight')?.value);
+
+  let weight_kg = null;
+  if (!isNaN(weightInput) && weightInput > 0) {
+    weight_kg = units === 'imperial' ? weightInput * 0.453592 : weightInput;
+    weight_kg = Math.round(weight_kg * 10) / 10;
+  }
+
+  let height_cm = null;
+  if (units === 'imperial') {
+    const ft = parseFloat(document.getElementById('settingsHeightFt')?.value) || 0;
+    const inches = parseFloat(document.getElementById('settingsHeightIn')?.value) || 0;
+    if (ft > 0 || inches > 0) {
+      const totalIn = ft * 12 + inches;
+      height_cm = Math.round(totalIn * 2.54);
+    }
+  } else {
+    const cm = parseFloat(document.getElementById('settingsHeightCm')?.value);
+    if (!isNaN(cm) && cm > 0) height_cm = cm;
+  }
+
+  // Goals
+  const goal = document.getElementById('settingsGoal')?.value || null;
+  const raceDate = document.getElementById('settingsRaceDate')?.value || null;
+  const experience = document.getElementById('settingsExperience')?.value || null;
+  const hours = parseFloat(document.getElementById('settingsHours')?.value) || null;
+  const injuries = document.getElementById('settingsInjuries')?.value.trim() || null;
+
+  // Zones
+  const runLthr = parseInt(document.getElementById('settingsRunLthr')?.value) || 170;
+  const bikeLthr = parseInt(document.getElementById('settingsBikeLthr')?.value) || 165;
+
+  // Update profile state
+  state.profile = { ...state.profile, runLthr, bikeLthr };
+  if (name && state.user) state.user.name = name;
+
+  // Save profile
+  await sb.from('profiles').update({
+    run_lthr: runLthr,
+    bike_lthr: bikeLthr,
+    name: name,
+    display_name: name,
+  }).eq('id', state.user.id);
+
+  // Save intake fields
+  await sb.from('athlete_intake').update({
+    unit_preference: units,
+    sex: sex,
+    age: age,
+    weight_kg: weight_kg,
+    height_cm: height_cm,
+    goal_event: goal,
+    race_date: raceDate,
+    experience_level: experience,
+    current_weekly_hours: hours,
+    injuries: injuries,
+    updated_at: new Date().toISOString(),
+  }).eq('user_id', state.user.id);
+
+  showApp();
+  if (!silent) toast('Settings saved');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  ['runLthrInput', 'bikeLthrInput'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', updateZonePreview);
-  });
-});
+// Legacy alias
+async function saveProfile() { return saveAllSettings(); }
 
 // ═══════════════════════════════════════════════════════════
 // UPLOAD
