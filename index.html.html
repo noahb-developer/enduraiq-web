@@ -1740,19 +1740,77 @@ h1.hero-h .grad {
   z-index: 0;
 }
 
-/* Topo map overlay — concentric mountain peaks, thin elegant contour rings */
+/* City street map overlay — thin streets in background */
 .lv2-grid {
   position: absolute !important;
   inset: 0 !important;
   pointer-events: none;
   z-index: 4 !important;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000' preserveAspectRatio='xMidYMid slice'><g fill='none' stroke='white' stroke-width='0.6' stroke-opacity='0.16'><ellipse cx='200' cy='220' rx='30' ry='18'/><ellipse cx='200' cy='220' rx='60' ry='38'/><ellipse cx='200' cy='220' rx='95' ry='62'/><ellipse cx='200' cy='220' rx='135' ry='90'/><ellipse cx='200' cy='220' rx='180' ry='122'/><ellipse cx='200' cy='220' rx='230' ry='158'/><ellipse cx='720' cy='180' rx='25' ry='15'/><ellipse cx='720' cy='180' rx='55' ry='34'/><ellipse cx='720' cy='180' rx='90' ry='58'/><ellipse cx='720' cy='180' rx='130' ry='86'/><ellipse cx='720' cy='180' rx='175' ry='118'/><ellipse cx='720' cy='180' rx='225' ry='154'/><ellipse cx='450' cy='480' rx='35' ry='22'/><ellipse cx='450' cy='480' rx='70' ry='46'/><ellipse cx='450' cy='480' rx='110' ry='74'/><ellipse cx='450' cy='480' rx='155' ry='106'/><ellipse cx='450' cy='480' rx='205' ry='142'/><ellipse cx='450' cy='480' rx='260' ry='182'/><ellipse cx='150' cy='720' rx='28' ry='17'/><ellipse cx='150' cy='720' rx='58' ry='37'/><ellipse cx='150' cy='720' rx='95' ry='62'/><ellipse cx='150' cy='720' rx='138' ry='92'/><ellipse cx='150' cy='720' rx='185' ry='126'/><ellipse cx='820' cy='680' rx='32' ry='20'/><ellipse cx='820' cy='680' rx='65' ry='42'/><ellipse cx='820' cy='680' rx='105' ry='70'/><ellipse cx='820' cy='680' rx='150' ry='102'/><ellipse cx='820' cy='680' rx='200' ry='138'/></g><g fill='none' stroke='white' stroke-width='1' stroke-opacity='0.26'><ellipse cx='200' cy='220' rx='30' ry='18'/><ellipse cx='200' cy='220' rx='95' ry='62'/><ellipse cx='720' cy='180' rx='25' ry='15'/><ellipse cx='720' cy='180' rx='90' ry='58'/><ellipse cx='450' cy='480' rx='35' ry='22'/><ellipse cx='450' cy='480' rx='110' ry='74'/><ellipse cx='150' cy='720' rx='28' ry='17'/><ellipse cx='150' cy='720' rx='95' ry='62'/><ellipse cx='820' cy='680' rx='32' ry='20'/><ellipse cx='820' cy='680' rx='105' ry='70'/></g></svg>");
-  background-size: 1100px 1100px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1200' preserveAspectRatio='xMidYMid slice'><g fill='none' stroke='white' stroke-width='0.5' stroke-opacity='0.13'><path d='M0,180 L1200,160'/><path d='M0,260 L1200,250'/><path d='M0,340 L1200,330'/><path d='M0,420 L1200,440'/><path d='M0,520 L1200,510'/><path d='M0,610 L1200,620'/><path d='M0,700 L1200,690'/><path d='M0,790 L1200,800'/><path d='M0,880 L1200,870'/><path d='M0,970 L1200,990'/><path d='M0,1060 L1200,1050'/><path d='M120,0 L100,1200'/><path d='M240,0 L260,1200'/><path d='M360,0 L340,1200'/><path d='M480,0 L500,1200'/><path d='M600,0 L580,1200'/><path d='M720,0 L740,1200'/><path d='M840,0 L820,1200'/><path d='M960,0 L980,1200'/><path d='M1080,0 L1060,1200'/></g><g fill='none' stroke='white' stroke-width='0.4' stroke-opacity='0.09'><path d='M0,40 L1200,80'/><path d='M0,130 L1200,120'/><path d='M0,220 L1200,210'/><path d='M0,300 L1200,290'/><path d='M0,380 L1200,400'/><path d='M0,470 L1200,460'/><path d='M0,560 L1200,570'/><path d='M0,650 L1200,640'/><path d='M0,740 L1200,750'/><path d='M0,830 L1200,820'/><path d='M0,920 L1200,930'/><path d='M0,1010 L1200,1020'/><path d='M0,1100 L1200,1110'/><path d='M60,0 L40,1200'/><path d='M180,0 L200,1200'/><path d='M300,0 L290,1200'/><path d='M420,0 L440,1200'/><path d='M540,0 L520,1200'/><path d='M660,0 L680,1200'/><path d='M780,0 L760,1200'/><path d='M900,0 L920,1200'/><path d='M1020,0 L1000,1200'/><path d='M1140,0 L1160,1200'/></g><g fill='none' stroke='white' stroke-width='0.3' stroke-opacity='0.06'><path d='M0,90 Q300,100 600,85 T1200,95'/><path d='M0,440 Q300,460 600,435 T1200,455'/><path d='M0,750 Q300,770 600,745 T1200,765'/><path d='M0,1080 Q300,1095 600,1070 T1200,1090'/></g></svg>");
+  background-size: 1400px 1400px;
   background-repeat: repeat;
   background-position: center center;
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.85) 45%, transparent 95%);
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, rgba(0,0,0,0.85) 45%, transparent 95%);
-  opacity: 0.9;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, rgba(0,0,0,0.85) 50%, transparent 95%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, rgba(0,0,0,0.85) 50%, transparent 95%);
+  opacity: 0.85;
+}
+
+/* Glowing GPS path overlay */
+.lv2-gps-path {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
+}
+.lv2-gps-path svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+.lv2-gps-path .gps-line {
+  fill: none;
+  stroke: var(--lv2-acc);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px var(--lv2-acc)) drop-shadow(0 0 14px var(--lv2-acc));
+  stroke-dasharray: 3000;
+  stroke-dashoffset: 3000;
+  animation: lv2-drawGps 4s 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.lv2-gps-path .gps-pin {
+  fill: var(--lv2-acc);
+  filter: drop-shadow(0 0 8px var(--lv2-acc));
+  opacity: 0;
+  animation: lv2-popPin 0.5s forwards cubic-bezier(0.2, 1.4, 0.5, 1);
+}
+.lv2-gps-path .gps-pin.start { animation-delay: 1s; }
+.lv2-gps-path .gps-pin.mid { animation-delay: 3s; }
+.lv2-gps-path .gps-pin.end { animation-delay: 4.5s; }
+.lv2-gps-path .gps-pin-ring {
+  fill: none;
+  stroke: var(--lv2-acc);
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-origin: center;
+  animation: lv2-pulsePin 2.5s ease-out infinite;
+}
+.lv2-gps-path .gps-pin-ring.start { animation-delay: 1.2s; }
+.lv2-gps-path .gps-pin-ring.end { animation-delay: 4.7s; }
+
+@keyframes lv2-drawGps {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes lv2-popPin {
+  0% { opacity: 0; transform: scale(0.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes lv2-pulsePin {
+  0% { opacity: 0.6; r: 4; }
+  100% { opacity: 0; r: 30; }
 }
 
 /* Noise grain overlay */
@@ -2794,6 +2852,25 @@ body.on-auth .container {
   <div class="landing-v2">
     <div class="lv2-blob-3"></div>
     <div class="lv2-grid"></div>
+    <div class="lv2-gps-path">
+      <svg viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid slice">
+        <!-- Glowing GPS route winding across the screen -->
+        <path class="gps-line" d="M 80,520 Q 180,500 240,460 T 380,420 L 460,440 Q 530,470 600,430 T 740,400 L 820,440 Q 900,490 980,460 T 1140,430 L 1240,470"/>
+
+        <!-- Start pin -->
+        <circle class="gps-pin-ring start" cx="80" cy="520" r="4"/>
+        <circle class="gps-pin start" cx="80" cy="520" r="6"/>
+        <circle class="gps-pin start" cx="80" cy="520" r="3" fill="#070b14"/>
+
+        <!-- Mid pin -->
+        <circle class="gps-pin mid" cx="600" cy="430" r="5"/>
+
+        <!-- End pin -->
+        <circle class="gps-pin-ring end" cx="1240" cy="470" r="4"/>
+        <circle class="gps-pin end" cx="1240" cy="470" r="6"/>
+        <circle class="gps-pin end" cx="1240" cy="470" r="3" fill="#070b14"/>
+      </svg>
+    </div>
     <div class="lv2-grain"></div>
 
     <!-- Landing-specific nav (visible only when logged out) -->
