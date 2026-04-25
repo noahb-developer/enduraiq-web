@@ -3542,17 +3542,22 @@ async function doLogout() {
 }
 
 function showEmailVerifyScreen(email) {
-  const wrap = document.querySelector('#page-signup .auth-wrap');
+  const wrap = document.querySelector('#page-signup .lv2-auth-card');
   if (wrap) {
     wrap.innerHTML = `
-      <h2 class="auth-title">Check your email</h2>
-      <p class="auth-sub">We sent a verification link to<br><strong style="color: var(--text);">${email}</strong></p>
-      <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 20px 0; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
-        1. Open your email inbox (and check spam)<br>
-        2. Click the verification link from Stryxs<br>
-        3. Come back here and log in
+      <h2 class="lv2-auth-title">Check your <em>email</em></h2>
+      <p class="lv2-auth-sub">We sent a verification link to<br><strong style="color: var(--lv2-text);">${email}</strong></p>
+      <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px; margin: 20px 0; font-size: 14px; color: var(--lv2-text-dim); line-height: 1.65;">
+        <strong style="color: var(--lv2-text); font-weight: 600;">Important:</strong> emails sometimes land in spam.<br><br>
+        1. Open your inbox (and check the <strong style="color: var(--lv2-acc);">spam / junk</strong> folder)<br>
+        2. Click the verification link from <strong>Stryxs</strong><br>
+        3. Come back here and log in<br><br>
+        Mark Stryxs as "Not Spam" so future emails go to inbox.
       </div>
-      <button class="btn full" onclick="navigate('login')">I verified — let me log in</button>
+      <button class="lv2-btn-primary lv2-full" onclick="navigate('login')">
+        I verified — let me log in
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
     `;
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
