@@ -1740,21 +1740,19 @@ h1.hero-h .grad {
   z-index: 0;
 }
 
-/* City street map overlay — real top-down city map image from Unsplash */
+/* Grid overlay — checkered pattern that fades at edges */
 .lv2-grid {
   position: absolute !important;
   inset: 0 !important;
   pointer-events: none;
   z-index: 4 !important;
-  background-image: url("https://images.unsplash.com/photo-1733194727715-94d77a13d11b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80");
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center top;
-  background-attachment: scroll;
-  -webkit-mask-image: radial-gradient(ellipse 95% 80% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.3) 80%, transparent 100%);
-  mask-image: radial-gradient(ellipse 95% 80% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.3) 80%, transparent 100%);
-  opacity: 0.55;
-  filter: brightness(0.7) saturate(0.5);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px) !important;
+  background-size: 64px 64px !important;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
+  mask-image: radial-gradient(ellipse 65% 55% at 50% 35%, black 0%, rgba(0,0,0,0.85) 40%, transparent 95%);
 }
 
 /* Glowing GPS path overlay — runs vertically down the entire landing page */
@@ -2856,26 +2854,6 @@ body.on-auth .container {
   <div class="landing-v2">
     <div class="lv2-blob-3"></div>
     <div class="lv2-grid"></div>
-    <div class="lv2-gps-path">
-      <svg viewBox="0 0 1000 4000" preserveAspectRatio="xMidYMid slice">
-        <!-- Bike route winding vertically down through the city -->
-        <path class="gps-line" d="M 200,40 L 200,180 L 350,180 L 350,340 L 280,340 L 280,520 L 460,520 L 460,720 L 380,720 L 380,920 L 560,920 L 560,1140 L 720,1140 L 720,1320 L 600,1320 L 600,1520 L 480,1520 L 480,1720 L 660,1720 L 660,1920 L 540,1920 L 540,2140 L 420,2140 L 420,2360 L 600,2360 L 600,2560 L 480,2560 L 480,2760 L 640,2760 L 640,2960 L 520,2960 L 520,3160 L 700,3160 L 700,3360 L 580,3360 L 580,3560 L 460,3560 L 460,3760 L 600,3760 L 600,3960"/>
-
-        <!-- Start pin (top) -->
-        <circle class="gps-pin-ring start" cx="200" cy="40" r="4"/>
-        <circle class="gps-pin start" cx="200" cy="40" r="9"/>
-        <circle class="gps-pin start" cx="200" cy="40" r="4" fill="#070b14"/>
-
-        <!-- Waypoint pins along the route -->
-        <circle class="gps-pin mid1" cx="460" cy="720" r="6"/>
-        <circle class="gps-pin mid2" cx="540" cy="2140" r="6"/>
-
-        <!-- End pin (bottom) -->
-        <circle class="gps-pin-ring end" cx="600" cy="3960" r="4"/>
-        <circle class="gps-pin end" cx="600" cy="3960" r="9"/>
-        <circle class="gps-pin end" cx="600" cy="3960" r="4" fill="#070b14"/>
-      </svg>
-    </div>
     <div class="lv2-grain"></div>
 
     <!-- Landing-specific nav (visible only when logged out) -->
