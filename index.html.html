@@ -1247,6 +1247,89 @@ h1.hero-h .grad {
   font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
 }
 
+/* Settings collapsible sections */
+.settings-section {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.settings-section:hover {
+  border-color: var(--border-light);
+}
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  cursor: pointer;
+  user-select: none;
+  gap: 14px;
+  transition: background 0.15s;
+}
+.settings-section-header:hover { background: rgba(255,255,255,0.02); }
+.settings-section-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.settings-section-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(0, 255, 163, 0.1), rgba(80, 130, 255, 0.05));
+  border: 1px solid rgba(0, 255, 163, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.settings-section-text { flex: 1; min-width: 0; }
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.2px;
+  margin-bottom: 2px;
+}
+.settings-section-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.settings-section-chevron {
+  color: var(--text-dim);
+  font-size: 16px;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.settings-section.expanded .settings-section-chevron {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.settings-section-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.settings-section.expanded .settings-section-body {
+  max-height: 5000px; /* large enough for any section */
+}
+.settings-section-inner {
+  padding: 4px 22px 22px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  .settings-section-header { padding: 14px 16px; }
+  .settings-section-inner { padding: 4px 16px 18px; }
+  .settings-section-icon { width: 34px; height: 34px; font-size: 16px; }
+}
+
 /* EMPTY */
 .empty {
   text-align: center; padding: 64px 24px; color: var(--text-dim);
@@ -5415,6 +5498,7 @@ async function completeIntake() {
     preferred_long_day: intakeAnswers.preferred_long_day || null,
     has_pool_access: (intakeAnswers.equipment || []).includes('pool'),
     has_bike_trainer: (intakeAnswers.equipment || []).includes('trainer'),
+    equipment: intakeAnswers.equipment || [],
     injuries: intakeAnswers.injuries || null,
     age: intakeAnswers.age ? parseInt(intakeAnswers.age) : null,
     sex: intakeAnswers.sex || null,
@@ -7339,9 +7423,20 @@ async function renderSettings() {
   }
 
   el.innerHTML = `
-    <!-- Profile Card -->
-    <div class="panel">
-      <div class="panel-title" style="margin-bottom: 16px;">Profile</div>
+    <!-- Profile Section -->
+    <div class="settings-section expanded" id="section-profile">
+      <div class="settings-section-header" onclick="toggleSettingsSection('profile')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">👤</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Profile</div>
+            <div class="settings-section-sub">Name, photo, bio, email</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
       <div style="display: flex; gap: 18px; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap;">
         <div style="position: relative; flex-shrink: 0;">
           <div class="user-avatar" id="settingsAvatar" style="width: 80px; height: 80px; font-size: 32px; ${state.profile?.avatarUrl ? `background-image: url('${state.profile.avatarUrl}'); background-size: cover; background-position: center;` : ''}">
@@ -7369,11 +7464,24 @@ async function renderSettings() {
         <label>Email</label>
         <input type="email" id="settingsEmail" value="${state.user?.email || ''}" readonly style="opacity: 0.5;" />
       </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Personal Info -->
-    <div class="panel">
-      <div class="panel-title" style="margin-bottom: 16px;">Personal Info</div>
+    <!-- Personal Info Section -->
+    <div class="settings-section" id="section-personal">
+      <div class="settings-section-header" onclick="toggleSettingsSection('personal')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">📐</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Personal Info</div>
+            <div class="settings-section-sub">Units, age, weight, height</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
       <div class="field">
         <label>Units</label>
         <select id="settingsUnits" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
@@ -7415,11 +7523,24 @@ async function renderSettings() {
           <input type="number" id="settingsHeightCm" value="${heightCm}" placeholder="e.g. 178" min="100" max="250" />
         `}
       </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Training Goals -->
-    <div class="panel">
-      <div class="panel-title" style="margin-bottom: 16px;">Training Goals</div>
+    <!-- Training Goals Section -->
+    <div class="settings-section" id="section-goals">
+      <div class="settings-section-header" onclick="toggleSettingsSection('goals')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🎯</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Training Goals</div>
+            <div class="settings-section-sub">Race, experience, weekly hours, injuries</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
       <div class="field">
         <label>Primary goal</label>
         <select id="settingsGoal" style="width: 100%; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; outline: none;">
@@ -7453,11 +7574,24 @@ async function renderSettings() {
         <label>Injuries / health notes</label>
         <textarea id="settingsInjuries" placeholder="None, or list any current issues" style="width: 100%; min-height: 60px; padding: 13px 14px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; outline: none; resize: vertical;">${intake?.injuries || ''}</textarea>
       </div>
+        </div>
+      </div>
     </div>
 
-    <!-- PBs and Goal Time -->
-    <div class="panel">
-      <div class="panel-title" style="margin-bottom: 8px;">Race Benchmarks</div>
+    <!-- Race Benchmarks Section -->
+    <div class="settings-section" id="section-benchmarks">
+      <div class="settings-section-header" onclick="toggleSettingsSection('benchmarks')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🏆</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Race Benchmarks</div>
+            <div class="settings-section-sub">PBs, goal time, last race result</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
       <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.55;">Add your PBs to unlock accurate pace projections. All optional — leave blank if you don't have one.</p>
       <div class="field">
         <label>Goal time (for current race)</label>
@@ -7483,11 +7617,62 @@ async function renderSettings() {
         <label>Most recent race</label>
         <input type="text" id="settingsLastRace" value="${intake?.last_race || ''}" placeholder="e.g. 5K 19:45 in March 2026" />
       </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Heart Rate Zones -->
-    <div class="panel">
-      <div class="panel-title" style="margin-bottom: 16px;">Heart Rate Zones</div>
+    <!-- Equipment Section (NEW) -->
+    <div class="settings-section" id="section-equipment">
+      <div class="settings-section-header" onclick="toggleSettingsSection('equipment')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🛠</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Equipment</div>
+            <div class="settings-section-sub">What you have access to. Coach adapts workouts.</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 16px; line-height: 1.55;">Toggle on/off any equipment you have access to. Coach will adjust your training plan automatically.</p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;" id="equipmentToggles">
+        ${(() => {
+          const eq = intake?.equipment || [];
+          const items = [
+            { value: 'pool', emoji: '🏊', label: 'Pool' },
+            { value: 'open_water', emoji: '🌊', label: 'Open water' },
+            { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
+            { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+            { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+            { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
+          ];
+          return items.map(item => `
+            <button class="choice-btn ${eq.includes(item.value) ? 'selected' : ''}" data-equipment="${item.value}" onclick="toggleEquipmentItem(this, '${item.value}')" style="padding: 12px 14px; text-align: left;">
+              <span style="font-size: 18px; margin-right: 10px;">${item.emoji}</span>
+              <span>${item.label}</span>
+            </button>
+          `).join('');
+        })()}
+      </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HR Zones Section -->
+    <div class="settings-section" id="section-hr">
+      <div class="settings-section-header" onclick="toggleSettingsSection('hr')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">❤️</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Heart Rate Zones</div>
+            <div class="settings-section-sub">LTHR for run and bike</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
       <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.55;">Your LTHR is the most important number in training. Test it properly with a 30-min time trial.</p>
       <div class="field">
         <label>Run LTHR (bpm)</label>
@@ -7498,6 +7683,8 @@ async function renderSettings() {
         <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
       </div>
       <div id="zonePreview"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Save / Logout -->
@@ -7512,6 +7699,10 @@ async function renderSettings() {
     const inp = document.getElementById(id);
     if (inp) inp.addEventListener('input', updateZonePreview);
   });
+
+  // Initialize equipment selection set from intake
+  settingsEquipmentSelected.clear();
+  (intake?.equipment || []).forEach(e => settingsEquipmentSelected.add(e));
 
   // Bio character counter
   const bioInput = document.getElementById('settingsBio');
@@ -7536,6 +7727,25 @@ async function renderSettings() {
   }
 
   updateZonePreview();
+}
+
+function toggleSettingsSection(id) {
+  const section = document.getElementById('section-' + id);
+  if (!section) return;
+  section.classList.toggle('expanded');
+}
+
+// Equipment selection in Settings — store in a module-level set used at save time
+const settingsEquipmentSelected = new Set();
+
+function toggleEquipmentItem(btn, value) {
+  if (settingsEquipmentSelected.has(value)) {
+    settingsEquipmentSelected.delete(value);
+    btn.classList.remove('selected');
+  } else {
+    settingsEquipmentSelected.add(value);
+    btn.classList.add('selected');
+  }
 }
 
 function updateZonePreview() {
@@ -7664,6 +7874,9 @@ async function saveAllSettings(silent = false) {
     pb_half: pbHalf,
     pb_marathon: pbMarathon,
     last_race: lastRace,
+    equipment: Array.from(settingsEquipmentSelected),
+    has_pool_access: settingsEquipmentSelected.has('pool'),
+    has_bike_trainer: settingsEquipmentSelected.has('trainer'),
     updated_at: new Date().toISOString(),
   }).eq('user_id', state.user.id);
 
