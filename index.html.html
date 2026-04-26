@@ -197,13 +197,18 @@ body.on-landing #landingNav { display: none !important; }
 }
 
 .logo-mark {
-  width: 30px; height: 30px;
+  width: 32px; height: 32px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  border-radius: 8px;
+  border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 900; color: var(--bg); font-size: 15px;
   box-shadow: 0 4px 20px rgba(0, 229, 160, 0.4);
   animation: logoGlow 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.logo-mark svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 @keyframes logoGlow {
@@ -912,6 +917,39 @@ h1.hero-h .grad {
 .panel-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
 .panel-sub { font-size: 12px; color: var(--text-dim); }
 
+/* Plan Management buttons — wrap meta line on mobile */
+.plan-mgmt-btn {
+  width: 100%;
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  justify-content: flex-start;
+}
+.plan-mgmt-icon { font-size: 18px; flex-shrink: 0; }
+.plan-mgmt-main { font-weight: 600; flex-shrink: 0; }
+.plan-mgmt-meta {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+.plan-mgmt-danger {
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  color: #f87171 !important;
+}
+@media (max-width: 560px) {
+  .plan-mgmt-btn { gap: 10px; }
+  .plan-mgmt-meta {
+    margin-left: 30px;
+    flex-basis: 100%;
+    font-size: 11px;
+    margin-top: -4px;
+  }
+}
+
 /* ════════ UPLOAD ════════ */
 .source-tabs {
   display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
@@ -1516,9 +1554,16 @@ h1.hero-h .grad {
 }
 
 @media (max-width: 720px) {
-  .cal-day { min-height: 60px; padding: 4px 4px; }
+  .cal-day { min-height: 56px; padding: 4px 3px; gap: 2px; }
   .cal-date { font-size: 10px; }
-  .cal-workout { font-size: 9px; padding: 2px 3px; }
+  .cal-workout {
+    font-size: 12px;
+    padding: 3px 0;
+    text-align: center;
+    line-height: 1;
+    /* On mobile, hide the text label, show only the emoji */
+  }
+  .cal-workout .cal-label { display: none; }
   .cal-header-cell { font-size: 10px; padding: 4px 2px; }
   .calendar { padding: 8px; }
   .cal-grid { gap: 2px; }
@@ -2154,7 +2199,7 @@ h1.hero-h .grad {
   justify-content: center;
   flex-wrap: wrap;
   font-size: 11px;
-  color: var(--lv2-text-mute);
+  color: var(--lv2-text-dim);
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -2804,7 +2849,7 @@ body.on-auth .container {
       <span></span><span></span><span></span>
     </button>
     <div class="logo" onclick="navigate('dashboard')">
-      <div class="logo-mark">E</div>
+      <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
       <span>Stryxs</span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
@@ -2857,10 +2902,6 @@ body.on-auth .container {
     <span class="avatar-menu-icon">⚙</span>
     <span>Settings</span>
   </button>
-  <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('coach')">
-    <span class="avatar-menu-icon">👤</span>
-    <span>My Profile</span>
-  </button>
   <div class="avatar-menu-divider"></div>
   <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); confirmLogout();">
     <span class="avatar-menu-icon">↪</span>
@@ -2871,7 +2912,7 @@ body.on-auth .container {
 <nav class="nav" id="landingNav">
   <div class="nav-inner">
     <div class="logo" onclick="navigate('landing')">
-      <div class="logo-mark">E</div>
+      <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
       <span>Stryxs</span>
     </div>
     <div style="display:flex; gap:8px;">
@@ -3197,7 +3238,8 @@ body.on-auth .container {
     <div id="dashRecent"></div>
   </div>
 
-  <div class="panel" id="fitnessTrend">
+  <!-- Fitness Trend hidden for now — revisit with a better composite metric (volume + drift + completion + intensity balance) -->
+  <div class="panel" id="fitnessTrend" style="display: none;">
     <div class="panel-header">
       <div>
         <div class="panel-title">Fitness Trend</div>
@@ -3717,6 +3759,17 @@ function toggleNavMenu() {
   const isOpen = panel.classList.contains('open');
   if (isOpen) closeNavMenu();
   else {
+    // Position the menu directly below the hamburger button
+    const hamburger = document.querySelector('.nav .hamburger');
+    if (hamburger && window.innerWidth > 720) {
+      const rect = hamburger.getBoundingClientRect();
+      panel.style.left = rect.left + 'px';
+      panel.style.top = (rect.bottom + 8) + 'px';
+      panel.style.right = 'auto';
+    } else {
+      panel.style.left = '';
+      panel.style.top = '';
+    }
     panel.classList.add('open');
     backdrop.classList.add('open');
     closeAvatarMenu();
@@ -3745,6 +3798,18 @@ function toggleAvatarMenu(event) {
     const header = document.getElementById('avatarMenuHeader');
     if (header && state.user) {
       header.innerHTML = `<strong>${state.user.name || 'Athlete'}</strong><span>${state.user.email || ''}</span>`;
+    }
+    // Position the menu directly below the avatar button on desktop
+    const avatarBtn = document.querySelector('.nav .nav-user-btn');
+    if (avatarBtn && window.innerWidth > 720) {
+      const rect = avatarBtn.getBoundingClientRect();
+      menu.style.right = (window.innerWidth - rect.right) + 'px';
+      menu.style.top = (rect.bottom + 8) + 'px';
+      menu.style.left = 'auto';
+    } else {
+      menu.style.right = '';
+      menu.style.top = '';
+      menu.style.left = '';
     }
     menu.classList.add('open');
     if (backdrop) backdrop.classList.add('open');
@@ -5212,19 +5277,33 @@ async function renderCoachChat(el, intake) {
     </div>
 
     <div class="panel" style="margin-top: 16px; border-color: rgba(239, 68, 68, 0.15);">
-      <div class="panel-header"><div><div class="panel-title">Plan Management</div><div class="panel-sub">Change or reset your current plan</div></div></div>
+      <div class="panel-header" style="position: relative;">
+        <div>
+          <div class="panel-title">Plan Management</div>
+          <div class="panel-sub">Change or reset your current plan</div>
+        </div>
+        <button onclick="togglePlanMgmtHelp()" id="planMgmtHelpBtn" style="position: absolute; top: 0; right: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="What do these do?">?</button>
+      </div>
+      <div id="planMgmtHelp" style="display: none; padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong> — paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar.</div>
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong> — keeps everything you've told Coach about yourself (intake answers, profile) but throws away the current plan and builds a fresh one.</div>
+        <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. You start over from scratch.</div>
+      </div>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="btn ghost" style="width: 100%; justify-content: flex-start;" onclick="openImportModal()">
-          📥&nbsp;&nbsp;Import existing plan
-          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Already have a plan elsewhere?</span>
+        <button class="btn ghost plan-mgmt-btn" onclick="openImportModal()">
+          <span class="plan-mgmt-icon">📥</span>
+          <span class="plan-mgmt-main">Import existing plan</span>
+          <span class="plan-mgmt-meta">Already have a plan elsewhere?</span>
         </button>
-        <button class="btn ghost" style="width: 100%; justify-content: flex-start;" onclick="openResetModal('regenerate')">
-          🔄&nbsp;&nbsp;Generate new plan
-          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Keep profile, new plan</span>
+        <button class="btn ghost plan-mgmt-btn" onclick="openResetModal('regenerate')">
+          <span class="plan-mgmt-icon">🔄</span>
+          <span class="plan-mgmt-main">Generate new plan</span>
+          <span class="plan-mgmt-meta">Keep profile, new plan</span>
         </button>
-        <button class="btn ghost" style="width: 100%; justify-content: flex-start; border-color: rgba(239, 68, 68, 0.25); color: #f87171;" onclick="openResetModal('full')">
-          🗑&nbsp;&nbsp;Reset everything
-          <span style="margin-left: auto; color: var(--text-dim); font-size: 12px; font-weight: 400;">Clear profile + plan</span>
+        <button class="btn ghost plan-mgmt-btn plan-mgmt-danger" onclick="openResetModal('full')">
+          <span class="plan-mgmt-icon">🗑</span>
+          <span class="plan-mgmt-main">Reset everything</span>
+          <span class="plan-mgmt-meta">Clear profile + plan</span>
         </button>
       </div>
     </div>
@@ -5387,6 +5466,18 @@ function formatHeight(cm, unitPref) {
 // ═══════════════════════════════════════════════════════════
 // PLAN MANAGEMENT — Reset / Regenerate / Import
 // ═══════════════════════════════════════════════════════════
+
+function togglePlanMgmtHelp() {
+  const help = document.getElementById('planMgmtHelp');
+  const btn = document.getElementById('planMgmtHelpBtn');
+  if (!help) return;
+  const isOpen = help.style.display !== 'none';
+  help.style.display = isOpen ? 'none' : 'block';
+  if (btn) {
+    btn.style.background = isOpen ? 'var(--bg-3)' : 'var(--accent)';
+    btn.style.color = isOpen ? 'var(--text-dim)' : 'var(--bg)';
+  }
+}
 
 function openResetModal(type) {
   // type: 'regenerate' (keep profile, new plan) or 'full' (clear everything)
@@ -6641,7 +6732,7 @@ function renderCalendarGrid(plannedWorkouts) {
         ${dayWorkouts.map(w => {
           const emoji = sportEmojis[w.sport] || '';
           const label = w.workout_type || w.sport;
-          return `<div class="cal-workout ${w.sport || 'rest'} ${w.completed ? 'completed' : ''}">${emoji} ${label}</div>`;
+          return `<div class="cal-workout ${w.sport || 'rest'} ${w.completed ? 'completed' : ''}">${emoji}<span class="cal-label"> ${label}</span></div>`;
         }).join('')}
       </div>
     `;
@@ -6916,7 +7007,7 @@ async function renderSettings() {
     <!-- Save / Logout -->
     <div style="display: flex; gap: 10px; margin-top: 24px;">
       <button class="btn" style="flex: 1;" onclick="saveAllSettings()">Save changes</button>
-      <button class="btn ghost" onclick="doLogout()">Log out</button>
+      <button class="btn ghost" style="color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="confirmLogout()">Log out</button>
     </div>
   `;
 
