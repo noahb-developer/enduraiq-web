@@ -5458,13 +5458,16 @@ async function analyzeTrainingPatterns() {
     // Need at least 2 workouts to detect patterns
     if (!recentRaw || recentRaw.length < 2) return;
 
-    const recentWorkouts = recentRaw.map(w => ({
-      sport: w.sport,
-      type: w.workout_type,
-      distance: w.distance_km,
-      avgHr: w.avg_hr,
-      drift: w.cardiac_drift,
-    }));
+    const recentWorkouts = recentRaw.map(w => {
+      const wd = w.workout_data || {};
+      return {
+        sport: w.sport,
+        type: wd.workout_type || wd.type || null,
+        distance: parseFloat(wd.distance || wd.distance_km || 0) || null,
+        avgHr: parseInt(wd.avgHr || wd.avg_hr || 0) || null,
+        drift: parseFloat(wd.drift || wd.cardiac_drift || 0) || null,
+      };
+    });
 
     // Pull next 7 days of planned workouts
     const today = new Date().toISOString().split('T')[0];
@@ -5670,16 +5673,27 @@ async function renderProgress() {
   const container = document.getElementById('progressContainer');
   if (!container) return;
 
-  // Pull all workouts for this user (only need essentials for stats)
-  const { data: allWorkouts } = await sb.from('workouts')
-    .select('sport, distance_km, duration_minutes, created_at')
+  // Pull all workouts for this user (workout_data holds distance/duration as JSONB)
+  const { data: workoutsRaw } = await sb.from('workouts')
+    .select('sport, workout_data, created_at')
     .eq('user_id', state.user.id)
     .order('created_at', { ascending: false });
 
-  if (!allWorkouts || allWorkouts.length === 0) {
+  if (!workoutsRaw || workoutsRaw.length === 0) {
     container.innerHTML = '';
     return;
   }
+
+  // Flatten: pull distance + duration out of the JSONB blob
+  const allWorkouts = workoutsRaw.map(w => {
+    const wd = w.workout_data || {};
+    return {
+      sport: w.sport,
+      created_at: w.created_at,
+      distance_km: parseFloat(wd.distance || wd.distance_km || 0) || 0,
+      duration_minutes: parseFloat(wd.duration || wd.duration_minutes || 0) || 0,
+    };
+  });
 
   // Pull completed planned workouts for plan adherence streak
   const { data: completedPlanned } = await sb.from('planned_workouts')
@@ -5886,13 +5900,16 @@ async function generateNextWeek() {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    const recentWorkouts = (recentRaw || []).map(w => ({
-      sport: w.sport,
-      type: w.workout_type,
-      distance: w.distance_km,
-      avgHr: w.avg_hr,
-      drift: w.cardiac_drift,
-    }));
+    const recentWorkouts = (recentRaw || []).map(w => {
+      const wd = w.workout_data || {};
+      return {
+        sport: w.sport,
+        type: wd.workout_type || wd.type || null,
+        distance: parseFloat(wd.distance || wd.distance_km || 0) || null,
+        avgHr: parseInt(wd.avgHr || wd.avg_hr || 0) || null,
+        drift: parseFloat(wd.drift || wd.cardiac_drift || 0) || null,
+      };
+    });
 
     // 5. Generate next week plan via Coach
     const plan = await callCoach('generate_plan', {
