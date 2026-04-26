@@ -5061,24 +5061,58 @@ const intakeQuestions = [
     question: "Best day for your longest workout?",
     context: "This is when Coach will schedule your weekly long run / long ride.",
     type: 'single',
-    options: [
-      { value: 'sat', emoji: '🏞', label: 'Saturday' },
-      { value: 'sun', emoji: '🏞', label: 'Sunday' },
-    ],
+    options: (a) => {
+      const allDays = [
+        { value: 'mon', emoji: '🏞', label: 'Monday' },
+        { value: 'tue', emoji: '🏞', label: 'Tuesday' },
+        { value: 'wed', emoji: '🏞', label: 'Wednesday' },
+        { value: 'thu', emoji: '🏞', label: 'Thursday' },
+        { value: 'fri', emoji: '🏞', label: 'Friday' },
+        { value: 'sat', emoji: '🏞', label: 'Saturday' },
+        { value: 'sun', emoji: '🏞', label: 'Sunday' },
+      ];
+      const available = a.available_days || [];
+      // Only show days the user has available; if they picked weekends, prefer those
+      const filtered = allDays.filter(d => available.includes(d.value));
+      // Move weekend days to the top if available
+      filtered.sort((a, b) => {
+        const weekendOrder = { sat: 0, sun: 1 };
+        const aWeek = weekendOrder[a.value];
+        const bWeek = weekendOrder[b.value];
+        if (aWeek !== undefined && bWeek === undefined) return -1;
+        if (bWeek !== undefined && aWeek === undefined) return 1;
+        if (aWeek !== undefined && bWeek !== undefined) return aWeek - bWeek;
+        return 0;
+      });
+      return filtered.length > 0 ? filtered : allDays;
+    },
   },
   {
     id: 'equipment',
     question: "What do you have access to?",
     context: "Select everything that applies.",
     type: 'multi',
-    options: [
-      { value: 'pool', emoji: '🏊', label: 'Pool' },
-      { value: 'open_water', emoji: '🌊', label: 'Open water' },
-      { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
-      { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
-      { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
-      { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
-    ],
+    options: (a) => {
+      const isTri = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event);
+      const isGeneral = a.goal_event === 'general';
+      const runOnly = ['5k', '10k', 'half_marathon', 'marathon'].includes(a.goal_event);
+
+      const swimBikeOptions = [
+        { value: 'pool', emoji: '🏊', label: 'Pool' },
+        { value: 'open_water', emoji: '🌊', label: 'Open water' },
+        { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
+        { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+      ];
+      const generalOptions = [
+        { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
+        { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
+      ];
+
+      if (isTri) return [...swimBikeOptions, ...generalOptions];
+      if (isGeneral) return [...swimBikeOptions, ...generalOptions];
+      if (runOnly) return generalOptions;
+      return [...swimBikeOptions, ...generalOptions];
+    },
   },
   {
     id: 'injuries',
@@ -5147,9 +5181,10 @@ function renderIntakeStep() {
   let inputHtml = '';
   if (q.type === 'single' || q.type === 'multi') {
     const current = intakeAnswers[q.id] || (q.type === 'multi' ? [] : null);
+    const options = typeof q.options === 'function' ? q.options(intakeAnswers) : q.options;
     inputHtml = `
       <div class="choice-grid">
-        ${q.options.map(opt => {
+        ${options.map(opt => {
           const isSelected = q.type === 'multi' ? (current || []).includes(opt.value) : current === opt.value;
           return `
             <button class="choice-btn ${isSelected ? 'selected' : ''}" data-value="${opt.value}">
@@ -5521,7 +5556,9 @@ async function loadCoachPersonaBadge(intake) {
   const badge = document.getElementById('coachPersonaBadge');
   if (!badge) return;
   try {
+    console.log('[Stryxs] Loading persona for goal_event:', intake?.goal_event);
     const persona = await callCoach('get_persona', { intake });
+    console.log('[Stryxs] Persona received:', persona);
     if (!persona) return;
     badge.innerHTML = `
       <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 18px;">
