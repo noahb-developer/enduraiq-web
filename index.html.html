@@ -3259,6 +3259,8 @@ body.on-auth .container {
 
   <div id="progressContainer"></div>
 
+  <div id="projectionsContainer"></div>
+
   <div class="panel">
     <div class="panel-header">
       <div>
@@ -4628,6 +4630,9 @@ async function renderDashboard() {
   // Render streaks + progress section
   await renderProgress();
 
+  // Render race projections panel
+  renderProjections();
+
   const recent = state.workouts.slice(-7);
   const runs = recent.filter(w => w.sport === 'run');
   const bikes = recent.filter(w => w.sport === 'bike');
@@ -4912,6 +4917,54 @@ const intakeQuestions = [
     ],
   },
   {
+    id: 'goal_time',
+    question: "Got a goal time for this race?",
+    context: "Optional. Helps Coach project paces and pace targets. Skip if you're not sure yet.",
+    type: 'text',
+    placeholder: 'e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K (or leave blank)',
+    optional: true,
+  },
+  {
+    id: 'pb_5k',
+    question: "Current 5K PB?",
+    context: "Optional but unlocks accurate pace projections. Format: minutes:seconds (e.g. 19:30).",
+    type: 'text',
+    placeholder: 'e.g. 19:30',
+    optional: true,
+  },
+  {
+    id: 'pb_10k',
+    question: "Current 10K PB?",
+    context: "Optional. Format: minutes:seconds (e.g. 41:00).",
+    type: 'text',
+    placeholder: 'e.g. 41:00',
+    optional: true,
+  },
+  {
+    id: 'pb_half',
+    question: "Current Half Marathon PB?",
+    context: "Optional. Format: hours:minutes:seconds (e.g. 1:30:00).",
+    type: 'text',
+    placeholder: 'e.g. 1:30:00',
+    optional: true,
+  },
+  {
+    id: 'pb_marathon',
+    question: "Current Marathon PB?",
+    context: "Optional. Format: hours:minutes:seconds (e.g. 3:15:00).",
+    type: 'text',
+    placeholder: 'e.g. 3:15:00',
+    optional: true,
+  },
+  {
+    id: 'last_race',
+    question: "Most recent race result?",
+    context: "Optional. Free text — helps Coach calibrate current fitness. Anything you've raced recently.",
+    type: 'text',
+    placeholder: 'e.g. 5K 19:45 in March 2026',
+    optional: true,
+  },
+  {
     id: 'current_weekly_hours',
     question: "How many hours can you train per week?",
     context: "Be realistic. Consistency matters more than peak volume.",
@@ -5087,12 +5140,15 @@ function renderIntakeStep() {
 
   body.innerHTML = `
     <div class="intake-card">
-      <div class="intake-question">${q.question}</div>
+      <div class="intake-question">${q.question}${q.optional ? ' <span style="font-size: 12px; color: var(--text-mute); font-weight: 500;">(optional)</span>' : ''}</div>
       <div class="intake-context">${q.context}</div>
       ${inputHtml}
       <div class="intake-actions">
         <button class="btn ghost" onclick="intakeBack()" ${intakeStep === 0 ? 'style="visibility:hidden;"' : ''}>← Back</button>
-        <button class="btn" onclick="intakeNext()">${intakeStep === intakeQuestions.length - 1 ? 'Build my plan →' : 'Next →'}</button>
+        <div style="display: flex; gap: 8px;">
+          ${q.optional ? `<button class="btn ghost" onclick="intakeSkip()">Skip</button>` : ''}
+          <button class="btn" onclick="intakeNext()">${intakeStep === intakeQuestions.length - 1 ? 'Build my plan →' : 'Next →'}</button>
+        </div>
       </div>
     </div>
   `;
@@ -5119,6 +5175,18 @@ function renderIntakeStep() {
 
 function intakeBack() {
   if (intakeStep > 0) { intakeStep--; renderIntakeStep(); }
+}
+
+function intakeSkip() {
+  const q = intakeQuestions[intakeStep];
+  // Mark as empty/skipped
+  intakeAnswers[q.id] = '';
+  if (intakeStep < intakeQuestions.length - 1) {
+    intakeStep++;
+    renderIntakeStep();
+  } else {
+    completeIntake();
+  }
 }
 
 async function intakeNext() {
@@ -5165,7 +5233,7 @@ async function intakeNext() {
     return toast('Please enter your height');
   }
   if (q.type === 'text' && !intakeAnswers[q.id]) {
-    intakeAnswers[q.id] = 'none';
+    intakeAnswers[q.id] = q.optional ? '' : 'none';
   }
 
   if (intakeStep < intakeQuestions.length - 1) {
@@ -5235,6 +5303,13 @@ async function completeIntake() {
     weight_kg: weight_kg,
     height_cm: height_cm,
     unit_preference: intakeAnswers.unit_preference || 'metric',
+    // Optional benchmark fields — empty strings normalize to null
+    pb_5k: intakeAnswers.pb_5k || null,
+    pb_10k: intakeAnswers.pb_10k || null,
+    pb_half: intakeAnswers.pb_half || null,
+    pb_marathon: intakeAnswers.pb_marathon || null,
+    last_race: intakeAnswers.last_race || null,
+    goal_time: intakeAnswers.goal_time || null,
     completed: true,
     updated_at: new Date().toISOString(),
   };
@@ -5277,6 +5352,8 @@ async function renderCoachChat(el, intake) {
         <p>Your AI endurance coach. Ask anything about your training, a workout, or how to improve.</p>
       </div>
     </div>
+
+    <div id="coachPersonaBadge" style="margin-bottom: 16px;"></div>
 
     <div class="coach-chat">
       <div class="chat-messages" id="chatMessages">
@@ -5341,6 +5418,39 @@ async function renderCoachChat(el, intake) {
   // Scroll chat to bottom
   const chatEl = document.getElementById('chatMessages');
   if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+
+  // Load Coach persona badge in background
+  loadCoachPersonaBadge(intake);
+}
+
+async function loadCoachPersonaBadge(intake) {
+  const badge = document.getElementById('coachPersonaBadge');
+  if (!badge) return;
+  try {
+    const persona = await callCoach('get_persona', { intake });
+    if (!persona) return;
+    badge.innerHTML = `
+      <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px; padding: 16px 18px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px;">
+          <div style="font-size: 22px; line-height: 1; flex-shrink: 0;">🎯</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 4px;">Coaching Style</div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px;">${persona.label}</div>
+            <div style="font-size: 12px; color: var(--text-dim);">Methodology: <strong style="color: var(--text);">${persona.coach_brain}</strong></div>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+          ${persona.methodology_summary}
+        </div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+          Phase: <strong style="color: var(--accent); text-transform: none; letter-spacing: 0;">${persona.phase}</strong>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Persona badge load failed:', err);
+    badge.innerHTML = '';
+  }
 }
 
 function renderMsg(role, content) {
@@ -5874,6 +5984,137 @@ async function renderCoachInsights() {
       </div>
     </div>
   `;
+}
+
+// ─── Race Projections Panel ───
+async function renderProjections() {
+  if (!state.user) return;
+  const container = document.getElementById('projectionsContainer');
+  if (!container) return;
+
+  // Show loading state
+  container.innerHTML = `
+    <div class="panel" style="margin-bottom: 20px; opacity: 0.6;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">🎯 Race Projections</div>
+          <div class="panel-sub">Calculating predicted times from your training...</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  try {
+    // Get intake
+    const { data: intake } = await sb.from('athlete_intake')
+      .select('*').eq('user_id', state.user.id).single();
+    if (!intake || !intake.completed) {
+      container.innerHTML = '';
+      return;
+    }
+
+    // Get last 14 workouts
+    const { data: recentRaw } = await sb.from('workouts')
+      .select('sport, workout_data, created_at')
+      .eq('user_id', state.user.id)
+      .order('created_at', { ascending: false })
+      .limit(14);
+
+    const recentWorkouts = (recentRaw || []).map(w => {
+      const wd = w.workout_data || {};
+      return {
+        sport: w.sport,
+        type: wd.workout_type || wd.type || null,
+        distance: parseFloat(wd.distance || wd.distance_km || 0) || null,
+        duration: wd.duration ? parseFloat(wd.duration) : null,
+        avgHr: parseInt(wd.avgHr || wd.avg_hr || 0) || null,
+        drift: parseFloat(wd.drift || wd.cardiac_drift || 0) || null,
+      };
+    });
+
+    // Call Coach for projections
+    const proj = await callCoach('race_projections', { intake, recentWorkouts });
+    if (!proj) {
+      container.innerHTML = '';
+      return;
+    }
+
+    if (proj.data_sufficiency === 'low' || !proj.primary_projection) {
+      container.innerHTML = `
+        <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">🎯 Race Projections</div>
+              <div class="panel-sub">Need more data to calculate</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+            Add a recent PB or race result in <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="navigate('settings')">Settings</a>, OR upload a few quality workouts to unlock pace and time projections.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const primary = proj.primary_projection;
+    const secondaries = proj.secondary_projections || [];
+    const paces = proj.training_paces || {};
+
+    const confColor = { low: '#fb923c', medium: '#facc15', high: '#4ade80' }[primary.confidence] || '#facc15';
+
+    container.innerHTML = `
+      <div class="panel" style="margin-bottom: 20px;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🎯 Race Projections</div>
+            <div class="panel-sub">Predicted times based on your training</div>
+          </div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, rgba(0, 255, 163, 0.1), rgba(80, 130, 255, 0.05)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 14px; padding: 22px; margin-bottom: 18px; position: relative;">
+          <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 8px;">Primary projection</div>
+          <div style="font-size: 14px; color: var(--text-dim); margin-bottom: 8px;">${primary.event}</div>
+          <div style="font-size: 36px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1; margin-bottom: 12px; letter-spacing: -1px;">${primary.predicted_time}</div>
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: ${confColor}22; border: 1px solid ${confColor}55; border-radius: 6px; font-size: 11px; color: ${confColor}; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${confColor};"></span>
+            ${primary.confidence} confidence
+          </div>
+          ${primary.reasoning ? `<div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);">${primary.reasoning}</div>` : ''}
+        </div>
+
+        ${secondaries.length > 0 ? `
+          <div style="margin-bottom: 18px;">
+            <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Other distances</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
+              ${secondaries.map(s => `
+                <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+                  <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;">${s.distance}</div>
+                  <div style="font-size: 18px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace;">${s.time}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        ${paces && Object.keys(paces).length > 0 ? `
+          <div>
+            <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px;">Training paces</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font-size: 13px;">
+              ${Object.entries(paces).map(([key, val]) => val ? `
+                <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--bg-3); border-radius: 8px;">
+                  <span style="font-size: 11px; color: var(--text-dim); text-transform: capitalize;">${key.replace(/_/g, ' ')}</span>
+                  <strong style="font-family: 'JetBrains Mono', monospace; color: var(--text);">${val}</strong>
+                </div>
+              ` : '').join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } catch (err) {
+    console.error('Projections render failed:', err);
+    container.innerHTML = '';
+  }
 }
 
 // ─── Streaks + Progress Tracking ───
