@@ -3150,6 +3150,8 @@ body.on-auth .container {
 
   <div class="stat-grid" id="statGrid"></div>
 
+  <div id="progressContainer"></div>
+
   <div class="panel">
     <div class="panel-header">
       <div>
@@ -4437,6 +4439,9 @@ async function renderDashboard() {
   // Render any active Coach insights
   await renderCoachInsights();
 
+  // Render streaks + progress section
+  await renderProgress();
+
   const recent = state.workouts.slice(-7);
   const runs = recent.filter(w => w.sport === 'run');
   const bikes = recent.filter(w => w.sport === 'bike');
@@ -5655,6 +5660,173 @@ async function renderCoachInsights() {
           ` : ''}
         </div>
       </div>
+    </div>
+  `;
+}
+
+// ─── Streaks + Progress Tracking ───
+async function renderProgress() {
+  if (!state.user) return;
+  const container = document.getElementById('progressContainer');
+  if (!container) return;
+
+  // Pull all workouts for this user (only need essentials for stats)
+  const { data: allWorkouts } = await sb.from('workouts')
+    .select('sport, distance_km, duration_minutes, created_at')
+    .eq('user_id', state.user.id)
+    .order('created_at', { ascending: false });
+
+  if (!allWorkouts || allWorkouts.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  // Pull completed planned workouts for plan adherence streak
+  const { data: completedPlanned } = await sb.from('planned_workouts')
+    .select('scheduled_date, completed')
+    .eq('user_id', state.user.id)
+    .eq('completed', true)
+    .order('scheduled_date', { ascending: false });
+
+  // ─── Calculate Streaks ───
+  // Training streak: consecutive days with at least one workout
+  const trainingDays = new Set();
+  allWorkouts.forEach(w => {
+    const d = new Date(w.created_at);
+    trainingDays.add(d.toISOString().split('T')[0]);
+  });
+
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const yesterdayStr = (() => {
+    const y = new Date(today);
+    y.setDate(y.getDate() - 1);
+    return y.toISOString().split('T')[0];
+  })();
+
+  let currentTrainingStreak = 0;
+  let cursor = new Date(today);
+  // If trained today, start from today; if not but trained yesterday, start from yesterday
+  if (!trainingDays.has(todayStr) && trainingDays.has(yesterdayStr)) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  while (trainingDays.has(cursor.toISOString().split('T')[0])) {
+    currentTrainingStreak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  // Longest training streak
+  const sortedDays = Array.from(trainingDays).sort();
+  let longestTrainingStreak = 0;
+  let runningStreak = 0;
+  let prevDate = null;
+  for (const dStr of sortedDays) {
+    const d = new Date(dStr + 'T12:00:00');
+    if (prevDate) {
+      const diff = Math.round((d - prevDate) / (1000 * 60 * 60 * 24));
+      if (diff === 1) runningStreak++;
+      else runningStreak = 1;
+    } else {
+      runningStreak = 1;
+    }
+    if (runningStreak > longestTrainingStreak) longestTrainingStreak = runningStreak;
+    prevDate = d;
+  }
+
+  // Plan adherence streak: consecutive days where planned workout was completed
+  const adherenceDays = new Set((completedPlanned || []).map(p => p.scheduled_date));
+  let currentAdherenceStreak = 0;
+  let cursor2 = new Date(today);
+  if (!adherenceDays.has(todayStr) && adherenceDays.has(yesterdayStr)) {
+    cursor2.setDate(cursor2.getDate() - 1);
+  }
+  while (adherenceDays.has(cursor2.toISOString().split('T')[0])) {
+    currentAdherenceStreak++;
+    cursor2.setDate(cursor2.getDate() - 1);
+  }
+
+  // ─── Calculate This Month + This Year totals ───
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const yearStart = new Date(today.getFullYear(), 0, 1);
+
+  const monthWorkouts = allWorkouts.filter(w => new Date(w.created_at) >= monthStart);
+  const yearWorkouts = allWorkouts.filter(w => new Date(w.created_at) >= yearStart);
+
+  const sumDist = arr => arr.reduce((s, w) => s + (parseFloat(w.distance_km) || 0), 0);
+  const sumMin = arr => arr.reduce((s, w) => s + (parseInt(w.duration_minutes) || 0), 0);
+
+  const monthKm = sumDist(monthWorkouts);
+  const monthHours = sumMin(monthWorkouts) / 60;
+  const yearKm = sumDist(yearWorkouts);
+  const yearHours = sumMin(yearWorkouts) / 60;
+
+  // ─── Sport breakdown (this month) ───
+  const monthBySport = { run: 0, bike: 0, swim: 0, other: 0 };
+  monthWorkouts.forEach(w => {
+    const sport = w.sport || 'other';
+    monthBySport[sport] = (monthBySport[sport] || 0) + (parseFloat(w.distance_km) || 0);
+  });
+  const monthTotal = Object.values(monthBySport).reduce((s, v) => s + v, 0) || 1;
+
+  // Get unit preference for display
+  const { data: intake } = await sb.from('athlete_intake').select('unit_preference').eq('user_id', state.user.id).single();
+  const isImperial = intake?.unit_preference === 'imperial';
+  const distLabel = isImperial ? 'mi' : 'km';
+  const convertDist = km => isImperial ? km * 0.621371 : km;
+
+  const monthName = today.toLocaleDateString('en-US', { month: 'long' });
+
+  container.innerHTML = `
+    <div class="panel" style="margin-bottom: 20px;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Streaks & Progress</div>
+          <div class="panel-sub">Your training consistency at a glance</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; position: relative; overflow: hidden;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">🔥 Training Streak</div>
+          <div style="font-size: 32px; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;">${currentTrainingStreak}</div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">days · longest ${longestTrainingStreak}</div>
+        </div>
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">🎯 Plan Adherence</div>
+          <div style="font-size: 32px; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;">${currentAdherenceStreak}</div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">days completed in a row</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">${monthName} totals</div>
+          <div style="font-size: 22px; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;">${convertDist(monthKm).toFixed(1)} <span style="font-size: 13px; color: var(--text-dim); font-weight: 500;">${distLabel}</span></div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">${monthHours.toFixed(1)} hours · ${monthWorkouts.length} workout${monthWorkouts.length === 1 ? '' : 's'}</div>
+        </div>
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">${today.getFullYear()} totals</div>
+          <div style="font-size: 22px; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;">${convertDist(yearKm).toFixed(1)} <span style="font-size: 13px; color: var(--text-dim); font-weight: 500;">${distLabel}</span></div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">${yearHours.toFixed(1)} hours · ${yearWorkouts.length} workout${yearWorkouts.length === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+
+      ${monthWorkouts.length > 0 ? `
+        <div>
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;">${monthName} sport split</div>
+          <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); margin-bottom: 10px;">
+            ${monthBySport.run > 0 ? `<div style="width: ${(monthBySport.run / monthTotal) * 100}%; background: #60a5fa;" title="Run"></div>` : ''}
+            ${monthBySport.bike > 0 ? `<div style="width: ${(monthBySport.bike / monthTotal) * 100}%; background: #fb923c;" title="Bike"></div>` : ''}
+            ${monthBySport.swim > 0 ? `<div style="width: ${(monthBySport.swim / monthTotal) * 100}%; background: #4ade80;" title="Swim"></div>` : ''}
+            ${monthBySport.other > 0 ? `<div style="width: ${(monthBySport.other / monthTotal) * 100}%; background: var(--text-mute);" title="Other"></div>` : ''}
+          </div>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim);">
+            ${monthBySport.run > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; margin-right: 6px;"></span>Run ${convertDist(monthBySport.run).toFixed(1)} ${distLabel}</div>` : ''}
+            ${monthBySport.bike > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #fb923c; margin-right: 6px;"></span>Bike ${convertDist(monthBySport.bike).toFixed(1)} ${distLabel}</div>` : ''}
+            ${monthBySport.swim > 0 ? `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 6px;"></span>Swim ${convertDist(monthBySport.swim).toFixed(1)} ${distLabel}</div>` : ''}
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
