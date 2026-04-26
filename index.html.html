@@ -5326,12 +5326,26 @@ async function completeIntake() {
     const plan = await callCoach('generate_plan', { intake: payload });
     await savePlanToDb(plan, state.user.id);
 
+    // Generate Coach's intro message explaining the plan
+    try {
+      const introMsg = await callCoach('plan_intro_message', { intake: payload });
+      if (introMsg) {
+        await sb.from('coach_messages').insert({
+          user_id: state.user.id,
+          role: 'coach',
+          content: introMsg,
+          context_type: 'plan_intro',
+        });
+      }
+    } catch (introErr) {
+      console.error('Intro message failed (non-blocking):', introErr);
+    }
+
     toast('Plan ready!');
     renderCoach();
   } catch (err) {
     console.error('Plan generation failed:', err);
     toast('Plan generation failed: ' + err.message);
-    // Still show the profile even if plan gen failed
     renderCoach();
   }
 }
@@ -5700,6 +5714,20 @@ async function confirmAction(type) {
     try {
       const plan = await callCoach('generate_plan', { intake });
       await savePlanToDb(plan, state.user.id);
+
+      // Generate Coach's intro message
+      try {
+        const introMsg = await callCoach('plan_intro_message', { intake });
+        if (introMsg) {
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: introMsg,
+            context_type: 'plan_intro',
+          });
+        }
+      } catch (introErr) { console.error('Intro msg failed:', introErr); }
+
       toast('New plan ready!');
       renderCoach();
     } catch (err) {
@@ -6763,7 +6791,7 @@ async function renderPublicShare(token) {
                         <span style="font-weight: 700; font-size: 14px; color: var(--text);">${dayLabel}</span>
                         <span style="font-size: 12px; color: var(--text-mute);">${dateLabel}</span>
                         <span style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding: 2px 8px; background: rgba(0, 255, 163, 0.08); border-radius: 4px;">${w.workout_type || w.sport}</span>
-                        ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${w.duration_minutes || 0}min${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)}km` : ''}</span>` : ''}
+                        ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${w.duration_minutes ? `${w.duration_minutes}min` : '—min'}${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)}km` : (w.sport !== 'strength' && w.sport !== 'rest' ? ' · —km' : '')}</span>` : ''}
                       </div>
                       <div style="font-size: 13.5px; color: var(--text-dim); line-height: 1.55;">${w.description || ''}</div>
                       ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 6px; font-weight: 600;">→ ${w.intensity_target}</div>` : ''}
@@ -7046,18 +7074,14 @@ function openWorkoutPanel(dateStr) {
         ` : ''}
 
         <div class="metrics" style="margin-top: 14px;">
-          ${w.duration_minutes ? `
-            <div class="metric">
-              <div class="metric-label">Duration</div>
-              <div class="metric-value">${w.duration_minutes}<span style="font-size: 13px; color: var(--text-dim);"> min</span></div>
-            </div>
-          ` : ''}
-          ${w.distance_km ? `
-            <div class="metric">
-              <div class="metric-label">Distance</div>
-              <div class="metric-value">${w.distance_km}<span style="font-size: 13px; color: var(--text-dim);"> km</span></div>
-            </div>
-          ` : ''}
+          <div class="metric">
+            <div class="metric-label">Duration ${(!w.duration_minutes || w.duration_minutes === 0) && w.sport !== 'rest' ? '<span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after upload)</span>' : ''}</div>
+            <div class="metric-value">${w.duration_minutes ? `${w.duration_minutes}<span style="font-size: 13px; color: var(--text-dim);"> min</span>` : (w.sport === 'rest' ? '0<span style="font-size: 13px; color: var(--text-dim);"> min</span>' : '<span style="color: var(--text-dim);">—</span>')}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Distance ${(!w.distance_km || w.distance_km === 0) && w.sport !== 'rest' && w.sport !== 'strength' ? '<span style="font-size: 10px; color: var(--text-mute); font-weight: 400; text-transform: none;">(fills in after upload)</span>' : ''}</div>
+            <div class="metric-value">${w.distance_km ? `${parseFloat(w.distance_km).toFixed(1)}<span style="font-size: 13px; color: var(--text-dim);"> km</span>` : ((w.sport === 'rest' || w.sport === 'strength') ? '<span style="color: var(--text-dim);">—</span>' : '<span style="color: var(--text-dim);">—</span>')}</div>
+          </div>
           ${w.intensity_target ? `
             <div class="metric" style="grid-column: 1 / -1;">
               <div class="metric-label">Intensity Target</div>
@@ -7259,6 +7283,36 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- PBs and Goal Time -->
+    <div class="panel">
+      <div class="panel-title" style="margin-bottom: 8px;">Race Benchmarks</div>
+      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 14px; line-height: 1.55;">Add your PBs to unlock accurate pace projections. All optional — leave blank if you don't have one.</p>
+      <div class="field">
+        <label>Goal time (for current race)</label>
+        <input type="text" id="settingsGoalTime" value="${intake?.goal_time || ''}" placeholder="e.g. sub-3:30 marathon, sub-10 Ironman, 19:00 5K" />
+      </div>
+      <div class="field">
+        <label>5K PB</label>
+        <input type="text" id="settingsPb5k" value="${intake?.pb_5k || ''}" placeholder="e.g. 19:30" />
+      </div>
+      <div class="field">
+        <label>10K PB</label>
+        <input type="text" id="settingsPb10k" value="${intake?.pb_10k || ''}" placeholder="e.g. 41:00" />
+      </div>
+      <div class="field">
+        <label>Half Marathon PB</label>
+        <input type="text" id="settingsPbHalf" value="${intake?.pb_half || ''}" placeholder="e.g. 1:30:00" />
+      </div>
+      <div class="field">
+        <label>Marathon PB</label>
+        <input type="text" id="settingsPbMarathon" value="${intake?.pb_marathon || ''}" placeholder="e.g. 3:15:00" />
+      </div>
+      <div class="field">
+        <label>Most recent race</label>
+        <input type="text" id="settingsLastRace" value="${intake?.last_race || ''}" placeholder="e.g. 5K 19:45 in March 2026" />
+      </div>
+    </div>
+
     <!-- Heart Rate Zones -->
     <div class="panel">
       <div class="panel-title" style="margin-bottom: 16px;">Heart Rate Zones</div>
@@ -7388,6 +7442,14 @@ async function saveAllSettings(silent = false) {
   const hours = parseFloat(document.getElementById('settingsHours')?.value) || null;
   const injuries = document.getElementById('settingsInjuries')?.value.trim() || null;
 
+  // PBs and goal time (all optional)
+  const goalTime = document.getElementById('settingsGoalTime')?.value.trim() || null;
+  const pb5k = document.getElementById('settingsPb5k')?.value.trim() || null;
+  const pb10k = document.getElementById('settingsPb10k')?.value.trim() || null;
+  const pbHalf = document.getElementById('settingsPbHalf')?.value.trim() || null;
+  const pbMarathon = document.getElementById('settingsPbMarathon')?.value.trim() || null;
+  const lastRace = document.getElementById('settingsLastRace')?.value.trim() || null;
+
   // Zones
   const runLthr = parseInt(document.getElementById('settingsRunLthr')?.value) || 170;
   const bikeLthr = parseInt(document.getElementById('settingsBikeLthr')?.value) || 165;
@@ -7424,6 +7486,12 @@ async function saveAllSettings(silent = false) {
     experience_level: experience,
     current_weekly_hours: hours,
     injuries: injuries,
+    goal_time: goalTime,
+    pb_5k: pb5k,
+    pb_10k: pb10k,
+    pb_half: pbHalf,
+    pb_marathon: pbMarathon,
+    last_race: lastRace,
     updated_at: new Date().toISOString(),
   }).eq('user_id', state.user.id);
 
