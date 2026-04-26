@@ -1249,19 +1249,34 @@ h1.hero-h .grad {
 
 /* EMPTY */
 .empty {
-  text-align: center; padding: 60px 20px; color: var(--text-dim);
+  text-align: center; padding: 64px 24px; color: var(--text-dim);
 }
 
 .empty-icon {
-  width: 72px; height: 72px; margin: 0 auto 18px;
-  border-radius: 50%; background: var(--bg-3);
-  border: 1px solid var(--border);
+  width: 80px; height: 80px; margin: 0 auto 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0, 255, 163, 0.06), rgba(80, 130, 255, 0.04));
+  border: 1px solid rgba(0, 255, 163, 0.15);
   display: flex; align-items: center; justify-content: center;
-  font-size: 28px; opacity: 0.6;
+  font-size: 32px;
+  box-shadow: 0 4px 30px rgba(0, 255, 163, 0.06);
+  position: relative;
+}
+.empty-icon::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 255, 163, 0.1);
+  animation: emptyPulse 3s ease-in-out infinite;
+}
+@keyframes emptyPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.04); }
 }
 
-.empty-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
-.empty-desc { font-size: 14px; max-width: 320px; margin: 0 auto; line-height: 1.55; }
+.empty-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; letter-spacing: -0.3px; }
+.empty-desc { font-size: 14px; max-width: 340px; margin: 0 auto; line-height: 1.6; color: var(--text-dim); }
 
 /* HELP */
 .help-grid {
@@ -1709,17 +1724,34 @@ h1.hero-h .grad {
 
 /* TOAST */
 .toast {
-  position: fixed; bottom: calc(24px + var(--safe-bottom)); left: 50%;
+  position: fixed; bottom: calc(32px + var(--safe-bottom)); left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: var(--bg-3); border: 1px solid var(--accent-border);
   color: var(--text); padding: 12px 20px;
   border-radius: 12px; font-size: 14px; font-weight: 500;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(0, 255, 163, 0.15);
   z-index: 1000; opacity: 0; pointer-events: none;
-  transition: all 0.25s;
-  max-width: 90vw;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  max-width: calc(100vw - 32px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media (max-width: 720px) {
+  .toast {
+    bottom: calc(24px + var(--safe-bottom));
+    left: 16px;
+    right: 16px;
+    transform: translateY(20px);
+    max-width: none;
+    text-align: center;
+    white-space: normal;
+  }
+  .toast.show { transform: translateY(0); }
+}
 
 /* MOBILE */
 @media (max-width: 720px) {
@@ -3238,16 +3270,7 @@ body.on-auth .container {
     <div id="dashRecent"></div>
   </div>
 
-  <!-- Fitness Trend hidden for now — revisit with a better composite metric (volume + drift + completion + intensity balance) -->
-  <div class="panel" id="fitnessTrend" style="display: none;">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Fitness Trend</div>
-        <div class="panel-sub">Cardiac drift over time — lower is better aerobic fitness</div>
-      </div>
-    </div>
-    <div id="trendChart"></div>
-  </div>
+  <!-- Fitness Trend removed — will be replaced with composite metric later -->
 </div>
 
 <!-- COACH -->
@@ -3680,8 +3703,17 @@ function showApp() {
   const avatarEl = document.getElementById('navAvatar');
   if (avatarEl) {
     if (state.profile?.avatarUrl) {
-      avatarEl.style.backgroundImage = `url('${state.profile.avatarUrl}')`;
-      avatarEl.textContent = '';
+      // Test image load — if it fails, fall back to initial
+      const testImg = new Image();
+      testImg.onload = () => {
+        avatarEl.style.backgroundImage = `url('${state.profile.avatarUrl}')`;
+        avatarEl.textContent = '';
+      };
+      testImg.onerror = () => {
+        avatarEl.style.backgroundImage = '';
+        avatarEl.textContent = initial;
+      };
+      testImg.src = state.profile.avatarUrl;
     } else {
       avatarEl.style.backgroundImage = '';
       avatarEl.textContent = initial;
@@ -4631,47 +4663,16 @@ async function renderDashboard() {
   if (recentList.length === 0) {
     rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts yet</div><div class="empty-desc">Upload your first workout to see analysis here</div></div>`;
     document.getElementById('recentCount').textContent = 'Upload your first workout';
-    document.getElementById('fitnessTrend').style.display = 'none';
   } else {
     rec.innerHTML = recentList.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
     document.getElementById('recentCount').textContent = `Showing last ${recentList.length} of ${state.workouts.length}`;
-    renderFitnessTrend();
-    document.getElementById('fitnessTrend').style.display = 'block';
+    // Fitness trend is hidden until we have a better composite metric
   }
 }
 
 function renderFitnessTrend() {
-  const runs = state.workouts.filter(w => w.sport === 'run' && w.drift !== undefined).slice(-10);
-  if (runs.length < 2) {
-    document.getElementById('fitnessTrend').style.display = 'none';
-    return;
-  }
-  const w = 560; const h = 120; const padding = 20;
-  const maxDrift = Math.max(...runs.map(r => Math.abs(r.drift))) + 2;
-  const pts = runs.map((r, i) => {
-    const x = padding + (i / (runs.length - 1)) * (w - padding * 2);
-    const y = h/2 - (r.drift / maxDrift) * (h/2 - padding);
-    return { x, y };
-  });
-  const path = pts.map((p, i) => `${i===0?'M':'L'}${p.x},${p.y}`).join(' ');
-  const area = `${path} L${pts[pts.length-1].x},${h-padding} L${pts[0].x},${h-padding} Z`;
-
-  document.getElementById('trendChart').innerHTML = `
-    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width: 100%;">
-      <defs>
-        <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <line x1="${padding}" y1="${h/2}" x2="${w-padding}" y2="${h/2}" stroke="var(--border)" stroke-dasharray="2,4"/>
-      <path d="${area}" fill="url(#trendGrad)"/>
-      <path d="${path}" stroke="var(--accent)" stroke-width="2.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
-      ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--accent)"/>`).join('')}
-      <text x="${padding}" y="${h-4}" fill="var(--text-mute)" font-size="10">${runs.length} runs ago</text>
-      <text x="${w-padding}" y="${h-4}" fill="var(--text-mute)" font-size="10" text-anchor="end">latest</text>
-    </svg>
-  `;
+  // Removed — will be replaced with composite fitness metric later
+  return;
 }
 
 function renderHistoryItem(w, idx) {
@@ -4705,10 +4706,38 @@ function renderHistory() {
   list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
 }
 
-function viewHistoryDetail(idx) {
+async function viewHistoryDetail(idx) {
   const w = state.workouts[idx];
   navigate('upload');
-  document.getElementById('analysisOutput').innerHTML = renderAnalysis(w);
+  const output = document.getElementById('analysisOutput');
+  output.innerHTML = renderAnalysis(w);
+
+  // Try to load saved Coach commentary for this workout
+  if (state.user && w._dbId) {
+    try {
+      // Match commentary saved around the same time as the workout was created
+      const workoutDate = new Date(w.date || w.created_at);
+      const windowStart = new Date(workoutDate.getTime() - 60000); // 1 min before
+      const windowEnd = new Date(workoutDate.getTime() + 5 * 60000); // 5 min after
+
+      const { data: messages } = await sb.from('coach_messages')
+        .select('content, created_at')
+        .eq('user_id', state.user.id)
+        .eq('context_type', 'workout_commentary')
+        .gte('created_at', windowStart.toISOString())
+        .lte('created_at', windowEnd.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (messages && messages.length > 0) {
+        const commentaryEl = document.createElement('div');
+        commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text">${formatMarkdown(messages[0].content)}</div></div>`;
+        output.appendChild(commentaryEl);
+      }
+    } catch (err) {
+      console.error('Could not load commentary:', err);
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
