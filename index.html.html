@@ -3146,6 +3146,8 @@ body.on-auth .container {
     <button class="btn" onclick="navigate('upload')">+ Analyze workout</button>
   </div>
 
+  <div id="insightsContainer"></div>
+
   <div class="stat-grid" id="statGrid"></div>
 
   <div class="panel">
@@ -4432,6 +4434,9 @@ async function renderDashboard() {
     }
   }
 
+  // Render any active Coach insights
+  await renderCoachInsights();
+
   const recent = state.workouts.slice(-7);
   const runs = recent.filter(w => w.sport === 'run');
   const bikes = recent.filter(w => w.sport === 'bike');
@@ -5425,6 +5430,235 @@ async function savePlanToDb(plan, userId, startDate = null) {
   }
 }
 
+// ─── Smart Plan Adjustments — Pattern Analysis ───
+async function analyzeTrainingPatterns() {
+  if (!state.user) return;
+
+  try {
+    // Get athlete intake
+    const { data: intake } = await sb.from('athlete_intake')
+      .select('*').eq('user_id', state.user.id).single();
+    if (!intake) return;
+
+    // Pull last 14 days of completed workouts
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const { data: recentRaw } = await sb.from('workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('uploaded_at', fourteenDaysAgo.toISOString())
+      .order('uploaded_at', { ascending: false })
+      .limit(10);
+
+    // Need at least 2 workouts to detect patterns
+    if (!recentRaw || recentRaw.length < 2) return;
+
+    const recentWorkouts = recentRaw.map(w => ({
+      sport: w.sport,
+      type: w.workout_type,
+      distance: w.distance_km,
+      avgHr: w.avg_hr,
+      drift: w.cardiac_drift,
+    }));
+
+    // Pull next 7 days of planned workouts
+    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysOut = new Date();
+    sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+    const { data: planned } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', today)
+      .lte('scheduled_date', sevenDaysOut.toISOString().split('T')[0])
+      .order('scheduled_date', { ascending: true });
+
+    // Call Coach to analyze
+    const insight = await callCoach('analyze_patterns', {
+      intake,
+      recentWorkouts,
+      plannedWorkouts: planned || [],
+    });
+
+    // If no adjustment needed, don't bother saving an insight
+    if (!insight || !insight.needs_adjustment) return;
+
+    // Save insight to database
+    await sb.from('coach_insights').insert({
+      user_id: state.user.id,
+      severity: insight.severity || 'info',
+      title: insight.title || 'Coach insight',
+      summary: insight.summary || '',
+      recommendation: insight.recommendation || '',
+      suggested_action: insight.suggested_action || 'none',
+    });
+
+    // Also save as a chat message so user sees it in Coach chat
+    const chatContent = `**${insight.title}**\n\n${insight.summary}\n\n${insight.recommendation}`;
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id,
+      role: 'coach',
+      content: chatContent,
+      context_type: 'pattern_insight',
+    });
+
+    // If user is currently on dashboard, refresh to show banner
+    const dashboardActive = document.getElementById('page-dashboard')?.classList.contains('active');
+    if (dashboardActive) renderDashboard();
+
+  } catch (err) {
+    console.error('Pattern analysis error:', err);
+  }
+}
+
+// Apply Coach's suggested adjustment to upcoming plan
+async function applyInsight(insightId) {
+  if (!state.user) return;
+  toast('Applying Coach\'s adjustment...');
+
+  try {
+    // Get the insight
+    const { data: insight } = await sb.from('coach_insights')
+      .select('*').eq('id', insightId).single();
+    if (!insight) return;
+
+    const action = insight.suggested_action;
+
+    // Get next 7 days of planned workouts
+    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysOut = new Date();
+    sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+    const { data: planned } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', today)
+      .lte('scheduled_date', sevenDaysOut.toISOString().split('T')[0])
+      .eq('completed', false);
+
+    if (!planned || planned.length === 0) {
+      toast('No upcoming workouts to adjust');
+      return;
+    }
+
+    if (action === 'reduce_volume') {
+      // Reduce duration & distance by 15% across all upcoming workouts
+      for (const p of planned) {
+        if (p.sport === 'rest') continue;
+        await sb.from('planned_workouts').update({
+          duration_minutes: Math.round((p.duration_minutes || 0) * 0.85),
+          distance_km: Math.round((p.distance_km || 0) * 0.85 * 10) / 10,
+        }).eq('id', p.id);
+      }
+    } else if (action === 'add_recovery') {
+      // Convert the next non-rest day into a recovery/easy day
+      const nextHard = planned.find(p =>
+        p.sport !== 'rest' && (p.workout_type === 'tempo' || p.workout_type === 'threshold' || p.workout_type === 'intervals')
+      );
+      if (nextHard) {
+        await sb.from('planned_workouts').update({
+          workout_type: 'recovery',
+          duration_minutes: 30,
+          distance_km: nextHard.sport === 'run' ? 4 : (nextHard.sport === 'bike' ? 15 : 1),
+          description: 'Easy recovery — keep HR in Z1, focus on form and feeling fresh',
+          intensity_target: 'Z1 recovery',
+        }).eq('id', nextHard.id);
+      } else {
+        // Or convert the next workout into a rest day
+        const nextWorkout = planned.find(p => p.sport !== 'rest');
+        if (nextWorkout) {
+          await sb.from('planned_workouts').update({
+            sport: 'rest',
+            workout_type: 'rest',
+            duration_minutes: 0,
+            distance_km: 0,
+            description: 'Rest day added by Coach for recovery',
+            intensity_target: 'Recovery',
+          }).eq('id', nextWorkout.id);
+        }
+      }
+    } else if (action === 'progress') {
+      // Increase volume by 8% across upcoming
+      for (const p of planned) {
+        if (p.sport === 'rest') continue;
+        await sb.from('planned_workouts').update({
+          duration_minutes: Math.round((p.duration_minutes || 0) * 1.08),
+          distance_km: Math.round((p.distance_km || 0) * 1.08 * 10) / 10,
+        }).eq('id', p.id);
+      }
+    }
+
+    // Mark insight as applied
+    await sb.from('coach_insights').update({ applied: true, dismissed: true }).eq('id', insightId);
+
+    toast('Plan adjusted');
+    renderDashboard();
+    if (document.getElementById('page-plan')?.classList.contains('active')) renderPlan();
+  } catch (err) {
+    console.error('Apply insight failed:', err);
+    toast('Adjustment failed: ' + err.message);
+  }
+}
+
+async function dismissInsight(insightId) {
+  if (!state.user) return;
+  await sb.from('coach_insights').update({ dismissed: true }).eq('id', insightId);
+  renderDashboard();
+}
+
+// Render active insight banners on dashboard
+async function renderCoachInsights() {
+  if (!state.user) return;
+  const container = document.getElementById('insightsContainer');
+  if (!container) return;
+
+  // Get most recent active (not dismissed) insight
+  const { data: insights } = await sb.from('coach_insights')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .eq('dismissed', false)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!insights || insights.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const i = insights[0];
+  const sevColors = {
+    info: { bg: 'rgba(0, 255, 163, 0.06)', border: 'rgba(0, 255, 163, 0.2)', accent: 'var(--accent)', icon: '💡' },
+    caution: { bg: 'rgba(255, 209, 102, 0.08)', border: 'rgba(255, 209, 102, 0.25)', accent: '#ffd166', icon: '⚠️' },
+    alert: { bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.3)', accent: '#f87171', icon: '🔔' },
+  };
+  const c = sevColors[i.severity] || sevColors.info;
+
+  const showApply = i.suggested_action && i.suggested_action !== 'none';
+  const actionLabel = {
+    reduce_volume: 'Reduce volume',
+    add_recovery: 'Add recovery day',
+    progress: 'Progress plan',
+  }[i.suggested_action] || 'Apply';
+
+  container.innerHTML = `
+    <div style="background: ${c.bg}; border: 1px solid ${c.border}; border-left: 3px solid ${c.accent}; border-radius: 14px; padding: 18px 20px; margin-bottom: 20px; position: relative;">
+      <button onclick="dismissInsight('${i.id}')" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1;" title="Dismiss">×</button>
+      <div style="display: flex; align-items: flex-start; gap: 14px;">
+        <div style="font-size: 22px; flex-shrink: 0; line-height: 1;">${c.icon}</div>
+        <div style="flex: 1; min-width: 0; padding-right: 24px;">
+          <div style="font-weight: 700; font-size: 15px; color: ${c.accent}; margin-bottom: 6px;">${i.title}</div>
+          <div style="font-size: 14px; color: var(--text); line-height: 1.5; margin-bottom: 6px;">${i.summary}</div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px;"><strong style="color: var(--text);">Coach recommends:</strong> ${i.recommendation}</div>
+          ${showApply ? `
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn" style="padding: 8px 14px; font-size: 13px; background: ${c.accent}; color: var(--bg);" onclick="applyInsight('${i.id}')">${actionLabel} →</button>
+              <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="dismissInsight('${i.id}')">Not now</button>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // ─── Generate Next Week ───
 async function generateNextWeek() {
   if (!state.user) return;
@@ -6273,6 +6507,9 @@ function initUpload() {
             txtEl.innerHTML = `<span style="color: var(--text-dim); font-size: 13px;">Coach is busy right now. Your workout is saved. <a style="color: var(--accent); cursor: pointer;" onclick="navigate('coach')">Ask Coach about it →</a></span>`;
           }
         }
+
+        // Trigger pattern analysis in the background (don't await — let it run)
+        analyzeTrainingPatterns().catch(e => console.error('Pattern analysis failed:', e));
       } catch (cerr) {
         console.error('Commentary setup failed:', cerr);
       }
