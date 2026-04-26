@@ -5269,15 +5269,18 @@ function renderIntakeStep() {
   document.querySelectorAll('.choice-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const val = btn.dataset.value;
-      const numVal = isNaN(parseFloat(val)) ? val : parseFloat(val);
+      // Only convert to number if the ENTIRE string is purely numeric
+      // (preserves values like "5k", "10k", "70_3" as strings)
+      const isPureNumber = /^-?\d+(\.\d+)?$/.test(val);
+      const finalVal = isPureNumber ? parseFloat(val) : val;
       if (q.type === 'multi') {
         let arr = intakeAnswers[q.id] || [];
-        if (arr.includes(numVal)) arr = arr.filter(v => v !== numVal);
-        else arr = [...arr, numVal];
+        if (arr.includes(finalVal)) arr = arr.filter(v => v !== finalVal);
+        else arr = [...arr, finalVal];
         intakeAnswers[q.id] = arr;
         btn.classList.toggle('selected');
       } else {
-        intakeAnswers[q.id] = numVal;
+        intakeAnswers[q.id] = finalVal;
         document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
       }
