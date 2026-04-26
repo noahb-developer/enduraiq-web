@@ -52,9 +52,39 @@ html { scroll-behavior: smooth; }
 /* Loading state - prevents flash of landing page on app load */
 body.app-loading .app, body.app-loading .nav { visibility: hidden; }
 body.share-public .nav, body.share-public .sidebar, body.share-public .topbar, body.share-public .lv2-nav, body.share-public .landing-v2 { display: none !important; }
-body.share-public { background: var(--bg-1); }
-body.share-public .page#page-share { display: block !important; opacity: 1 !important; padding: 0 !important; min-height: 100vh; }
-body.share-public .app { display: block !important; padding: 0 !important; }
+body.share-public {
+  background: #070b14;
+  position: relative;
+  overflow-x: hidden;
+}
+body.share-public::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(0, 255, 163, 0.18), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(80, 130, 255, 0.15), transparent 55%),
+    radial-gradient(circle at 50% 90%, rgba(255, 87, 51, 0.12), transparent 50%);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+body.share-public::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+body.share-public .page#page-share { display: block !important; opacity: 1 !important; padding: 0 !important; min-height: 100vh; position: relative; z-index: 2; }
+body.share-public .app { display: block !important; padding: 0 !important; background: transparent !important; }
 body.app-loading::after {
   content: '';
   position: fixed; inset: 0;
@@ -6284,18 +6314,41 @@ async function renderPublicShare(token) {
     if (showProfile && profile) {
       const name = profile.display_name || profile.name || 'Athlete';
       headerHTML = `
-        <div style="text-align: center; margin-bottom: 32px;">
-          ${profile.avatar_url ? `<img src="${profile.avatar_url}" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; margin: 0 auto 14px; border: 2px solid var(--border);">` : ''}
-          <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 6px; font-family: 'Instrument Serif', serif;">${name}'s Training Plan</h1>
-          ${goalText ? `<div style="color: var(--text-dim); font-size: 15px;">Training for <strong style="color: var(--accent);">${goalText}</strong>${raceDate ? ` · ${raceDate}` : ''}</div>` : ''}
-          ${intake?.experience_level ? `<div style="color: var(--text-dim); font-size: 13px; margin-top: 6px;">${intake.experience_level} athlete${profile.run_lthr ? ` · Run LTHR ${profile.run_lthr}` : ''}${profile.bike_lthr ? ` · Bike LTHR ${profile.bike_lthr}` : ''}</div>` : ''}
+        <div style="text-align: center; margin-bottom: 40px; padding: 36px 24px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; backdrop-filter: blur(8px);">
+          ${profile.avatar_url ? `<img src="${profile.avatar_url}" style="width: 84px; height: 84px; border-radius: 50%; object-fit: cover; margin: 0 auto 18px; border: 2px solid rgba(0, 255, 163, 0.3); box-shadow: 0 0 30px rgba(0, 255, 163, 0.15);">` : ''}
+          <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 10px;">Training Plan</div>
+          <h1 style="font-size: 36px; font-weight: 400; margin-bottom: 10px; font-family: 'Instrument Serif', serif; line-height: 1.1; letter-spacing: -0.5px;">${name}'s <em style="color: var(--accent); font-style: italic;">journey</em></h1>
+          ${goalText ? `<div style="color: var(--text-dim); font-size: 16px; margin-top: 14px;">Building toward <strong style="color: var(--text); font-weight: 600;">${goalText}</strong>${raceDate ? `<br><span style="font-size: 13px; color: var(--text-mute);">${raceDate}</span>` : ''}</div>` : ''}
+          ${intake?.experience_level || profile.run_lthr || profile.bike_lthr ? `
+            <div style="display: flex; gap: 24px; justify-content: center; margin-top: 22px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.06);">
+              ${intake?.experience_level ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Level</div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text); text-transform: capitalize;">${intake.experience_level}</div>
+                </div>
+              ` : ''}
+              ${profile.run_lthr ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Run LTHR</div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace;">${profile.run_lthr} <span style="font-size: 11px; color: var(--text-dim); font-weight: 400;">bpm</span></div>
+                </div>
+              ` : ''}
+              ${profile.bike_lthr ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Bike LTHR</div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace;">${profile.bike_lthr} <span style="font-size: 11px; color: var(--text-dim); font-weight: 400;">bpm</span></div>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
       `;
     } else {
       headerHTML = `
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 6px; font-family: 'Instrument Serif', serif;">Training Plan</h1>
-          <div style="color: var(--text-dim); font-size: 14px;">A coaching plan built with Stryxs AI</div>
+        <div style="text-align: center; margin-bottom: 40px; padding: 36px 24px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; backdrop-filter: blur(8px);">
+          <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 10px;">Training Plan</div>
+          <h1 style="font-size: 36px; font-weight: 400; margin-bottom: 10px; font-family: 'Instrument Serif', serif; line-height: 1.1; letter-spacing: -0.5px;">A coaching <em style="color: var(--accent); font-style: italic;">plan</em></h1>
+          <div style="color: var(--text-dim); font-size: 15px; margin-top: 8px;">Built with Stryxs AI</div>
         </div>
       `;
     }
@@ -6317,27 +6370,42 @@ async function renderPublicShare(token) {
         const totalKm = weekWorkouts.reduce((s, w) => s + (parseFloat(w.distance_km) || 0), 0);
 
         weeksHTML += `
-          <div style="margin-bottom: 28px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;">
-            <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-3);">
-              <div style="font-weight: 700; font-size: 15px;">Week of ${weekLabel}</div>
-              <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">${weekWorkouts.length} sessions · ${(totalMin / 60).toFixed(1)}h · ${totalKm.toFixed(1)} km</div>
+          <div style="margin-bottom: 24px; background: rgba(20, 26, 38, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; overflow: hidden; backdrop-filter: blur(8px);">
+            <div style="padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div style="font-weight: 700; font-size: 16px; color: var(--text);">Week of ${weekLabel}</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">${weekWorkouts.length} sessions</div>
+              </div>
+              <div style="display: flex; gap: 16px;">
+                <div style="text-align: right;">
+                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Time</div>
+                  <div style="font-size: 14px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace;">${(totalMin / 60).toFixed(1)}h</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Distance</div>
+                  <div style="font-size: 14px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace;">${totalKm.toFixed(1)} <span style="font-size: 11px; color: var(--text-dim);">km</span></div>
+                </div>
+              </div>
             </div>
-            <div style="padding: 8px 0;">
-              ${weekWorkouts.map(w => {
+            <div>
+              ${weekWorkouts.map((w, i) => {
                 const d = new Date(w.scheduled_date + 'T12:00:00');
-                const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const dayLabel = d.toLocaleDateString('en-US', { weekday: 'long' });
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 const isRest = w.sport === 'rest' || (w.duration_minutes === 0 && (!w.distance_km || w.distance_km === 0));
+                const isLast = i === weekWorkouts.length - 1;
                 return `
-                  <div style="padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 14px; align-items: flex-start;">
-                    <div style="font-size: 22px; flex-shrink: 0; width: 32px; text-align: center;">${sportEmoji[w.sport] || '🏃'}</div>
+                  <div style="padding: 16px 22px; ${!isLast ? 'border-bottom: 1px solid rgba(255,255,255,0.04);' : ''} display: flex; gap: 16px; align-items: flex-start; ${isRest ? 'opacity: 0.55;' : ''}">
+                    <div style="font-size: 26px; flex-shrink: 0; width: 40px; text-align: center; line-height: 1.2;">${sportEmoji[w.sport] || '🏃'}</div>
                     <div style="flex: 1; min-width: 0;">
-                      <div style="display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px;">
-                        <span style="font-weight: 600; font-size: 14px;">${dayLabel}</span>
-                        <span style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">${w.workout_type || w.sport}</span>
-                        ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim);">· ${w.duration_minutes || 0} min${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)} km` : ''}</span>` : ''}
+                      <div style="display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px;">
+                        <span style="font-weight: 700; font-size: 14px; color: var(--text);">${dayLabel}</span>
+                        <span style="font-size: 12px; color: var(--text-mute);">${dateLabel}</span>
+                        <span style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding: 2px 8px; background: rgba(0, 255, 163, 0.08); border-radius: 4px;">${w.workout_type || w.sport}</span>
+                        ${!isRest ? `<span style="font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${w.duration_minutes || 0}min${w.distance_km ? ` · ${parseFloat(w.distance_km).toFixed(1)}km` : ''}</span>` : ''}
                       </div>
-                      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">${w.description || ''}</div>
-                      ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${w.intensity_target}</div>` : ''}
+                      <div style="font-size: 13.5px; color: var(--text-dim); line-height: 1.55;">${w.description || ''}</div>
+                      ${w.intensity_target ? `<div style="font-size: 11px; color: var(--accent); margin-top: 6px; font-weight: 600;">→ ${w.intensity_target}</div>` : ''}
                     </div>
                   </div>
                 `;
@@ -6349,19 +6417,28 @@ async function renderPublicShare(token) {
     }
 
     container.innerHTML = `
-      <div style="max-width: 720px; margin: 0 auto; padding: 32px 20px 60px;">
-        <div style="display: flex; justify-content: center; margin-bottom: 28px;">
-          <a href="/" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-weight: 700; font-family: 'Instrument Serif', serif; font-size: 22px;">
+      <div style="max-width: 760px; margin: 0 auto; padding: 36px 20px 64px; position: relative;">
+        <div style="display: flex; justify-content: center; margin-bottom: 36px;">
+          <a href="/" style="display: flex; align-items: center; gap: 4px; text-decoration: none; color: var(--text); font-weight: 700; font-family: 'Instrument Serif', serif; font-size: 26px; letter-spacing: -0.5px;">
             Stryx<em style="color: var(--accent); font-style: italic;">s</em>
           </a>
         </div>
         ${headerHTML}
         ${weeksHTML}
-        <div style="text-align: center; margin-top: 40px; padding: 24px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
-          <div style="font-size: 14px; color: var(--text); margin-bottom: 14px;">Want your own AI training plan?</div>
-          <a href="/" class="btn" style="display: inline-block; text-decoration: none;">Get started with Stryxs →</a>
+
+        <div style="margin-top: 48px; padding: 32px 28px; background: linear-gradient(135deg, rgba(0, 255, 163, 0.08), rgba(80, 130, 255, 0.05)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 20px; text-align: center; position: relative; overflow: hidden;">
+          <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 12px;">For athletes</div>
+          <h3 style="font-size: 26px; font-weight: 400; margin-bottom: 10px; font-family: 'Instrument Serif', serif; letter-spacing: -0.3px;">Want your <em style="color: var(--accent); font-style: italic;">own</em> AI plan?</h3>
+          <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 22px; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.6;">Stryxs builds personalized training plans that adapt to your data. Upload workouts, get coaching, hit your goals.</p>
+          <a href="/" class="btn" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 14px 26px; font-size: 14px; font-weight: 600;">
+            Get started — free
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
         </div>
-        <div style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--text-dim);">Built with Stryxs · stryxs.com</div>
+
+        <div style="text-align: center; margin-top: 32px; font-size: 12px; color: var(--text-mute);">
+          Built with <a href="/" style="color: var(--accent); text-decoration: none; font-weight: 600;">Stryxs</a> · stryxs.com
+        </div>
       </div>
     `;
   } catch (err) {
