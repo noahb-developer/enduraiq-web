@@ -6100,7 +6100,7 @@ async function openShareModal() {
         <div id="shareLinkBox" style="margin-bottom: 16px; padding: 14px; background: rgba(0, 255, 163, 0.06); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 10px;">
           <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px;">Your share link</div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <input id="shareLinkInput" readonly value="${window.location.origin}/share/${existingShare.share_token}" style="flex: 1; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: 'JetBrains Mono', monospace; outline: none;">
+            <input id="shareLinkInput" readonly value="${window.location.origin}/?share=${existingShare.share_token}" style="flex: 1; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: 'JetBrains Mono', monospace; outline: none;">
             <button class="btn" style="padding: 10px 14px; font-size: 13px;" onclick="copyShareLink()">Copy</button>
           </div>
         </div>
@@ -7272,16 +7272,17 @@ function animateShowcase() {
   initUpload();
   initReveals();
 
-  // Check if this is a public share URL — /share/{token}
+  // Check if this is a public share URL — supports both /share/{token} and ?share={token}
   const path = window.location.pathname;
-  const shareMatch = path.match(/^\/share\/([a-zA-Z0-9]+)/);
-  if (shareMatch) {
-    const token = shareMatch[1];
-    // Show only the share page, no login required
+  const queryParams = new URLSearchParams(window.location.search);
+  const pathMatch = path.match(/^\/share\/([a-zA-Z0-9]+)/);
+  const queryToken = queryParams.get('share');
+  const token = pathMatch ? pathMatch[1] : queryToken;
+
+  if (token) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const sharePage = document.getElementById('page-share');
     if (sharePage) sharePage.classList.add('active');
-    // Hide nav, show clean public layout
     document.body.classList.add('share-public');
     await renderPublicShare(token);
     document.body.classList.remove('app-loading');
