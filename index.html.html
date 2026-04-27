@@ -4438,11 +4438,13 @@ function parseSwimCSV(text) {
   const strokeIdx = findCol(h, ['swim stroke']);
   const distIdx = findCol(h, ['distance']);
   const timeIdx = findCol(h, ['cumulative time', 'duration', 'total time', 'time']);
+  const movingIdx = findCol(h, ['moving time', 'elapsed time']);
   if (hrIdx === -1) return null;
 
   const sets = [];
   let summary = null;
   let totalMeters = 0;
+  let totalSetSeconds = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]; const label = r[1] || '';
@@ -4450,7 +4452,9 @@ function parseSwimCSV(text) {
     // Summary row: pull total distance + avgHr + time
     if (label.toLowerCase() === 'summary') {
       summary = { avgHr: parseInt(r[hrIdx]) || 0 };
-      if (timeIdx >= 0 && r[timeIdx]) summary.time = r[timeIdx];
+      // Try the cumulative time column FIRST, then moving time
+      if (timeIdx >= 0 && r[timeIdx] && r[timeIdx] !== '--') summary.time = r[timeIdx];
+      else if (movingIdx >= 0 && r[movingIdx] && r[movingIdx] !== '--') summary.time = r[movingIdx];
       // Parse summary distance — format like "1,775" or "1775"
       if (distIdx >= 0) {
         const distStr = (r[distIdx] || '').toString().replace(/,/g, '').trim();
@@ -4462,7 +4466,14 @@ function parseSwimCSV(text) {
 
     if (strokeIdx >= 0) {
       const stk = (r[strokeIdx] || '').toLowerCase();
-      if (stk === 'rest' || stk === '--') continue;
+      if (stk === 'rest' || stk === '--') {
+        // Still accumulate rest time for total session duration
+        if (timeIdx >= 0 && r[timeIdx]) {
+          const restSecs = parseTimeToSeconds(r[timeIdx]);
+          if (restSecs > 0) totalSetSeconds += restSecs;
+        }
+        continue;
+      }
     }
 
     // Sum up parent intervals (label like "1", "2") not sub-intervals ("1.1", "1.2")
@@ -4470,6 +4481,11 @@ function parseSwimCSV(text) {
       if (distIdx >= 0) {
         const intervalDist = parseFloat((r[distIdx] || '').toString().replace(/,/g, '')) || 0;
         if (intervalDist > 0) totalMeters += intervalDist;
+      }
+      // Sum interval times
+      if (timeIdx >= 0 && r[timeIdx]) {
+        const intervalSecs = parseTimeToSeconds(r[timeIdx]);
+        if (intervalSecs > 0) totalSetSeconds += intervalSecs;
       }
     }
 
@@ -4484,6 +4500,11 @@ function parseSwimCSV(text) {
         const setDist = parseFloat((r[distIdx] || '').toString().replace(/,/g, '')) || 0;
         if (setDist > 0) s.distance = setDist;
       }
+      // Pull time for this set
+      if (timeIdx >= 0 && r[timeIdx]) {
+        s.time = r[timeIdx];
+        s.timeSecs = parseTimeToSeconds(r[timeIdx]);
+      }
       sets.push(s);
     }
   }
@@ -4492,7 +4513,18 @@ function parseSwimCSV(text) {
   const finalMeters = summary?.totalMeters || totalMeters;
   if (summary && finalMeters) summary.totalMeters = finalMeters;
 
-  return { sets, summary, totalMeters: finalMeters };
+  // Fallback for time: if summary.time is missing but we summed set durations, use that
+  if (summary && (!summary.time || summary.time === '--' || summary.time === 'N/A') && totalSetSeconds > 0) {
+    const h = Math.floor(totalSetSeconds / 3600);
+    const m = Math.floor((totalSetSeconds % 3600) / 60);
+    const s = Math.floor(totalSetSeconds % 60);
+    summary.time = h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+      : `${m}:${String(s).padStart(2,'0')}`;
+    summary.timeSource = 'estimated_from_sets';
+  }
+
+  return { sets, summary, totalMeters: finalMeters, totalSetSeconds };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4673,6 +4705,7 @@ function analyzeSwim(data) {
     distance: data.totalMeters ? data.totalMeters / 1000 : 0,
     time: data.summary?.time || 'N/A',
     duration: parseTimeToSeconds(data.summary?.time || ''),
+    timeSource: data.summary?.timeSource || null,
     date: new Date().toISOString(),
   };
 }
