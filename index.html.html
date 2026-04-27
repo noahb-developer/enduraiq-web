@@ -957,25 +957,91 @@ select option {
 }
 .stat-label-row .stat-label { margin-bottom: 0; flex: 1; min-width: 0; }
 .stat-mini-picker {
+  display: none; /* Old select-based picker hidden — replaced with new dropdown */
+}
+
+/* New stat card mini-dropdown (icon button → dropdown menu) */
+.stat-picker-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.stat-picker-btn {
   background: var(--bg-3);
   border: 1px solid var(--border);
   color: var(--text-dim);
+  border-radius: 6px;
+  padding: 4px 8px 4px 8px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 4px 22px 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.stat-picker-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.stat-picker-btn.open {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.stat-picker-btn-arrow {
+  font-size: 8px;
+  opacity: 0.7;
+}
+.stat-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 130px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 50;
+  display: none;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 255, 163, 0.08);
+  backdrop-filter: blur(12px);
+}
+.stat-picker-menu.open { display: block; }
+.stat-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2378819b' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 6px center;
-  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text);
+  transition: background 0.12s;
+  user-select: none;
+  white-space: nowrap;
 }
-.stat-mini-picker:hover { border-color: var(--accent); color: var(--accent); }
+.stat-picker-option:hover { background: rgba(255,255,255,0.05); }
+.stat-picker-option.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.stat-picker-option.selected::after {
+  content: '✓';
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* Trends side-by-side panels on desktop, stack on mobile */
+@media (max-width: 720px) {
+  .trends-row {
+    grid-template-columns: 1fr !important;
+  }
+}
 
 .stat-value {
   font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
@@ -1188,7 +1254,7 @@ select option {
 }
 
 .donut {
-  width: 170px; height: 170px; flex-shrink: 0; position: relative;
+  width: 150px; height: 150px; flex-shrink: 0; position: relative;
 }
 
 .donut-center {
@@ -1196,12 +1262,13 @@ select option {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   text-align: center;
+  pointer-events: none;
 }
 
-.donut-value { font-size: 30px; font-weight: 800; letter-spacing: -0.8px; font-family: 'JetBrains Mono', monospace; line-height: 1; }
-.donut-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.donut-value { font-size: 26px; font-weight: 800; letter-spacing: -0.8px; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+.donut-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
 
-.donut-legend { flex: 1; min-width: 200px; }
+.donut-legend { flex: 1; min-width: 0; }
 
 .legend-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -4880,12 +4947,7 @@ async function renderDashboard() {
     <div class="stat-card">
       <div class="stat-label-row">
         <div class="stat-label">Avg Cardiac Drift</div>
-        <select class="stat-mini-picker" onchange="setDashDriftSport(this.value)">
-          <option value="overall" ${state.dashDriftSport === 'overall' ? 'selected' : ''}>Overall</option>
-          <option value="run" ${state.dashDriftSport === 'run' ? 'selected' : ''}>Run</option>
-          <option value="bike" ${state.dashDriftSport === 'bike' ? 'selected' : ''}>Bike</option>
-          <option value="swim" ${state.dashDriftSport === 'swim' ? 'selected' : ''}>Swim</option>
-        </select>
+        ${renderStatPicker('dashDrift', state.dashDriftSport, ['overall', 'run', 'bike', 'swim'], 'setDashDriftSport')}
       </div>
       <div class="stat-value">${currentDrift !== null ? currentDrift.toFixed(1) + '%' : '—'}</div>
       <div class="stat-meta ${currentDrift!==null && currentDrift < 5 ? 'good' : currentDrift !== null && currentDrift > 8 ? 'bad' : ''}">${currentDrift === null ? (driftCount === 0 ? 'no data yet' : 'no drift data') : currentDrift < 5 ? '✓ strong aerobic' : currentDrift < 8 ? 'building' : 'needs work'}</div>
@@ -4893,10 +4955,7 @@ async function renderDashboard() {
     <div class="stat-card">
       <div class="stat-label-row">
         <div class="stat-label">${lthrLabel}</div>
-        <select class="stat-mini-picker" onchange="setDashLthrSport(this.value)">
-          <option value="run" ${state.dashLthrSport === 'run' ? 'selected' : ''}>Run</option>
-          <option value="bike" ${state.dashLthrSport === 'bike' ? 'selected' : ''}>Bike</option>
-        </select>
+        ${renderStatPicker('dashLthr', state.dashLthrSport, ['run', 'bike'], 'setDashLthrSport')}
       </div>
       <div class="stat-value">${currentLthr || '—'}</div>
       <div class="stat-meta">${currentLthr ? `Z2: ${Math.floor(currentLthr*0.81)}-${Math.floor(currentLthr*0.9)} bpm` : 'set in settings'}</div>
@@ -4944,13 +5003,71 @@ async function renderDashboard() {
           `;
         }).join('')}
       </div>
-      <div style="margin-top: 14px; text-align: center;">
-        <button class="btn ghost" onclick="navigate('history')" style="padding: 10px 20px;">View all workouts →</button>
-      </div>
     `;
     document.getElementById('recentCount').textContent = `${state.workouts.length} total`;
   }
 }
+
+// Reusable mini-dropdown picker for stat cards
+// Usage: renderStatPicker('uniqueId', currentValue, options, onChangeFnName)
+function renderStatPicker(id, current, options, changeFn) {
+  const labels = {
+    overall: 'All sports',
+    run: 'Run',
+    bike: 'Bike',
+    swim: 'Swim',
+    hours: 'By hours',
+    distance: 'By distance',
+  };
+  const emojis = {
+    overall: '🌐',
+    run: '🏃',
+    bike: '🚴',
+    swim: '🏊',
+    hours: '⏱',
+    distance: '📏',
+  };
+  const currentLabel = labels[current] || current;
+  const currentEmoji = emojis[current] || '';
+  return `
+    <div class="stat-picker-wrap">
+      <button class="stat-picker-btn" onclick="toggleStatPicker(event, '${id}')">
+        ${currentEmoji} ${currentLabel}
+        <span class="stat-picker-btn-arrow">▾</span>
+      </button>
+      <div class="stat-picker-menu" id="picker-menu-${id}">
+        ${options.map(opt => `
+          <div class="stat-picker-option ${opt === current ? 'selected' : ''}" onclick="${changeFn}('${opt}'); closeStatPickers();">
+            ${emojis[opt] || ''} ${labels[opt] || opt}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function toggleStatPicker(event, id) {
+  event.stopPropagation();
+  const menu = document.getElementById('picker-menu-' + id);
+  const btn = event.currentTarget;
+  if (!menu) return;
+  const wasOpen = menu.classList.contains('open');
+  closeStatPickers();
+  if (!wasOpen) {
+    menu.classList.add('open');
+    btn.classList.add('open');
+  }
+}
+
+function closeStatPickers() {
+  document.querySelectorAll('.stat-picker-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.stat-picker-btn.open').forEach(b => b.classList.remove('open'));
+}
+
+// Close pickers when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.stat-picker-wrap')) closeStatPickers();
+});
 
 function setDashDriftSport(sport) {
   state.dashDriftSport = sport;
@@ -5108,56 +5225,56 @@ function renderTrends() {
   `;
 
   el.innerHTML = `
-    <div class="panel" style="padding: 18px;">
-      <div class="panel-header" style="margin-bottom: 14px;">
-        <div>
-          <div class="panel-title" style="font-size: 15px;">Training Mix</div>
-          <div class="panel-sub">Last ${recent.length} workouts</div>
-        </div>
-      </div>
-      <div class="donut-wrap">
-        ${renderSportDonut(sportCounts, totalS)}
-        <div class="donut-legend">
-          ${sportCounts.run > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#3b82f6;"></div>🏃 Run</div><div class="legend-value">${sportCounts.run}</div></div>` : ''}
-          ${sportCounts.bike > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#f97316;"></div>🚴 Bike</div><div class="legend-value">${sportCounts.bike}</div></div>` : ''}
-          ${sportCounts.swim > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#22c55e;"></div>🏊 Swim</div><div class="legend-value">${sportCounts.swim}</div></div>` : ''}
-          ${sportCounts.strength > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#a78bfa;"></div>💪 Gym</div><div class="legend-value">${sportCounts.strength}</div></div>` : ''}
-          ${sportCounts.other > 0 ? `<div class="legend-row"><div class="legend-label"><div class="legend-dot" style="background:#94a3b8;"></div>⚡ Other</div><div class="legend-value">${sportCounts.other}</div></div>` : ''}
-        </div>
-      </div>
-    </div>
-
-    <div class="panel" style="padding: 18px;">
-      <div class="panel-header" style="margin-bottom: 14px;">
-        <div style="flex: 1; min-width: 0;">
-          <div class="panel-title" style="font-size: 15px;">Average Cardiac Drift</div>
-          <div class="panel-sub">Best indicator of aerobic fitness</div>
-        </div>
-        ${sportPicker('trendsDrift', state.trendsDriftSport, 'setTrendsDriftSport', ['overall', 'run', 'bike', 'swim'])}
-      </div>
-      ${avgDrift !== null ? `
-        <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
-          <div>
-            <div style="font-size: 40px; font-weight: 800; letter-spacing: -1.5px; font-family: 'JetBrains Mono', monospace; line-height: 1;">${avgDrift.toFixed(1)}%</div>
-            <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 10px;">
-              <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
-              ${avgDrift < 5 ? 'Excellent aerobic base' : avgDrift < 8 ? 'Building aerobic fitness' : 'Aerobic engine needs work'}
-            </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;" class="trends-row">
+      <div class="panel" style="padding: 16px;">
+        <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+          <div style="flex: 1; min-width: 0;">
+            <div class="panel-title" style="font-size: 14px;">Training Mix</div>
+            <div class="panel-sub" style="font-size: 11px;">Last ${recent.length} workouts</div>
           </div>
-          <div style="font-size: 12px; color: var(--text-mute); flex: 1; min-width: 140px;">Based on ${driftSet.length} ${state.trendsDriftSport === 'overall' ? '' : state.trendsDriftSport + ' '}workout${driftSet.length === 1 ? '' : 's'}</div>
         </div>
-      ` : `
-        <div style="font-size: 13px; color: var(--text-dim); padding: 8px 0;">No drift data for ${state.trendsDriftSport === 'overall' ? 'any sport yet' : state.trendsDriftSport}. Try uploading more workouts.</div>
-      `}
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+          ${renderSportDonut(sportCounts, totalS)}
+          <div class="donut-legend" style="width: 100%;">
+            ${sportCounts.run > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#3b82f6;"></div>Run</div><div class="legend-value" style="font-size: 13px;">${sportCounts.run}</div></div>` : ''}
+            ${sportCounts.bike > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#f97316;"></div>Bike</div><div class="legend-value" style="font-size: 13px;">${sportCounts.bike}</div></div>` : ''}
+            ${sportCounts.swim > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#22c55e;"></div>Swim</div><div class="legend-value" style="font-size: 13px;">${sportCounts.swim}</div></div>` : ''}
+            ${sportCounts.strength > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#a78bfa;"></div>Gym</div><div class="legend-value" style="font-size: 13px;">${sportCounts.strength}</div></div>` : ''}
+            ${sportCounts.other > 0 ? `<div class="legend-row" style="padding: 4px 0;"><div class="legend-label" style="font-size: 12px;"><div class="legend-dot" style="background:#94a3b8;"></div>Other</div><div class="legend-value" style="font-size: 13px;">${sportCounts.other}</div></div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="padding: 16px;">
+        <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+          <div style="flex: 1; min-width: 0;">
+            <div class="panel-title" style="font-size: 14px;">Cardiac Drift</div>
+            <div class="panel-sub" style="font-size: 11px;">Aerobic fitness</div>
+          </div>
+          ${renderStatPicker('trendsDrift', state.trendsDriftSport, ['overall', 'run', 'bike', 'swim'], 'setTrendsDriftSport')}
+        </div>
+        ${avgDrift !== null ? `
+          <div style="display: flex; flex-direction: column; align-items: flex-start; padding-top: 14px;">
+            <div style="font-size: 36px; font-weight: 800; letter-spacing: -1.2px; font-family: 'JetBrains Mono', monospace; line-height: 1;">${avgDrift.toFixed(1)}%</div>
+            <div class="verdict ${avgDrift < 5 ? 'good' : avgDrift < 8 ? 'ok' : 'bad'}" style="display: inline-flex; margin-top: 12px; font-size: 11px;">
+              <span class="verdict-icon">${avgDrift < 5 ? '✓' : avgDrift < 8 ? '!' : '✕'}</span>
+              ${avgDrift < 5 ? 'Strong aerobic' : avgDrift < 8 ? 'Building' : 'Needs work'}
+            </div>
+            <div style="font-size: 11px; color: var(--text-mute); margin-top: 10px;">${driftSet.length} workout${driftSet.length === 1 ? '' : 's'}</div>
+          </div>
+        ` : `
+          <div style="font-size: 12px; color: var(--text-dim); padding: 14px 0;">No drift data yet.</div>
+        `}
+      </div>
     </div>
 
-    <div class="panel" style="padding: 18px;">
-      <div class="panel-header" style="margin-bottom: 14px;">
+    <div class="panel" style="padding: 16px;">
+      <div class="panel-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
         <div style="flex: 1; min-width: 0;">
-          <div class="panel-title" style="font-size: 15px;">Intensity Distribution</div>
-          <div class="panel-sub">Elite athletes train ~80% easy</div>
+          <div class="panel-title" style="font-size: 14px;">Intensity Distribution</div>
+          <div class="panel-sub" style="font-size: 11px;">Elite athletes train ~80% easy</div>
         </div>
-        ${sportPicker('trendsIntensity', state.trendsIntensitySport, 'setTrendsIntensitySport', ['overall', 'run', 'bike'])}
+        ${renderStatPicker('trendsIntensity', state.trendsIntensitySport, ['overall', 'run', 'bike'], 'setTrendsIntensitySport')}
       </div>
       ${landW.length > 0 ? `
         <div class="zone-bars">
@@ -5165,9 +5282,9 @@ function renderTrends() {
           <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z3);">Mo</div><span class="zone-name">Moderate</span></div><div class="zone-track"><div class="zone-fill" style="width: ${medPct}%; background: var(--z3);"></div></div><div class="zone-pct">${medPct}%</div></div>
           <div class="zone-row"><div class="zone-info"><div class="zone-chip" style="background: var(--z5);">Hd</div><span class="zone-name">Hard / Thresh+</span></div><div class="zone-track"><div class="zone-fill" style="width: ${hardPct}%; background: var(--z5);"></div></div><div class="zone-pct">${hardPct}%</div></div>
         </div>
-        <div class="verdict ${rc}" style="margin-top: 14px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
+        <div class="verdict ${rc}" style="margin-top: 12px;"><span class="verdict-icon">${rc==='good'?'✓':rc==='ok'?'!':'✕'}</span> ${rv}</div>
       ` : `
-        <div style="font-size: 13px; color: var(--text-dim); padding: 8px 0;">No intensity data for ${state.trendsIntensitySport === 'overall' ? 'cardio sports' : state.trendsIntensitySport} yet.</div>
+        <div style="font-size: 12px; color: var(--text-dim); padding: 8px 0;">No intensity data for ${state.trendsIntensitySport === 'overall' ? 'cardio sports' : state.trendsIntensitySport} yet.</div>
       `}
     </div>
   `;
@@ -6012,11 +6129,28 @@ async function regeneratePlanFromReactive(btn) {
     // Get current intake
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
-    // Delete upcoming planned workouts (today and forward)
-    const today = new Date().toISOString().split('T')[0];
-    await sb.from('planned_workouts').delete().eq('user_id', state.user.id).gte('scheduled_date', today);
+    // CRITICAL: Delete from THIS WEEK'S MONDAY forward — savePlanToDb anchors plans to Monday,
+    // so anything from Monday on must be cleared to prevent duplicates.
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    const dow = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const daysToMonday = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(now);
+    monday.setDate(monday.getDate() + daysToMonday);
+    const mondayStr = monday.toISOString().split('T')[0];
 
-    // Generate new plan
+    console.log('[Stryxs] Regenerate — deleting workouts from', mondayStr, 'forward');
+
+    const { error: delErr } = await sb.from('planned_workouts')
+      .delete()
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', mondayStr);
+    if (delErr) {
+      console.error('[Stryxs] Delete failed:', delErr);
+      throw new Error('Failed to clear old workouts: ' + delErr.message);
+    }
+
+    // Generate new plan (will save anchored to this week's Monday — matches the deletion above)
     const plan = await callCoach('generate_plan', { intake });
     await savePlanToDb(plan, state.user.id);
 
@@ -6983,27 +7117,50 @@ async function renderProgress() {
 
       ${monthWorkouts.length > 0 ? `
         <div>
-          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;">${monthName} sport split (by hours)</div>
-          <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); margin-bottom: 10px;">
-            ${['run', 'bike', 'swim', 'strength', 'other'].map(s => {
-              const v = monthBySportHours[s];
-              return v > 0 ? `<div style="width: ${(v / monthHoursTotal) * 100}%; background: ${sportColor[s]};" title="${sportLabel[s]}"></div>` : '';
-            }).join('')}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
+            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">${monthName} sport split</div>
+            ${renderStatPicker('progressSplit', state.progressSplitMetric || 'hours', ['hours', 'distance'], 'setProgressSplitMetric')}
           </div>
-          <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim);">
-            ${['run', 'bike', 'swim', 'strength', 'other'].map(s => {
-              const hrs = monthBySportHours[s];
-              const dist = monthBySportDist[s];
-              const cnt = monthBySportCount[s];
-              if (cnt === 0) return '';
-              const distText = (s !== 'strength' && s !== 'other' && dist > 0) ? ` · ${convertDist(dist).toFixed(1)} ${distLabel}` : '';
-              return `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${sportColor[s]}; margin-right: 6px;"></span>${sportLabel[s]} ${hrs.toFixed(1)}h${distText}</div>`;
-            }).filter(Boolean).join('')}
-          </div>
+          ${(() => {
+            const useHours = (state.progressSplitMetric || 'hours') === 'hours';
+            const sourceMap = useHours ? monthBySportHours : monthBySportDist;
+            const total = Object.values(sourceMap).reduce((s, v) => s + v, 0) || 1;
+            const sportsWithData = ['run', 'bike', 'swim', 'strength', 'other'].filter(s => sourceMap[s] > 0);
+
+            if (sportsWithData.length === 0) {
+              return `<div style="font-size: 12px; color: var(--text-dim); padding: 6px 0;">No ${useHours ? 'duration' : 'distance'} data this month yet.</div>`;
+            }
+
+            return `
+              <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); margin-bottom: 10px;">
+                ${sportsWithData.map(s => {
+                  const v = sourceMap[s];
+                  return `<div style="width: ${(v / total) * 100}%; background: ${sportColor[s]};" title="${sportLabel[s]}"></div>`;
+                }).join('')}
+              </div>
+              <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim);">
+                ${['run', 'bike', 'swim', 'strength', 'other'].map(s => {
+                  const hrs = monthBySportHours[s];
+                  const dist = monthBySportDist[s];
+                  const cnt = monthBySportCount[s];
+                  if (cnt === 0) return '';
+                  const valueText = useHours
+                    ? `${hrs.toFixed(1)}h`
+                    : ((s !== 'strength' && s !== 'other' && dist > 0) ? `${convertDist(dist).toFixed(1)} ${distLabel}` : '—');
+                  return `<div><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${sportColor[s]}; margin-right: 6px;"></span>${sportLabel[s]} ${valueText}</div>`;
+                }).filter(Boolean).join('')}
+              </div>
+            `;
+          })()}
         </div>
       ` : ''}
     </div>
   `;
+}
+
+function setProgressSplitMetric(metric) {
+  state.progressSplitMetric = metric;
+  renderProgress();
 }
 
 // ─── Generate Next Week ───
