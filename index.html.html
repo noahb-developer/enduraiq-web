@@ -865,24 +865,18 @@ h1.hero-h .grad {
 }
 .hamburger-badge {
   position: absolute;
-  top: -6px;
-  right: -8px;
-  width: 22px;
-  height: 22px;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 255, 163, 0.4);
+  background: #ef4444;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(239, 68, 68, 0.7);
   animation: badgePulse 2s ease-in-out infinite;
 }
 @keyframes badgePulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(0.92); }
+  50% { opacity: 0.7; transform: scale(0.85); }
 }
 
 /* Style ALL select elements to match dark theme + custom chevron */
@@ -941,7 +935,7 @@ select option {
 .stat-card {
   background: var(--bg-2); border: 1px solid var(--border);
   border-radius: 14px; padding: 16px 18px;
-  position: relative; overflow: hidden;
+  position: relative;
   transition: transform 0.2s, border-color 0.2s;
 }
 .stat-card:hover { transform: translateY(-2px); border-color: var(--border-light); }
@@ -950,6 +944,8 @@ select option {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: var(--accent); opacity: 0;
   transition: opacity 0.3s;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
 }
 .stat-card:hover::before { opacity: 1; }
 
@@ -1013,7 +1009,7 @@ select option {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 6px;
-  z-index: 50;
+  z-index: 9999;
   display: none;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 255, 163, 0.08);
   backdrop-filter: blur(12px);
@@ -3187,7 +3183,7 @@ body.on-auth .container {
   <div class="nav-inner">
     <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
       <span></span><span></span><span></span>
-      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;">🧠</span>
+      <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
     </button>
     <div class="logo" onclick="navigate('dashboard')">
       <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
@@ -4051,7 +4047,7 @@ function setCoachUnread(hasUnread) {
   const menuBadge = document.getElementById('coachUnreadBadge');
   const hamBadge = document.getElementById('hamburgerCoachBadge');
   if (menuBadge) menuBadge.style.display = hasUnread ? 'block' : 'none';
-  if (hamBadge) hamBadge.style.display = hasUnread ? 'flex' : 'none';
+  if (hamBadge) hamBadge.style.display = hasUnread ? 'block' : 'none';
   try {
     if (hasUnread) localStorage.setItem('stryxs_coach_unread', '1');
     else localStorage.removeItem('stryxs_coach_unread');
@@ -5233,16 +5229,18 @@ function toggleStatPicker(event, id) {
     menu.classList.add('open');
     btn.classList.add('open');
 
-    // Smart positioning — flip upward if not enough room below
+    // Smart positioning — first measure menu size after it's visible
     requestAnimationFrame(() => {
       const btnRect = btn.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const margin = 12;
+
+      // Vertical: flip up if not enough room below
       const spaceBelow = viewportHeight - btnRect.bottom;
       const spaceAbove = btnRect.top;
-
-      if (spaceBelow < menuRect.height + 12 && spaceAbove > menuRect.height + 12) {
-        // Flip upward
+      if (spaceBelow < menuRect.height + margin && spaceAbove > menuRect.height + margin) {
         menu.style.top = 'auto';
         menu.style.bottom = 'calc(100% + 6px)';
       } else {
@@ -5250,12 +5248,24 @@ function toggleStatPicker(event, id) {
         menu.style.bottom = 'auto';
       }
 
-      // Make sure it's not cut off horizontally — check right edge
-      const menuRightEdge = btnRect.right;
-      if (menuRightEdge > window.innerWidth - 12) {
-        menu.style.right = '0';
-        menu.style.left = 'auto';
-      }
+      // Horizontal: make sure menu doesn't go off the right edge OR get clipped on left
+      // Re-measure after vertical positioning may have shifted things
+      requestAnimationFrame(() => {
+        const updatedMenuRect = menu.getBoundingClientRect();
+
+        // Going off right edge?
+        if (updatedMenuRect.right > viewportWidth - margin) {
+          const overflowR = updatedMenuRect.right - (viewportWidth - margin);
+          menu.style.right = (parseFloat(getComputedStyle(menu).right) || 0) + overflowR + 'px';
+          menu.style.left = 'auto';
+        }
+        // Going off left edge?
+        const updatedMenuRect2 = menu.getBoundingClientRect();
+        if (updatedMenuRect2.left < margin) {
+          menu.style.right = 'auto';
+          menu.style.left = (margin - updatedMenuRect2.left + (parseFloat(getComputedStyle(menu).left) || 0)) + 'px';
+        }
+      });
     });
   }
 }
