@@ -3619,7 +3619,7 @@ body.on-auth .container {
   </div>
 
   <div id="sourceConnect">
-    <div class="connect-card">
+    <div class="connect-card" id="stravaConnectCard">
       <div class="connect-logo" style="background: rgba(252, 76, 2, 0.15);">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
       </div>
@@ -4098,6 +4098,7 @@ function navigate(page) {
   if (page === 'history') renderHistory();
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
+  if (page === 'upload') updateStravaConnectCard();
 
   // Re-trigger landing animations when navigating back to landing (fixes mobile reload bug)
   if (page === 'landing') {
@@ -4241,8 +4242,41 @@ document.querySelectorAll('.source-tab').forEach(tab => {
     const src = tab.dataset.source;
     document.getElementById('sourceUpload').style.display = src === 'upload' ? 'block' : 'none';
     document.getElementById('sourceConnect').style.display = src === 'connect' ? 'block' : 'none';
+    if (src === 'connect') updateStravaConnectCard();
   });
 });
+
+// Refresh the Strava card on the Analyze page based on connection status
+async function updateStravaConnectCard() {
+  const card = document.getElementById('stravaConnectCard');
+  if (!card || !state.user) return;
+
+  try {
+    const { connected, connection } = await callStrava('get_status');
+    if (connected && connection) {
+      const fullName = [connection.athlete_firstname, connection.athlete_lastname].filter(Boolean).join(' ') || connection.athlete_username || 'Strava athlete';
+      card.innerHTML = `
+        <div class="connect-logo" style="background: rgba(252, 76, 2, 0.15);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+        </div>
+        <div class="connect-info">
+          <div class="connect-name">
+            Strava
+            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; font-size: 11px; color: #4ade80; font-weight: 600; margin-left: 8px;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ade80;"></span>
+              Connected
+            </span>
+          </div>
+          <div class="connect-desc">Connected as ${fullName}. New workouts auto-sync within seconds.</div>
+        </div>
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Manage</button>
+      `;
+    }
+    // If not connected, leave the original card as-is (it already shows Connect button)
+  } catch (err) {
+    console.error('updateStravaConnectCard failed:', err);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // ZONES & PARSING
@@ -4828,10 +4862,59 @@ function renderInsights(insights) {
 }
 
 function renderAnalysis(a) {
+  // If this is a summary-only workout (Strava sync), use the simpler view
+  if (a.summary_only || (!a.zd && !a.sets && !a.laps)) {
+    return renderSummaryWorkout(a);
+  }
   if (a.sport === 'run') return renderRun(a);
   if (a.sport === 'bike') return renderBike(a);
   if (a.sport === 'swim') return renderSwim(a);
-  return '';
+  return renderSummaryWorkout(a);
+}
+
+// Simple summary view for Strava-synced workouts (no per-lap data)
+function renderSummaryWorkout(a) {
+  const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', other: 'Other' };
+  const sportLabel = sportLabels[a.sport] || a.sport;
+  const dateStr = a.date ? new Date(a.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+  const sourceBadge = a.source === 'strava' ? `
+    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: rgba(252, 76, 2, 0.12); border: 1px solid rgba(252, 76, 2, 0.3); border-radius: 6px; font-size: 11px; color: #FC4C02; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 8px; vertical-align: middle;">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+      Strava
+    </span>` : '';
+
+  const stravaLink = a.strava_url ? `<a href="${a.strava_url}" target="_blank" rel="noopener" style="color: #FC4C02; font-size: 12px; text-decoration: none;">View on Strava ↗</a>` : '';
+
+  return `
+    <div class="analysis-card">
+      <div class="analysis-hero">
+        <div class="workout-sport">${a.icon || '⚡'} ${sportLabel}${sourceBadge}</div>
+        <div class="workout-name">${a.name || a.type || sportLabel}</div>
+        <div class="workout-meta">
+          ${a.distance > 0 ? `<span>📍 ${a.distance.toFixed(2)} km</span>` : ''}
+          ${a.time ? `<span>⏱ ${a.time}</span>` : ''}
+          ${a.avgHr ? `<span>💓 ${a.avgHr} bpm avg</span>` : ''}
+          ${a.maxHr ? `<span>🔥 ${a.maxHr} bpm max</span>` : ''}
+          ${a.avgPace ? `<span>⚡ ${a.avgPace}/km</span>` : ''}
+          ${a.elevationGain > 0 ? `<span>⛰ ${Math.round(a.elevationGain)}m</span>` : ''}
+          ${a.cadence ? `<span>👟 ${a.cadence} spm</span>` : ''}
+          ${a.calories ? `<span>🔥 ${a.calories} cal</span>` : ''}
+        </div>
+        ${dateStr ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">${dateStr}</div>` : ''}
+      </div>
+      <div class="analysis-body">
+        <div style="padding: 18px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 10px; line-height: 1.6;">
+          <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
+            <strong style="color: var(--text);">ℹ️ Summary view</strong>
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim);">
+            This workout was synced from Strava. For deeper analysis (cardiac drift, zone distribution, intensity targets), upload the CSV file from your watch on the Upload page. ${stravaLink}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderRun(a) {
@@ -7081,6 +7164,15 @@ function persistProjectionsCache() {
   } catch (e) {}
 }
 
+// User-triggered force refresh — clears cache and re-renders
+async function forceRefreshProjections() {
+  _projectionsCache = null;
+  _projectionsCacheTime = 0;
+  try { sessionStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
+  toast('Refreshing projections...');
+  await renderProjections(true);
+}
+
 async function renderProjections(forceRefresh = false) {
   if (!state.user) return;
   const container = document.getElementById('projectionsContainer');
@@ -7191,23 +7283,40 @@ function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
     const needed = Math.max(0, TARGET_WORKOUTS - haveWorkouts);
     const hasPb = !!(intake.pb_5k || intake.pb_10k || intake.pb_half || intake.pb_marathon || intake.last_race);
 
+    // Compute what's actually missing for clearer messaging
+    let subtitle;
+    if (haveWorkouts < TARGET_WORKOUTS && !hasPb) {
+      subtitle = `Need ${needed} more workout${needed === 1 ? '' : 's'} OR a recent PB`;
+    } else if (haveWorkouts < TARGET_WORKOUTS) {
+      subtitle = `Need ${needed} more consistent workout${needed === 1 ? '' : 's'}`;
+    } else if (!hasPb) {
+      subtitle = `Add a recent PB or race time for accurate projections`;
+    } else {
+      subtitle = `Working on it — try refreshing in a moment`;
+    }
+
     container.innerHTML = `
       <div class="panel" style="margin-bottom: 20px; border-color: rgba(255, 209, 102, 0.2); background: rgba(255, 209, 102, 0.04);">
         <div class="panel-header">
           <div>
             <div class="panel-title">🎯 Race Projections</div>
-            <div class="panel-sub">Available after ${needed > 0 ? needed : 'a few more'} more ${needed === 1 ? 'workout' : 'workouts'} of consistent training</div>
+            <div class="panel-sub">${subtitle}</div>
           </div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 16px;">${haveWorkouts >= TARGET_WORKOUTS ? '✓' : '⏳'}</span>
-            <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
+            <span>${haveWorkouts}/${TARGET_WORKOUTS} workouts uploaded ${haveWorkouts >= TARGET_WORKOUTS ? '<span style="color: #4ade80; font-weight: 600;">✓ done</span>' : `<span style="color: var(--text-mute);">(${needed} more needed)</span>`}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 16px;">${hasPb ? '✓' : '○'}</span>
-            <span>${hasPb ? 'PB/race result on file' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
+            <span>${hasPb ? 'PB/race result on file <span style="color: #4ade80; font-weight: 600;">✓ done</span>' : 'Add a recent PB or race time'} ${!hasPb ? '<a style="color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 6px;" onclick="navigate(\'settings\')">in Settings</a>' : ''}</span>
           </div>
+          ${haveWorkouts >= TARGET_WORKOUTS && hasPb ? `
+            <div style="margin-top: 8px; padding: 10px 12px; background: rgba(74, 222, 128, 0.05); border: 1px solid rgba(74, 222, 128, 0.2); border-radius: 8px; font-size: 12px; color: var(--text-dim);">
+              Both requirements met! Your projection is generating. <a style="color: var(--accent); cursor: pointer; text-decoration: underline;" onclick="forceRefreshProjections()">Refresh now →</a>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -9104,6 +9213,11 @@ async function saveAllSettings(silent = false) {
       sendCoachReactiveMessage(importantChanges).catch(err => console.error('Coach reactive msg failed:', err));
     }
   }
+
+  // Invalidate projections cache — settings might have changed PBs/goals/etc.
+  _projectionsCache = null;
+  _projectionsCacheTime = 0;
+  try { sessionStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
 
   showApp();
   if (!silent) toast('Settings saved');
