@@ -3596,14 +3596,19 @@ body.on-auth .container {
 <!-- UPLOAD -->
 <div class="page" id="page-upload">
   <div class="section-title">Analyze Workout</div>
-  <p class="section-sub">Upload a workout file or connect your training platform for automatic syncing.</p>
+  <p class="section-sub">Connect Strava for auto-sync, or upload a CSV for deeper analysis.</p>
 
   <div class="source-tabs">
-    <button class="source-tab active" data-source="upload">📁 Upload file</button>
-    <button class="source-tab" data-source="connect">🔗 Connect platform</button>
+    <button class="source-tab active" data-source="connect">🔗 Auto-sync</button>
+    <button class="source-tab" data-source="upload">📁 Upload CSV (deep analysis)</button>
   </div>
 
-  <div id="sourceUpload">
+  <div id="sourceUpload" style="display: none;">
+    <div style="padding: 14px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 18px;">
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+        <strong style="color: var(--accent);">For power users:</strong> Upload a CSV from your watch for full per-lap analysis (cardiac drift, zone distribution, intensity targets). Strava sync gives you the basics; CSV gives you everything.
+      </div>
+    </div>
     <label class="upload-zone" id="uploadZone">
       <div class="upload-icon">↑</div>
       <div class="upload-title">Drop your workout file here</div>
@@ -3613,14 +3618,16 @@ body.on-auth .container {
     <p class="source-supports">Supports Garmin, COROS, Polar, Suunto, Apple Watch exports (.csv)</p>
   </div>
 
-  <div id="sourceConnect" style="display: none;">
+  <div id="sourceConnect">
     <div class="connect-card">
-      <div class="connect-logo" style="background: rgba(252, 76, 2, 0.15);">🧡</div>
-      <div class="connect-info">
-        <div class="connect-name">Strava <span class="connect-badge">Coming soon</span></div>
-        <div class="connect-desc">Auto-sync every workout from any watch via Strava. The fastest way to get started.</div>
+      <div class="connect-logo" style="background: rgba(252, 76, 2, 0.15);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
       </div>
-      <button class="btn ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Connect</button>
+      <div class="connect-info">
+        <div class="connect-name">Strava</div>
+        <div class="connect-desc">Auto-sync every workout from any watch via Strava. New activities appear here as soon as you finish them.</div>
+      </div>
+      <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect</button>
     </div>
     <div class="connect-card">
       <div class="connect-logo" style="background: rgba(0, 122, 255, 0.15);">⌚</div>
@@ -3905,8 +3912,13 @@ async function loadWorkouts() {
 
 async function saveWorkout(workout) {
   if (!state.user) return;
+  // Default to csv_upload source if not set
+  if (!workout.source) workout.source = 'csv_upload';
   const { data, error } = await sb.from('workouts').insert({
-    user_id: state.user.id, sport: workout.sport, workout_data: workout,
+    user_id: state.user.id,
+    sport: workout.sport,
+    workout_data: workout,
+    source: workout.source,
   }).select().single();
   if (data) workout._dbId = data.id;
   else if (error) console.error('Workout save error:', error);
@@ -5340,13 +5352,30 @@ function renderFitnessTrend() {
 function renderHistoryItem(w, idx) {
   const date = new Date(w.date);
   const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const icons = { run: '🏃', bike: '🚴', swim: '🏊' };
-  const sub = w.sport === 'swim' ? `${w.sets.length} sets · ${w.avgHr} bpm` : `${(w.distance || 0).toFixed(1)}km · ${w.time || ''} · ${w.avgHr} bpm`;
+  const icons = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', other: '⚡' };
+  const icon = icons[w.sport] || '⚡';
+  let sub;
+  if (w.sport === 'swim') {
+    sub = w.sets ? `${w.sets.length} sets · ${w.avgHr || 0} bpm` : `${(w.distance || 0).toFixed(2)}km · ${w.time || ''}`;
+  } else if (w.sport === 'strength' || w.sport === 'other') {
+    sub = `${w.time || ''}${w.avgHr ? ' · ' + w.avgHr + ' bpm' : ''}`;
+  } else {
+    sub = `${(w.distance || 0).toFixed(1)}km · ${w.time || ''}${w.avgHr ? ' · ' + w.avgHr + ' bpm' : ''}`;
+  }
+
+  // Strava attribution badge (per Strava API terms)
+  const stravaBadge = w.source === 'strava' ? `
+    <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; background: rgba(252, 76, 2, 0.12); border: 1px solid rgba(252, 76, 2, 0.3); border-radius: 4px; font-size: 9px; color: #FC4C02; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; vertical-align: middle;">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+      Strava
+    </span>
+  ` : '';
+
   return `
     <div class="history-item" onclick="viewHistoryDetail(${idx})">
-      <div class="history-icon">${icons[w.sport]}</div>
+      <div class="history-icon">${icon}</div>
       <div class="history-info">
-        <div class="history-title">${w.type || w.name}</div>
+        <div class="history-title">${w.type || w.name || w.sport}${stravaBadge}</div>
         <div class="history-meta">${sub}</div>
       </div>
       <div class="history-date">${dateStr}</div>
@@ -8597,6 +8626,27 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Connections Section (Strava, future Garmin/Apple Health) -->
+    <div class="settings-section" id="section-connections">
+      <div class="settings-section-header" onclick="toggleSettingsSection('connections')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🔗</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Connections</div>
+            <div class="settings-section-sub">Auto-sync workouts from Strava and other apps</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div id="connectionsContainer">
+            <div style="font-size: 12px; color: var(--text-dim); padding: 8px 0;">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- HR Zones Section -->
     <div class="settings-section" id="section-hr">
       <div class="settings-section-header" onclick="toggleSettingsSection('hr')">
@@ -8665,6 +8715,219 @@ async function renderSettings() {
   }
 
   updateZonePreview();
+  renderConnections();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STRAVA INTEGRATION
+// ═══════════════════════════════════════════════════════════
+const STRAVA_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/strava`;
+
+async function callStrava(action, payload = {}) {
+  const res = await fetch(STRAVA_FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({
+      action,
+      user_id: state.user?.id,
+      ...payload,
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Strava ${action} failed: ${res.status} ${errText}`);
+  }
+  return await res.json();
+}
+
+async function renderConnections() {
+  const container = document.getElementById('connectionsContainer');
+  if (!container || !state.user) return;
+
+  try {
+    const { connected, connection } = await callStrava('get_status');
+
+    if (connected && connection) {
+      // Connected state
+      const fullName = [connection.athlete_firstname, connection.athlete_lastname].filter(Boolean).join(' ') || connection.athlete_username || 'Strava athlete';
+      const lastSync = connection.last_sync_at
+        ? new Date(connection.last_sync_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'never';
+
+      container.innerHTML = `
+        <div style="background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 12px;">
+          <div style="flex-shrink: 0;">
+            ${connection.athlete_profile_url
+              ? `<img src="${connection.athlete_profile_url}" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover;" />`
+              : `<div style="width: 44px; height: 44px; border-radius: 50%; background: #FC4C02; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800;">S</div>`
+            }
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 2px;">
+              <strong style="font-size: 15px;">Strava</strong>
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; font-size: 11px; color: #4ade80; font-weight: 600;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ade80;"></span>
+                Connected
+              </span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim);">${fullName} · last sync ${lastSync}</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="syncStravaNow(this)">
+            🔄 Sync now
+          </button>
+          <button class="btn ghost" style="font-size: 13px; padding: 8px 14px; color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="disconnectStrava(this)">
+            Disconnect
+          </button>
+        </div>
+
+        <div style="margin-top: 14px; padding: 12px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.55;">
+          ℹ️ New activities sync automatically when you finish them. For deeper analysis (cardiac drift, zones), upload a CSV file on the Upload page.
+        </div>
+      `;
+    } else {
+      // Not connected — show connect button
+      container.innerHTML = `
+        <div style="text-align: center; padding: 12px 0 20px;">
+          <p style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 16px;">
+            Auto-sync your workouts from Strava. New activities appear here as soon as you finish them.
+          </p>
+          <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 14px; padding: 12px 22px; display: inline-flex; align-items: center; gap: 10px;" onclick="connectStrava()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+            Connect Strava
+          </button>
+        </div>
+
+        <div style="font-size: 11px; color: var(--text-mute); text-align: center; line-height: 1.5;">
+          We'll only read your activities. No posting, no editing.
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error('Connections render failed:', err);
+    container.innerHTML = `<div style="font-size: 13px; color: var(--text-dim);">Couldn't load connection status. Refresh to try again.</div>`;
+  }
+}
+
+async function connectStrava() {
+  if (!state.user) return;
+  try {
+    const { url } = await callStrava('get_auth_url');
+    // Redirect to Strava OAuth
+    window.location.href = url;
+  } catch (err) {
+    console.error('Connect Strava failed:', err);
+    toast('Failed to start Strava connection: ' + err.message);
+  }
+}
+
+async function disconnectStrava(btn) {
+  if (!confirm('Disconnect from Strava? You can reconnect anytime. Already-synced workouts will stay in your account.')) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Disconnecting...';
+
+  try {
+    await callStrava('disconnect');
+    toast('Disconnected from Strava');
+    renderConnections();
+  } catch (err) {
+    console.error('Disconnect failed:', err);
+    toast('Disconnect failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Disconnect';
+  }
+}
+
+async function syncStravaNow(btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing...';
+
+  try {
+    const result = await callStrava('sync_recent', { days: 30 });
+    if (result.imported > 0) {
+      toast(`Synced ${result.imported} new workout${result.imported === 1 ? '' : 's'}`);
+      // Refresh state.workouts so dashboard reflects new data
+      await loadWorkouts();
+    } else {
+      toast('All caught up — no new workouts');
+    }
+    renderConnections();
+  } catch (err) {
+    console.error('Sync failed:', err);
+    toast('Sync failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '🔄 Sync now';
+  }
+}
+
+// Handle Strava OAuth callback (when Strava redirects back to /strava-callback)
+async function handleStravaCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state_param = params.get('state');
+  const error = params.get('error');
+  const scope = params.get('scope');
+
+  if (error) {
+    toast('Strava authorization was cancelled');
+    history.replaceState({}, '', '/');
+    return false;
+  }
+
+  if (!code) return false;
+
+  // Verify scope includes activity:read_all (otherwise we can't pull workouts)
+  if (scope && !scope.includes('activity:read_all')) {
+    toast('Please grant activity access for sync to work');
+    history.replaceState({}, '', '/');
+    return true;
+  }
+
+  try {
+    // Wait for auth to be ready
+    let tries = 0;
+    while (!state.user && tries < 20) {
+      await new Promise(r => setTimeout(r, 100));
+      tries++;
+    }
+
+    if (!state.user) {
+      toast('Please sign in first, then try connecting Strava again');
+      history.replaceState({}, '', '/');
+      return true;
+    }
+
+    toast('Connecting to Strava...');
+    const result = await callStrava('exchange_code', { code });
+    if (result.success) {
+      toast(`Strava connected! Syncing recent workouts...`);
+      // Auto-trigger backfill of last 30 days
+      try {
+        const sync = await callStrava('sync_recent', { days: 30 });
+        if (sync.imported > 0) {
+          toast(`Imported ${sync.imported} workout${sync.imported === 1 ? '' : 's'} from Strava`);
+          await loadWorkouts();
+        }
+      } catch (syncErr) {
+        console.error('Initial sync failed:', syncErr);
+      }
+      // Clean URL and navigate to settings
+      history.replaceState({}, '', '/');
+      navigate('settings');
+    }
+    return true;
+  } catch (err) {
+    console.error('Strava callback failed:', err);
+    toast('Strava connection failed: ' + err.message);
+    history.replaceState({}, '', '/');
+    return true;
+  }
 }
 
 function toggleSettingsSection(id) {
@@ -9290,8 +9553,47 @@ function animateShowcase() {
     return;
   }
 
+  // Check for Strava OAuth callback — params 'code' + 'state' on /strava-callback
+  const isStravaCallback = path === '/strava-callback' || queryParams.has('code') && queryParams.has('state');
+  if (isStravaCallback && queryParams.has('code')) {
+    const loggedIn = await checkSession();
+    if (loggedIn) {
+      showApp();
+      const handled = await handleStravaCallback();
+      if (handled) {
+        document.body.classList.remove('app-loading');
+        return;
+      }
+    } else {
+      // Save the code to localStorage and redirect to login
+      try {
+        localStorage.setItem('stryxs_pending_strava_code', queryParams.get('code'));
+      } catch(e) {}
+      showLanding();
+      navigate('login');
+      toast('Sign in to finish connecting Strava');
+      document.body.classList.remove('app-loading');
+      return;
+    }
+  }
+
   const loggedIn = await checkSession();
-  if (loggedIn) { showApp(); navigate('dashboard'); }
+  if (loggedIn) {
+    showApp();
+    navigate('dashboard');
+    // If user just logged in and there's a pending Strava code, finish that flow
+    try {
+      const pendingCode = localStorage.getItem('stryxs_pending_strava_code');
+      if (pendingCode) {
+        localStorage.removeItem('stryxs_pending_strava_code');
+        // Reconstruct URL params for handler
+        const url = new URL(window.location.href);
+        url.searchParams.set('code', pendingCode);
+        history.replaceState({}, '', url.toString());
+        await handleStravaCallback();
+      }
+    } catch(e) { console.error('Pending Strava code resume failed:', e); }
+  }
   else { showLanding(); navigate('landing'); }
   document.body.classList.remove('app-loading');
 })();
