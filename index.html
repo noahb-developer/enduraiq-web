@@ -4181,6 +4181,20 @@ function showApp() {
       avatarEl.textContent = initial;
     }
   }
+  // Reset projections cache state for THIS user (clears whatever was in memory from a previous session)
+  _projectionsCache = null;
+  _projectionsCacheTime = 0;
+  // Then try to load THIS user's persisted cache (if any)
+  if (typeof loadProjectionsCacheFromStorage === 'function') {
+    loadProjectionsCacheFromStorage();
+  }
+  // Clear any old global-key caches from previous versions of the app
+  try {
+    localStorage.removeItem('stryxs_projections_cache'); // legacy global key
+    localStorage.removeItem('stryxs_onboarding_seen_v1'); // legacy global key
+    sessionStorage.removeItem('stryxs_projections_cache');
+  } catch (e) {}
+
   // Check for unread Coach messages on every app show
   checkCoachUnreadOnLoad();
   // Check if user needs onboarding (only fires for first-time users)
@@ -4197,13 +4211,16 @@ function showLanding() {
 // ═══════════════════════════════════════════════════════════
 // ONBOARDING — first-time user welcome flow
 // ═══════════════════════════════════════════════════════════
-const ONBOARDING_KEY = 'stryxs_onboarding_seen_v1';
+function getOnboardingKey() {
+  const uid = state.user?.id || 'anon';
+  return `stryxs_onboarding_seen_v1_${uid}`;
+}
 
 async function checkAndShowOnboarding() {
   if (!state.user) return;
-  // Skip if user has already seen onboarding
+  // Skip if user has already seen onboarding (per-user key)
   try {
-    if (localStorage.getItem(ONBOARDING_KEY) === '1') return;
+    if (localStorage.getItem(getOnboardingKey()) === '1') return;
   } catch(e) {}
 
   // Determine which steps are already complete
@@ -4238,7 +4255,7 @@ async function checkAndShowOnboarding() {
 
   // If everything is done, mark complete and skip
   if (steps.every(s => s.complete)) {
-    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch(e) {}
+    try { localStorage.setItem(getOnboardingKey(), '1'); } catch(e) {}
     return;
   }
 
@@ -4299,14 +4316,14 @@ function onboardingNext() {
 }
 
 function dismissOnboarding() {
-  try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch(e) {}
+  try { localStorage.setItem(getOnboardingKey(), '1'); } catch(e) {}
   const modal = document.getElementById('onboardingModal');
   if (modal) modal.remove();
 }
 
 // Force-show onboarding (for testing or manual trigger)
 function showOnboardingAgain() {
-  try { localStorage.removeItem(ONBOARDING_KEY); } catch(e) {}
+  try { localStorage.removeItem(getOnboardingKey()); } catch(e) {}
   checkAndShowOnboarding();
 }
 
@@ -6720,34 +6737,72 @@ async function intakeNext() {
 }
 
 // Helper that calls our Coach edge function
-async function callCoach(action, payload) {
+async function callCoach(action, payload, options = {}) {
   const { data: session } = await sb.auth.getSession();
   const token = session?.session?.access_token;
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/coach`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token || SUPABASE_KEY}`,
-      'apikey': SUPABASE_KEY,
-    },
-    body: JSON.stringify({ action, payload }),
-  });
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || 'Coach function failed');
-  return data.result;
+
+  // Default 90 second timeout (Edge Functions max is ~150s, but we want to fail clean before that)
+  const timeoutMs = options.timeoutMs || 90000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/coach`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || SUPABASE_KEY}`,
+        'apikey': SUPABASE_KEY,
+      },
+      body: JSON.stringify({ action, payload }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Stryxs] Coach HTTP error:', res.status, errText);
+      throw new Error(`Coach unavailable (${res.status}). Try again in a moment.`);
+    }
+
+    const data = await res.json();
+    if (!data.success) {
+      console.error('[Stryxs] Coach returned failure:', data);
+      throw new Error(data.error || 'Coach function failed');
+    }
+    return data.result;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Coach is taking longer than expected. Please try again.');
+    }
+    throw err;
+  }
 }
 
 async function completeIntake() {
   const el = document.getElementById('coachContent');
+
+  // Add beforeunload warning so user doesn't accidentally leave during generation
+  const beforeUnloadHandler = (e) => {
+    e.preventDefault();
+    e.returnValue = "Your plan is being built. Are you sure you want to leave?";
+    return e.returnValue;
+  };
+  window.addEventListener('beforeunload', beforeUnloadHandler);
+
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>Building your plan…</h2>
-        <p>Coach is analyzing your profile and designing your periodized training plan. This takes about 15-30 seconds.</p>
+        <p>Stryxs is designing your periodized training plan based on the methodology that fits your goal. This takes 20-45 seconds.</p>
+        <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
+          ⚠️ Don't close this window or navigate away — it interrupts the build.
+        </p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>Generating plan with Claude AI</div>
+    <div class="loading"><div class="spinner"></div>Designing your plan…</div>
   `;
 
   // Convert weight/height to metric for storage if needed
@@ -6863,6 +6918,9 @@ async function completeIntake() {
     console.error('Full error:', err.stack || err);
     toast('Plan generation failed: ' + err.message);
     renderCoach();
+  } finally {
+    // Always remove the beforeunload warning, success or fail
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
   }
 }
 
@@ -7279,7 +7337,10 @@ async function confirmAction(type) {
         <div class="coach-avatar">🧠</div>
         <div class="coach-intro">
           <h2>Building your new plan…</h2>
-          <p>Generating with Claude AI. Takes about 10-20 seconds.</p>
+          <p>Stryxs is rebuilding your training plan with the latest data. Takes 15-30 seconds.</p>
+          <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
+            ⚠️ Don't close this window — it'll interrupt the build.
+          </p>
         </div>
       </div>
       <div class="loading"><div class="spinner"></div>Working</div>
@@ -7662,22 +7723,35 @@ let _projectionsInflight = false;
 const PROJECTIONS_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 1 week — projections refresh weekly to save tokens
 
 // Try to restore cache from localStorage on page load
-try {
-  const stored = localStorage.getItem('stryxs_projections_cache');
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    if (parsed && parsed.time && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL)) {
-      _projectionsCache = parsed.data;
-      _projectionsCacheTime = parsed.time;
+// Cache is scoped per-user so signing out / different accounts don't see each other's data
+function getProjectionsCacheKey() {
+  const uid = state.user?.id || 'anon';
+  return `stryxs_projections_cache_${uid}`;
+}
+
+function loadProjectionsCacheFromStorage() {
+  try {
+    const stored = localStorage.getItem(getProjectionsCacheKey());
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validate cache: must have time, must be fresh, AND must include the right user_id
+      if (parsed && parsed.time && parsed.user_id === state.user?.id && (Date.now() - parsed.time < PROJECTIONS_CACHE_TTL)) {
+        _projectionsCache = parsed.data;
+        _projectionsCacheTime = parsed.time;
+      } else {
+        // Stale or wrong user — wipe it
+        localStorage.removeItem(getProjectionsCacheKey());
+      }
     }
-  }
-} catch (e) {}
+  } catch (e) {}
+}
 
 function persistProjectionsCache() {
   try {
-    localStorage.setItem('stryxs_projections_cache', JSON.stringify({
+    localStorage.setItem(getProjectionsCacheKey(), JSON.stringify({
       data: _projectionsCache,
       time: _projectionsCacheTime,
+      user_id: state.user?.id,
     }));
   } catch (e) {}
 }
@@ -7686,7 +7760,7 @@ function persistProjectionsCache() {
 async function forceRefreshProjections() {
   _projectionsCache = null;
   _projectionsCacheTime = 0;
-  try { localStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
+  try { localStorage.removeItem(getProjectionsCacheKey()); } catch(e) {}
   toast('Refreshing projections...');
   await renderProjections(true);
 }
@@ -7754,11 +7828,30 @@ async function renderProjections(forceRefresh = false) {
       return;
     }
 
-    // Get last 14 training workouts (exclude daily_activity, only count plan + extra_training + unclassified)
+    // Find when the active plan was created — only count workouts AFTER plan start
+    const { data: activePlanRow } = await sb.from('training_plans')
+      .select('created_at')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const planStartIso = activePlanRow?.created_at || null;
+    // Also bound to last 30 days regardless
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffIso = planStartIso && new Date(planStartIso) > thirtyDaysAgo
+      ? planStartIso
+      : thirtyDaysAgo.toISOString();
+
+    // Get last 14 TRAINING workouts (only plan + extra_training, since plan started, in last 30 days)
+    // We exclude unclassified entirely from projections — Coach should only project from confirmed training
     const { data: recentRaw } = await sb.from('workouts')
       .select('sport, workout_data, created_at, activity_classification')
       .eq('user_id', state.user.id)
-      .neq('activity_classification', 'daily_activity')
+      .in('activity_classification', ['plan', 'extra_training'])
+      .gte('created_at', cutoffIso)
       .order('created_at', { ascending: false })
       .limit(14);
 
@@ -8445,10 +8538,13 @@ async function processImportFromIntake(intake, adaptMode) {
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>${adaptMode ? 'Reviewing your plan...' : 'Importing your plan...'}</h2>
-        <p>${adaptMode ? 'Coach is parsing the plan and reviewing it against the methodology.' : 'Coach is parsing your plan into a structured format.'}</p>
+        <p>${adaptMode ? 'Stryxs is parsing your plan and reviewing it against the methodology.' : 'Stryxs is parsing your plan into a structured format.'}</p>
+        <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
+          ⚠️ Don't close this window — it'll interrupt the build.
+        </p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>${adaptMode ? 'Parsing + reviewing' : 'Parsing'} with Claude AI</div>
+    <div class="loading"><div class="spinner"></div>${adaptMode ? 'Parsing + reviewing your plan' : 'Parsing your plan'}</div>
   `;
 
   try {
@@ -9054,10 +9150,13 @@ async function submitImport() {
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>Importing your plan…</h2>
-        <p>Coach is reading your plan and structuring it. Takes about 15-30 seconds.</p>
+        <p>Stryxs is reading your plan and structuring it. Takes 15-30 seconds.</p>
+        <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
+          ⚠️ Don't close this window — it'll interrupt the import.
+        </p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>Parsing plan with Claude AI</div>
+    <div class="loading"><div class="spinner"></div>Parsing your plan</div>
   `;
 
   try {
