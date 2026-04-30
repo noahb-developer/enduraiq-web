@@ -6791,6 +6791,37 @@ async function completeIntake() {
   };
   window.addEventListener('beforeunload', beforeUnloadHandler);
 
+  // Hard timeout: if anything takes more than 3 minutes total, force-show an error
+  let masterTimeoutFired = false;
+  const masterTimeout = setTimeout(() => {
+    masterTimeoutFired = true;
+    console.error('[Stryxs] Plan generation MASTER TIMEOUT (3 min) — something is hung');
+    if (el) {
+      el.innerHTML = `
+        <div class="coach-hero">
+          <div class="coach-avatar">⚠️</div>
+          <div class="coach-intro">
+            <h2>Plan generation timed out</h2>
+            <p>This took longer than 3 minutes — something went wrong on our end. Your profile was saved. Please try again.</p>
+            <button class="btn" style="margin-top: 16px;" onclick="renderCoach()">Try again</button>
+          </div>
+        </div>
+      `;
+    }
+    toast('Plan generation timed out — please try again');
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+  }, 180000); // 3 minutes hard limit
+
+  // Helper to update the loading message so user sees progress
+  const updateProgress = (msg) => {
+    if (masterTimeoutFired) return;
+    const loading = el?.querySelector('.loading');
+    if (loading) {
+      loading.innerHTML = `<div class="spinner"></div>${msg}`;
+    }
+    console.log('[Stryxs]', msg);
+  };
+
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🧠</div>
@@ -6802,7 +6833,7 @@ async function completeIntake() {
         </p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>Designing your plan…</div>
+    <div class="loading"><div class="spinner"></div>Saving your profile…</div>
   `;
 
   // Convert weight/height to metric for storage if needed
@@ -6836,7 +6867,6 @@ async function completeIntake() {
     weight_kg: weight_kg,
     height_cm: height_cm,
     unit_preference: intakeAnswers.unit_preference || 'metric',
-    // Optional benchmark fields — empty strings normalize to null
     pb_5k: intakeAnswers.pb_5k || null,
     pb_10k: intakeAnswers.pb_10k || null,
     pb_half: intakeAnswers.pb_half || null,
@@ -6849,8 +6879,11 @@ async function completeIntake() {
     updated_at: new Date().toISOString(),
   };
 
+  updateProgress('Saving your profile…');
   const { error } = await sb.from('athlete_intake').upsert(payload, { onConflict: 'user_id' });
   if (error) {
+    clearTimeout(masterTimeout);
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
     toast('Save failed: ' + error.message);
     console.error(error);
     return;
@@ -6862,43 +6895,50 @@ async function completeIntake() {
 
   // BRANCH: if user chose to import a plan, show the import flow
   if (payload.plan_path === 'import_use' || payload.plan_path === 'import_adapt') {
+    clearTimeout(masterTimeout);
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
     showImportPlanFlow(payload);
     return;
   }
 
   // Standard path: generate skeleton first, then week 1
   try {
-    console.log('[Stryxs] Generating periodization skeleton...');
+    updateProgress('Designing your periodization arc…');
     let skeleton = null;
     try {
-      skeleton = await callCoach('generate_skeleton', { intake: payload });
+      skeleton = await callCoach('generate_skeleton', { intake: payload }, { timeoutMs: 30000 });
       console.log('[Stryxs] Skeleton received:', skeleton);
     } catch (skErr) {
       console.error('[Stryxs] Skeleton generation failed (non-blocking):', skErr);
     }
+    if (masterTimeoutFired) return;
 
+    updateProgress('Building your week-1 plan…');
     console.log('[Stryxs] Calling generate_plan with payload:', payload);
-    const plan = await callCoach('generate_plan', { intake: payload, weekNumber: 1, skeleton });
+    const plan = await callCoach('generate_plan', { intake: payload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
     console.log('[Stryxs] Plan received:', plan);
     console.log('[Stryxs] Plan workouts count:', plan?.workouts?.length || 0);
+    if (masterTimeoutFired) return;
 
     if (!plan || !plan.workouts || plan.workouts.length === 0) {
       throw new Error('Coach returned an empty plan');
     }
 
-    // Attach skeleton to plan so it persists
     if (skeleton) plan.skeleton = skeleton;
 
+    updateProgress('Saving your plan to your calendar…');
     const saveResult = await savePlanToDb(plan, state.user.id);
     console.log('[Stryxs] Save result:', saveResult);
+    if (masterTimeoutFired) return;
 
     // Generate Coach's intro message explaining the plan
+    updateProgress('Writing your welcome message…');
     try {
       const introMsg = await callCoach('plan_intro_message', {
         intake: payload,
         isAssessmentWeek: !!plan._is_assessment_week,
         totalWeeks: plan._total_weeks || (skeleton ? skeleton.length : null),
-      });
+      }, { timeoutMs: 30000 });
       if (introMsg) {
         await sb.from('coach_messages').insert({
           user_id: state.user.id,
@@ -6911,15 +6951,30 @@ async function completeIntake() {
       console.error('Intro message failed (non-blocking):', introErr);
     }
 
+    if (masterTimeoutFired) return;
+    clearTimeout(masterTimeout);
     toast('Plan ready!');
     renderCoach();
   } catch (err) {
+    clearTimeout(masterTimeout);
+    if (masterTimeoutFired) return; // Master timeout already showed an error
     console.error('Plan generation failed:', err);
     console.error('Full error:', err.stack || err);
+    if (el) {
+      el.innerHTML = `
+        <div class="coach-hero">
+          <div class="coach-avatar">⚠️</div>
+          <div class="coach-intro">
+            <h2>Plan generation failed</h2>
+            <p style="color: #f87171; margin-bottom: 12px;">${err.message || 'Coach is unavailable right now.'}</p>
+            <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 16px;">Your profile was saved. You can try again, and we'll pick up where you left off.</p>
+            <button class="btn" onclick="renderCoach()">Try again</button>
+          </div>
+        </div>
+      `;
+    }
     toast('Plan generation failed: ' + err.message);
-    renderCoach();
   } finally {
-    // Always remove the beforeunload warning, success or fail
     window.removeEventListener('beforeunload', beforeUnloadHandler);
   }
 }
@@ -7823,7 +7878,23 @@ async function renderProjections(forceRefresh = false) {
     if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
     if (!intake || !intake.completed) {
-      container.innerHTML = '';
+      // Show a helpful placeholder INSTEAD of blanking out — so users always know the panel exists
+      container.innerHTML = `
+        <div class="panel" style="margin-bottom: 20px; border-color: rgba(0, 255, 163, 0.15); background: rgba(0, 255, 163, 0.03);">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">🎯 Race Projections</div>
+              <div class="panel-sub">Complete intake to unlock</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+            Tell Coach about your goals and training, then log a few workouts. Race Projections will appear here automatically — they predict your race times based on your actual training data and update each week.
+            <div style="margin-top: 12px;">
+              <a style="display: inline-block; padding: 8px 16px; background: var(--accent); color: var(--bg-1); text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;" onclick="navigate('coach')">Set up Coach →</a>
+            </div>
+          </div>
+        </div>
+      `;
       _projectionsInflight = false;
       return;
     }
@@ -7903,7 +7974,9 @@ async function renderProjections(forceRefresh = false) {
 }
 
 function renderProjectionsFromData(container, intake, recentWorkouts, proj) {
-  // If no proj at all, render the low-data state with clear messaging
+  // Defensive defaults — never throw on bad input
+  intake = intake || {};
+  recentWorkouts = Array.isArray(recentWorkouts) ? recentWorkouts : [];
   if (!proj) {
     proj = { data_sufficiency: 'low', primary_projection: null };
   }
