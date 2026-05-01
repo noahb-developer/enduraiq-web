@@ -6345,6 +6345,25 @@ const intakeQuestions = [
     min: 0, max: 30,
   },
   {
+    id: 'lthr_choice',
+    question: "I have your LTHR on file. What should I do?",
+    context: (a) => {
+      const r = state.profile?.runLthr;
+      const b = state.profile?.bikeLthr;
+      const parts = [];
+      if (r) parts.push(`run LTHR: <strong>${r} bpm</strong>`);
+      if (b) parts.push(`bike LTHR: <strong>${b} bpm</strong>`);
+      return `Current values — ${parts.join(', ')}. Pick one:`;
+    },
+    type: 'single',
+    options: [
+      { value: 'keep', emoji: '✓', label: 'Keep current values' },
+      { value: 'update', emoji: '✏️', label: 'Update values now' },
+      { value: 'retest', emoji: '🎯', label: 'Re-test (assessment week)' },
+    ],
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && (state.profile?.runLthr || state.profile?.bikeLthr),
+  },
+  {
     id: 'lthr_run',
     question: "Do you know your run LTHR (lactate threshold heart rate)?",
     context: "Friel methodology builds zones from your LTHR. If you've tested before, enter it. If not, skip — Coach will build a test into Week 1 of your plan.",
@@ -6352,7 +6371,8 @@ const intakeQuestions = [
     placeholder: 'e.g. 175 (or skip)',
     min: 100, max: 220,
     optional: true,
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && !state.profile?.runLthr,
+    // Show when: (no profile LTHR) OR (user chose "update")
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && (!state.profile?.runLthr || a.lthr_choice === 'update'),
   },
   {
     id: 'lthr_bike',
@@ -6362,7 +6382,7 @@ const intakeQuestions = [
     placeholder: 'e.g. 165 (or skip)',
     min: 100, max: 220,
     optional: true,
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event) && !state.profile?.bikeLthr,
+    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event) && (!state.profile?.bikeLthr || a.lthr_choice === 'update'),
   },
   {
     id: 'goal_time',
@@ -6880,8 +6900,24 @@ async function completeIntake() {
     pb_marathon: intakeAnswers.pb_marathon || null,
     last_race: intakeAnswers.last_race || null,
     goal_time: intakeAnswers.goal_time || null,
-    run_lthr: intakeAnswers.lthr_run ? parseInt(intakeAnswers.lthr_run) : null,
-    bike_lthr: intakeAnswers.lthr_bike ? parseInt(intakeAnswers.lthr_bike) : null,
+    // LTHR resolution based on user's choice during intake:
+    //   'keep'   → use existing profile values, no test needed
+    //   'update' → use the new values they just typed in
+    //   'retest' → null out so backend triggers assessment week
+    //   no choice (new user) → use whatever they typed in (or null = test needed)
+    run_lthr: (() => {
+      const choice = intakeAnswers.lthr_choice;
+      if (choice === 'keep') return state.profile?.runLthr || null;
+      if (choice === 'retest') return null;
+      // 'update' or no choice (new user): use their typed value, fall back to profile if any
+      return intakeAnswers.lthr_run ? parseInt(intakeAnswers.lthr_run) : (state.profile?.runLthr || null);
+    })(),
+    bike_lthr: (() => {
+      const choice = intakeAnswers.lthr_choice;
+      if (choice === 'keep') return state.profile?.bikeLthr || null;
+      if (choice === 'retest') return null;
+      return intakeAnswers.lthr_bike ? parseInt(intakeAnswers.lthr_bike) : (state.profile?.bikeLthr || null);
+    })(),
     completed: true,
     updated_at: new Date().toISOString(),
   };
@@ -6922,9 +6958,28 @@ async function completeIntake() {
     return;
   }
 
-  // Also update state.profile with LTHR if provided so plan generation has access
-  if (payload.run_lthr) state.profile.runLthr = payload.run_lthr;
-  if (payload.bike_lthr) state.profile.bikeLthr = payload.bike_lthr;
+  // Also update state.profile with LTHR — if 'retest' was chosen, clear them so
+  // the assessment-week branch fires correctly. Otherwise sync the new values.
+  if (intakeAnswers.lthr_choice === 'retest') {
+    state.profile.runLthr = null;
+    state.profile.bikeLthr = null;
+    // Also clear them on the profiles row so other code paths see consistent state
+    try {
+      await sb.from('profiles').update({ run_lthr: null, bike_lthr: null }).eq('id', state.user.id);
+    } catch (e) { console.warn('[Stryxs] Failed to clear profile LTHR on retest:', e); }
+  } else {
+    if (payload.run_lthr) state.profile.runLthr = payload.run_lthr;
+    if (payload.bike_lthr) state.profile.bikeLthr = payload.bike_lthr;
+    // Also write the values into profiles table so they're authoritative
+    if (payload.run_lthr || payload.bike_lthr) {
+      try {
+        await sb.from('profiles').update({
+          run_lthr: payload.run_lthr,
+          bike_lthr: payload.bike_lthr,
+        }).eq('id', state.user.id);
+      } catch (e) { console.warn('[Stryxs] Failed to sync LTHR to profile:', e); }
+    }
+  }
 
   // BRANCH: if user chose to import a plan, show the import flow
   if (payload.plan_path === 'import_use' || payload.plan_path === 'import_adapt') {
@@ -10864,17 +10919,15 @@ async function saveAllSettings(silent = false) {
   _projectionsCacheTime = 0;
   try { localStorage.removeItem('stryxs_projections_cache'); } catch(e) {}
 
-  // ═══ AUTO-GENERATE PERIODIZED PLAN if user just entered LTHR ═══
+  // ═══ AUTO-GENERATE PERIODIZED PLAN if a stub plan exists and LTHR is now set ═══
   // Conditions:
   //   1. They have an active plan that was a STUB (awaiting LTHR)
-  //   2. They just entered both run_lthr AND bike_lthr (or run_lthr if not Friel persona)
-  //   3. The plan was saved with _awaiting_lthr=true
+  //   2. Current run_lthr AND bike_lthr (for Friel persona) are both set
+  // We don't gate on "just added" — fires whenever Settings save lands the user
+  // in a state where the stub can be replaced. Handles both first-time LTHR entry
+  // AND the case where LTHR was already in profile but intake was saved with nulls.
   try {
-    const oldRunLthr = oldProfile?.run_lthr || null;
-    const oldBikeLthr = oldProfile?.bike_lthr || null;
-    const lthrJustAdded = (!oldRunLthr && runLthr) || (!oldBikeLthr && bikeLthr);
-
-    if (lthrJustAdded && runLthr && bikeLthr) {
+    if (runLthr && bikeLthr) {
       const { data: activePlan } = await sb.from('training_plans')
         .select('id, plan_data, created_at')
         .eq('user_id', state.user.id)
@@ -10884,7 +10937,7 @@ async function saveAllSettings(silent = false) {
         .maybeSingle();
 
       if (activePlan?.plan_data?._awaiting_lthr) {
-        console.log('[Stryxs] LTHR entered + stub plan exists → auto-generating periodized week 1');
+        console.log('[Stryxs] Stub plan exists + LTHR available → auto-generating periodized week 1');
 
         // Generate week 1 of periodized plan starting on the original plan_start_date
         const planStartStr = activePlan.plan_data.plan_start_date;
