@@ -6299,11 +6299,71 @@ const intakeQuestions = [
       { value: 'half_marathon', emoji: '🏃', label: 'Half Marathon' },
       { value: '10k', emoji: '🏃', label: '10K' },
       { value: '5k', emoji: '🏃', label: '5K' },
+      { value: 'sprint_tri', emoji: '🏊', label: 'Sprint Tri' },
       { value: 'olympic_tri', emoji: '🏊', label: 'Olympic Tri' },
       { value: '70_3', emoji: '🚴', label: '70.3 / Half Ironman' },
       { value: 'ironman', emoji: '🏁', label: 'Ironman' },
-      { value: 'general', emoji: '💪', label: 'General fitness' },
+      { value: 'general', emoji: '💪', label: 'Fitness & Health' },
     ],
+  },
+  // ═══════════════════════════════════════════════════════════
+  // FITNESS & HEALTH-specific intake questions
+  // Only appear when goal_event === 'general'
+  // ═══════════════════════════════════════════════════════════
+  {
+    id: 'fh_primary_goal',
+    question: "What's your main focus?",
+    context: "Coach tailors the prescription to what you actually want.",
+    type: 'single',
+    options: [
+      { value: 'lose_weight', emoji: '⚖️', label: 'Lose weight / body composition' },
+      { value: 'build_aerobic', emoji: '🫁', label: 'Build aerobic fitness' },
+      { value: 'vo2_longevity', emoji: '❤️', label: 'VO2max + longevity' },
+      { value: 'general_health', emoji: '✨', label: 'General health & feel good' },
+      { value: 'sport_performance', emoji: '🏃', label: 'Sport performance (no race)' },
+    ],
+    relevant_when: (a) => a.goal_event === 'general',
+  },
+  {
+    id: 'fh_primary_sports',
+    question: "Which sports do you want to train?",
+    context: "Pick all that apply. Coach will work them into your plan.",
+    type: 'multi',
+    options: [
+      { value: 'run', emoji: '🏃', label: 'Running' },
+      { value: 'bike', emoji: '🚴', label: 'Cycling' },
+      { value: 'swim', emoji: '🏊', label: 'Swimming' },
+      { value: 'gym', emoji: '💪', label: 'Strength / gym only' },
+      { value: 'mixed', emoji: '🌀', label: "I'll let Coach decide" },
+    ],
+    relevant_when: (a) => a.goal_event === 'general',
+  },
+  {
+    id: 'fh_fitness_level',
+    question: "How would you describe your current fitness?",
+    context: "Coach calibrates the starting load. Be honest.",
+    type: 'single',
+    options: [
+      { value: 'sedentary', emoji: '🛋️', label: 'Sedentary — not training regularly' },
+      { value: 'beginner', emoji: '🌱', label: 'Active — some exercise but not structured' },
+      { value: 'intermediate', emoji: '💪', label: 'Fit — regular structured training' },
+      { value: 'advanced', emoji: '🔥', label: 'Very fit — consistent training for years' },
+    ],
+    relevant_when: (a) => a.goal_event === 'general',
+  },
+  {
+    id: 'fh_days_per_week',
+    question: "How many days per week can you train?",
+    context: "Be realistic. Coach builds around your real schedule.",
+    type: 'single',
+    options: [
+      { value: '3', emoji: '3️⃣', label: '3 days (minimum effective dose)' },
+      { value: '4', emoji: '4️⃣', label: '4 days' },
+      { value: '5', emoji: '5️⃣', label: '5 days' },
+      { value: '6', emoji: '6️⃣', label: '6 days' },
+      { value: '7', emoji: '7️⃣', label: '7 days (active recovery on light days)' },
+    ],
+    relevant_when: (a) => a.goal_event === 'general',
   },
   {
     id: 'race_date',
@@ -6311,6 +6371,7 @@ const intakeQuestions = [
     context: "Pick a date, or skip if you haven't signed up yet. Coach will build a rolling Base cycle now and switch to a full periodized plan when you set a date.",
     type: 'date',
     optional: true,
+    relevant_when: (a) => a.goal_event && a.goal_event !== 'general',
   },
   {
     id: 'experience_level',
@@ -6361,28 +6422,42 @@ const intakeQuestions = [
       { value: 'update', emoji: '✏️', label: 'Update values now' },
       { value: 'retest', emoji: '🎯', label: 'Re-test (assessment week)' },
     ],
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && (state.profile?.runLthr || state.profile?.bikeLthr),
+    // Show for racing personas always; for F&H only if VO2/longevity or sport_performance subgoal
+    relevant_when: (a) => {
+      const racingPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event);
+      const fhWantsLthr = a.goal_event === 'general' && ['vo2_longevity', 'sport_performance'].includes(a.fh_primary_goal);
+      const hasLthr = state.profile?.runLthr || state.profile?.bikeLthr;
+      return (racingPersona || fhWantsLthr) && hasLthr;
+    },
   },
   {
     id: 'lthr_run',
     question: "Do you know your run LTHR (lactate threshold heart rate)?",
-    context: "Friel methodology builds zones from your LTHR. If you've tested before, enter it. If not, skip — Coach will build a test into Week 1 of your plan.",
+    context: "Coach builds zones from your LTHR. If you've tested before, enter it. If not, skip — Coach will guide you.",
     type: 'number',
     placeholder: 'e.g. 175 (or skip)',
     min: 100, max: 220,
     optional: true,
-    // Show when: (no profile LTHR) OR (user chose "update")
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri', 'general'].includes(a.goal_event) && (!state.profile?.runLthr || a.lthr_choice === 'update'),
+    // Show for racing personas; for F&H only if relevant subgoal AND no profile LTHR (or chose update)
+    relevant_when: (a) => {
+      const racingPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event);
+      const fhWantsLthr = a.goal_event === 'general' && ['vo2_longevity', 'sport_performance'].includes(a.fh_primary_goal);
+      return (racingPersona || fhWantsLthr) && (!state.profile?.runLthr || a.lthr_choice === 'update');
+    },
   },
   {
     id: 'lthr_bike',
     question: "Do you know your bike LTHR?",
-    context: "Bike LTHR is usually 5-10 bpm lower than run LTHR. Skip if you haven't tested — Coach will guide you through it.",
+    context: "Bike LTHR is usually 5-10 bpm lower than run LTHR. Skip if you haven't tested.",
     type: 'number',
     placeholder: 'e.g. 165 (or skip)',
     min: 100, max: 220,
     optional: true,
-    relevant_when: (a) => ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event) && (!state.profile?.bikeLthr || a.lthr_choice === 'update'),
+    relevant_when: (a) => {
+      const racingPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(a.goal_event);
+      const fhWantsLthr = a.goal_event === 'general' && ['vo2_longevity', 'sport_performance'].includes(a.fh_primary_goal);
+      return (racingPersona || fhWantsLthr) && (!state.profile?.bikeLthr || a.lthr_choice === 'update');
+    },
   },
   {
     id: 'goal_time',
@@ -6395,6 +6470,7 @@ const intakeQuestions = [
     type: 'text',
     placeholder: (a) => goalTimePlaceholder(a.goal_event),
     optional: true,
+    relevant_when: (a) => a.goal_event && a.goal_event !== 'general',
   },
   {
     id: 'pb_5k',
@@ -6403,7 +6479,8 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 19:30',
     optional: true,
-    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman', 'general'].includes(a.goal_event),
+    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman'].includes(a.goal_event)
+      || (a.goal_event === 'general' && a.fh_primary_goal === 'sport_performance'),
   },
   {
     id: 'pb_10k',
@@ -6412,7 +6489,8 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 41:00',
     optional: true,
-    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman', 'general'].includes(a.goal_event),
+    condition: (a) => ['5k', '10k', 'half_marathon', 'marathon', 'olympic_tri', 'sprint_tri', '70_3', 'ironman'].includes(a.goal_event)
+      || (a.goal_event === 'general' && a.fh_primary_goal === 'sport_performance'),
   },
   {
     id: 'pb_half',
@@ -6421,7 +6499,8 @@ const intakeQuestions = [
     type: 'text',
     placeholder: 'e.g. 1:30:00',
     optional: true,
-    condition: (a) => ['half_marathon', 'marathon', '70_3', 'ironman', 'general'].includes(a.goal_event),
+    condition: (a) => ['half_marathon', 'marathon', '70_3', 'ironman'].includes(a.goal_event)
+      || (a.goal_event === 'general' && a.fh_primary_goal === 'sport_performance'),
   },
   {
     id: 'pb_marathon',
@@ -6900,6 +6979,14 @@ async function completeIntake() {
     pb_marathon: intakeAnswers.pb_marathon || null,
     last_race: intakeAnswers.last_race || null,
     goal_time: intakeAnswers.goal_time || null,
+    // Fitness & Health intake fields — passed to backend in memory.
+    // If DB doesn't have these columns the upsert will silently ignore unknown fields,
+    // but the in-memory payload still flows to the coach function.
+    fh_primary_goal: intakeAnswers.fh_primary_goal || null,
+    fh_primary_sports: intakeAnswers.fh_primary_sports || null,
+    fh_fitness_level: intakeAnswers.fh_fitness_level || null,
+    fh_days_per_week: intakeAnswers.fh_days_per_week || null,
+    available_days_count: intakeAnswers.fh_days_per_week || (intakeAnswers.available_days?.length || null),
     // LTHR resolution based on user's choice during intake:
     //   'keep'   → use existing profile values, no test needed
     //   'update' → use the new values they just typed in
@@ -6923,7 +7010,15 @@ async function completeIntake() {
   };
 
   updateProgress('Saving your profile…');
-  const { error } = await sb.from('athlete_intake').upsert(payload, { onConflict: 'user_id' });
+  // Strip fh_* and runtime-only fields before DB upsert (DB schema may not have them).
+  // Backend reads the in-memory payload directly via callCoach, so it still gets these values.
+  const dbPayload = { ...payload };
+  delete dbPayload.fh_primary_goal;
+  delete dbPayload.fh_primary_sports;
+  delete dbPayload.fh_fitness_level;
+  delete dbPayload.fh_days_per_week;
+  delete dbPayload.available_days_count;
+  const { error } = await sb.from('athlete_intake').upsert(dbPayload, { onConflict: 'user_id' });
   if (error) {
     clearTimeout(masterTimeout);
     window.removeEventListener('beforeunload', beforeUnloadHandler);
