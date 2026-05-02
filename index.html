@@ -6817,8 +6817,42 @@ function intakeBack() {
 
 function intakeSkip() {
   const q = intakeQuestions[intakeStep];
-  // Mark as empty/skipped
-  intakeAnswers[q.id] = '';
+
+  // ═══ PRESERVE TYPED VALUES ON SKIP ═══
+  // If user typed something then accidentally hit Skip, capture the value first.
+  // Only overwrite to empty if there's truly no value in the input field.
+  if (q.type === 'text' || q.type === 'number' || q.type === 'date' || q.type === 'weight') {
+    const input = document.getElementById('intakeInput');
+    if (input && input.value && input.value.trim()) {
+      // User typed something — preserve it instead of erasing
+      intakeAnswers[q.id] = input.value;
+    } else {
+      // Truly empty — mark as skipped
+      intakeAnswers[q.id] = '';
+    }
+  } else if (q.type === 'height') {
+    // Height has special inputs — preserve if user typed
+    const input = document.getElementById('intakeInput');
+    const ft = document.getElementById('intakeInputFt');
+    const inches = document.getElementById('intakeInputIn');
+    if (input?.value || ft?.value || inches?.value) {
+      // Use intakeNext capture logic
+      if (intakeAnswers.unit_preference === 'imperial' && (ft?.value || inches?.value)) {
+        intakeAnswers.height_ft = ft?.value || '';
+        intakeAnswers.height_in = inches?.value || '';
+        const totalIn = (parseFloat(ft?.value) || 0) * 12 + (parseFloat(inches?.value) || 0);
+        intakeAnswers.height = totalIn > 0 ? Math.round(totalIn * 2.54) : '';
+      } else if (input?.value) {
+        intakeAnswers.height = input.value;
+      }
+    } else {
+      intakeAnswers[q.id] = '';
+    }
+  } else {
+    // single/multi: if already has a value, keep it; else mark skipped
+    if (!intakeAnswers[q.id]) intakeAnswers[q.id] = '';
+  }
+
   const next = getNextRelevantStep(intakeStep, 1);
   if (next >= 0) {
     intakeStep = next;
@@ -7372,9 +7406,19 @@ async function renderCoachChat(el, intake) {
     </div>
   `;
 
-  // Scroll chat to bottom
+  // Scroll chat — if the latest message is long, anchor at its top; else scroll to bottom
   const chatEl = document.getElementById('chatMessages');
-  if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+  if (chatEl) {
+    const allMsgs = chatEl.querySelectorAll('.chat-msg');
+    const lastMsg = allMsgs[allMsgs.length - 1];
+    const lastMsgText = lastMsg?.textContent || '';
+    if (lastMsg && lastMsgText.length > 500) {
+      const offsetTop = lastMsg.offsetTop;
+      chatEl.scrollTop = Math.max(0, offsetTop - 16);
+    } else {
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+  }
 
   // Load Coach persona badge in background
   loadCoachPersonaBadge(intake);
@@ -7694,12 +7738,81 @@ async function sendChatMsg() {
 
     // Append reply
     msgs.innerHTML += renderMsg('coach', reply);
-    msgs.scrollTop = msgs.scrollHeight;
+
+    // ═══ SMART SCROLL ═══
+    // For long Coach messages (multi-paragraph plans, recaps, explanations), scroll to the
+    // TOP of the new message so the user reads top-to-bottom. For short responses,
+    // scroll to bottom as usual to keep the chat flow.
+    if (reply && reply.length > 500) {
+      // Long message — find the last message and scroll its top into view
+      const allMsgs = msgs.querySelectorAll('.chat-msg');
+      const lastMsg = allMsgs[allMsgs.length - 1];
+      if (lastMsg) {
+        // Scroll so the top of the new message aligns with the top of the visible area
+        const offsetTop = lastMsg.offsetTop;
+        msgs.scrollTo({ top: Math.max(0, offsetTop - 16), behavior: 'smooth' });
+      } else {
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+    } else {
+      msgs.scrollTop = msgs.scrollHeight;
+    }
 
     // Save coach msg
     await sb.from('coach_messages').insert({
       user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat',
     });
+
+    // ═══ DETECT "ALL GOOD" AFTER RECAP — TRIGGER REAL PLAN GENERATION ═══
+    // After import, Coach posts a recap message ("⚠️ IMPORTANT — read carefully... Did I get this right?").
+    // If the user replies with an acknowledgment ("all good", "yes", "looks good", etc.),
+    // we should ACTUALLY generate the next week of the plan (not just chat).
+    try {
+      const isAck = /^\s*(all good|all goof|all-good|allgood|looks good|sounds good|yes|yep|yeah|correct|perfect|right|good|ok|okay|continue|build|go|ready|let'?s go)\s*[!.]?\s*$/i.test(text);
+      if (isAck && activePlan?.plan_data?._imported_plan) {
+        // Check if the message just BEFORE this user msg was a recap or a "next week" trigger
+        const { data: lastMessages } = await sb.from('coach_messages')
+          .select('role, content, context_type')
+          .eq('user_id', state.user.id)
+          .order('created_at', { ascending: false })
+          .limit(4);
+        const justBeforeUser = lastMessages?.find(m => m.role === 'coach');
+        const wasRecap = justBeforeUser?.context_type === 'import_profile_recap'
+          || (justBeforeUser?.content || '').includes('Did I get this right')
+          || (justBeforeUser?.content || '').includes('all good and I\'ll keep building');
+
+        if (wasRecap) {
+          console.log('[Stryxs] User acknowledged recap — triggering real plan generation');
+          // Append a status message
+          msgs.innerHTML += `<div class="chat-msg" id="planBuildingMsg"><div class="msg-avatar">⚙️</div><div class="msg-bubble"><span style="opacity:0.7;">Building your next week of training and adding it to your calendar…</span></div></div>`;
+          msgs.scrollTop = msgs.scrollHeight;
+
+          try {
+            // Build next week — same flow as generateNextWeek but inline
+            await generateNextWeekFromAck(intake, activePlan);
+
+            const buildingMsg = document.getElementById('planBuildingMsg');
+            if (buildingMsg) buildingMsg.remove();
+
+            const successMsg = "Done. Next week is now in your calendar — head to the Plan tab to see it. I'll keep building week-by-week as you go.";
+            msgs.innerHTML += renderMsg('coach', successMsg);
+            await sb.from('coach_messages').insert({
+              user_id: state.user.id, role: 'coach', content: successMsg, context_type: 'general_chat',
+            });
+            msgs.scrollTop = msgs.scrollHeight;
+          } catch (planErr) {
+            console.error('[Stryxs] Plan build after ack failed:', planErr);
+            const buildingMsg = document.getElementById('planBuildingMsg');
+            if (buildingMsg) buildingMsg.remove();
+            const errMsg = `Couldn't build the next week automatically. You can try again from the Plan tab → Generate next week. Error: ${planErr.message || 'unknown'}`;
+            msgs.innerHTML += renderMsg('coach', errMsg);
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+        }
+      }
+    } catch (ackErr) {
+      console.warn('[Stryxs] Acknowledgment detection failed (non-fatal):', ackErr);
+    }
   } catch (err) {
     const thinking = document.getElementById('thinkingMsg');
     if (thinking) thinking.remove();
@@ -9082,6 +9195,80 @@ function setProgressSplitMetric(metric) {
 }
 
 // ─── Generate Next Week ───
+// Generate the next week from a chat acknowledgment ("all good" after recap).
+// This is a stripped-down variant of generateNextWeek that doesn't require button state
+// and respects the imported plan profile.
+async function generateNextWeekFromAck(intake, activePlan) {
+  if (!state.user) throw new Error('Not authenticated');
+
+  // Restore imported profile to intake for plan generation
+  if (activePlan?.plan_data?._plan_profile) {
+    intake._plan_profile = activePlan.plan_data._plan_profile;
+  }
+
+  // Find next Monday after the latest scheduled workout
+  const { data: latestPlanned } = await sb.from('planned_workouts')
+    .select('scheduled_date')
+    .eq('user_id', state.user.id)
+    .order('scheduled_date', { ascending: false })
+    .limit(1);
+
+  let nextStartStr;
+  if (latestPlanned && latestPlanned.length > 0) {
+    const lastDate = new Date(latestPlanned[0].scheduled_date + 'T12:00:00');
+    const nextStart = new Date(lastDate);
+    nextStart.setDate(lastDate.getDate() + 1);
+    const nextStartDow = nextStart.getDay();
+    if (nextStartDow !== 1) {
+      const daysToMon = nextStartDow === 0 ? 1 : (8 - nextStartDow);
+      nextStart.setDate(nextStart.getDate() + daysToMon);
+    }
+    nextStartStr = nextStart.toISOString().split('T')[0];
+  } else {
+    // No prior plan — start next Monday
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const dow = today.getDay();
+    const daysToMon = dow === 1 ? 0 : (dow === 0 ? 1 : 8 - dow);
+    const ns = new Date(today);
+    ns.setDate(today.getDate() + daysToMon);
+    nextStartStr = ns.toISOString().split('T')[0];
+  }
+
+  // Compute week number — for imported plans, increment from the imported current week
+  let nextWeekNumber = 2;
+  const importedCurrent = activePlan?.plan_data?._imported_current_week;
+  if (importedCurrent) {
+    nextWeekNumber = importedCurrent + 1;
+  }
+
+  const skeleton = activePlan?.plan_data?.skeleton || null;
+
+  // Generate the plan via Coach
+  const plan = await callCoach('generate_plan', {
+    intake,
+    weekNumber: nextWeekNumber,
+    skeleton,
+    recentWorkouts: [],
+  }, { timeoutMs: 90000 });
+
+  if (!plan || !plan.workouts || plan.workouts.length === 0) {
+    throw new Error('Coach returned an empty plan');
+  }
+
+  // Preserve the imported plan profile and current week marker
+  if (activePlan?.plan_data?._plan_profile) plan._plan_profile = activePlan.plan_data._plan_profile;
+  if (activePlan?.plan_data?._imported_plan) {
+    plan._imported_plan = true;
+    plan._imported_current_week = nextWeekNumber;
+    plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
+  }
+  if (skeleton) plan.skeleton = skeleton;
+
+  await savePlanToDb(plan, state.user.id, nextStartStr);
+  console.log('[Stryxs] Plan saved from ack — Week', nextWeekNumber, 'starting', nextStartStr);
+}
+
 async function generateNextWeek() {
   if (!state.user) return;
 
@@ -9163,7 +9350,23 @@ async function generateNextWeek() {
 
     const uniqueDays = new Set((allPlanned || []).map(p => p.scheduled_date));
     const existingWeeks = Math.ceil(uniqueDays.size / 7);
-    const nextWeekNumber = existingWeeks + 1;
+    let nextWeekNumber = existingWeeks + 1;
+
+    // 2b. Load active training_plan early so we can use its imported metadata for week-count
+    const { data: activePlan } = await sb.from('training_plans')
+      .select('plan_data')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // For imported plans, derive the week number from the stored profile, not from
+    // counting session weeks. If user is in Week 28 of their plan, next week is 29 (etc.)
+    if (activePlan?.plan_data?._imported_plan && activePlan?.plan_data?._imported_current_week) {
+      nextWeekNumber = activePlan.plan_data._imported_current_week + existingWeeks;
+      console.log('[Stryxs] Imported plan — next week is', nextWeekNumber);
+    }
 
     // 3. intake already loaded above (from the LTHR guard) — reuse it
 
@@ -9189,14 +9392,7 @@ async function generateNextWeek() {
       };
     });
 
-    // 4b. Get the active training_plan to extract its skeleton (if it has one)
-    const { data: activePlan } = await sb.from('training_plans')
-      .select('plan_data')
-      .eq('user_id', state.user.id)
-      .eq('active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 4b. Use activePlan loaded earlier
     const skeleton = activePlan?.plan_data?.skeleton || null;
     const importedProfile = activePlan?.plan_data?._plan_profile || null;
     if (importedProfile) {
@@ -9214,6 +9410,11 @@ async function generateNextWeek() {
 
     // 6. Save plan starting from nextStart (not today)
     if (importedProfile) plan._plan_profile = importedProfile; // PRESERVE across weeks
+    if (activePlan?.plan_data?._imported_plan) {
+      plan._imported_plan = true;
+      plan._imported_current_week = nextWeekNumber;
+      plan._imported_total_weeks = activePlan.plan_data._imported_total_weeks || null;
+    }
     await savePlanToDb(plan, state.user.id, nextStartStr);
 
     toast(`Week ${nextWeekNumber} ready!`);
@@ -9532,6 +9733,51 @@ async function finalizeImportedPlan(parsedPlan, intake) {
   el.innerHTML = `<div class="loading"><div class="spinner"></div>Saving plan to your calendar...</div>`;
 
   try {
+    // ═══ AUTO-FILL INTAKE FROM EXTRACTED PROFILE ═══
+    // The plan profile likely contains LTHR, CSS, current week, race info that the
+    // user already provided via the import. Pull these into athlete_intake so the
+    // rest of the app (LTHR-required gates, zone math, week numbering) works.
+    const profile = parsedPlan?._plan_profile;
+    if (profile) {
+      const intakeUpdate = {};
+      if (profile.training_zones?.run_lthr && !intake.run_lthr) {
+        intakeUpdate.run_lthr = profile.training_zones.run_lthr;
+        intake.run_lthr = profile.training_zones.run_lthr;
+      }
+      if (profile.training_zones?.bike_lthr && !intake.bike_lthr) {
+        intakeUpdate.bike_lthr = profile.training_zones.bike_lthr;
+        intake.bike_lthr = profile.training_zones.bike_lthr;
+      }
+      if (profile.training_zones?.swim_css_per_100m && !intake.swim_css) {
+        intakeUpdate.swim_css = profile.training_zones.swim_css_per_100m;
+        intake.swim_css = profile.training_zones.swim_css_per_100m;
+      }
+      // If the profile says athlete is at Week 28 of an 80-week plan, reflect that
+      if (profile.athlete_profile?.current_week_in_plan) {
+        intakeUpdate.imported_current_week = profile.athlete_profile.current_week_in_plan;
+        intake.imported_current_week = profile.athlete_profile.current_week_in_plan;
+      }
+      if (profile.athlete_profile?.total_plan_weeks) {
+        intakeUpdate.imported_total_weeks = profile.athlete_profile.total_plan_weeks;
+        intake.imported_total_weeks = profile.athlete_profile.total_plan_weeks;
+      }
+
+      if (Object.keys(intakeUpdate).length > 0) {
+        try {
+          // Strip fields not in the schema before upserting
+          const dbSafeUpdate = { ...intakeUpdate };
+          delete dbSafeUpdate.imported_current_week;
+          delete dbSafeUpdate.imported_total_weeks;
+          if (Object.keys(dbSafeUpdate).length > 0) {
+            await sb.from('athlete_intake').update(dbSafeUpdate).eq('user_id', state.user.id);
+            console.log('[Stryxs] Auto-filled intake from profile:', Object.keys(dbSafeUpdate));
+          }
+        } catch (e) {
+          console.warn('[Stryxs] Could not auto-fill intake from profile:', e);
+        }
+      }
+    }
+
     // Generate skeleton too so the plan has a periodization arc going forward
     let skeleton = null;
     try {
@@ -9540,6 +9786,13 @@ async function finalizeImportedPlan(parsedPlan, intake) {
       console.error('Skeleton generation failed (non-blocking):', skErr);
     }
     if (skeleton) parsedPlan.skeleton = skeleton;
+
+    // Mark the plan as imported so renderPlan/renderCoach skip starter-week messaging.
+    parsedPlan._imported_plan = true;
+    if (profile?.athlete_profile?.current_week_in_plan) {
+      parsedPlan._imported_current_week = profile.athlete_profile.current_week_in_plan;
+      parsedPlan._imported_total_weeks = profile.athlete_profile.total_plan_weeks || null;
+    }
 
     await savePlanToDb(parsedPlan, state.user.id);
 
@@ -10159,11 +10412,7 @@ async function renderPlan() {
     nextWeekStartLabel = nextStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
-  // Lock next-week generation if LTHR is missing for Friel personas (the periodized plan needs zones)
-  const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
-  const planLockedByLthr = isFrielPersona && (!intake?.run_lthr || !intake?.bike_lthr);
-
-  // Load active training plan to extract skeleton + week info
+  // Load active training plan to extract skeleton + week info (needed for LTHR gate fallback)
   const { data: activePlan } = await sb.from('training_plans')
     .select('plan_data, created_at')
     .eq('user_id', state.user.id)
@@ -10172,8 +10421,27 @@ async function renderPlan() {
     .limit(1)
     .maybeSingle();
 
+  // Lock next-week generation if LTHR is missing for Friel personas (the periodized plan needs zones)
+  // EXCEPTION: imported plans whose profile contains zones — those zones are baked into the plan
+  // and should not require re-entry in Settings.
+  const isFrielPersona = ['ironman', '70_3', 'olympic_tri', 'sprint_tri'].includes(intake?.goal_event);
+  let hasLthrFromIntake = !!(intake?.run_lthr && intake?.bike_lthr);
+  // Check imported profile zones as fallback
+  if (!hasLthrFromIntake) {
+    const _planData = activePlan?.plan_data;
+    const _profile = _planData?._plan_profile;
+    if (_profile?.training_zones?.run_lthr && _profile?.training_zones?.bike_lthr) {
+      hasLthrFromIntake = true;
+    }
+  }
+  const planLockedByLthr = isFrielPersona && !hasLthrFromIntake;
+
   const skeleton = activePlan?.plan_data?.skeleton || null;
-  const totalWeeks = skeleton?.length || null;
+  // Total weeks: prefer skeleton length, but if user imported their plan use the imported total weeks
+  let totalWeeks = skeleton?.length || null;
+  const _importedTotal = activePlan?.plan_data?._imported_total_weeks || null;
+  if (!totalWeeks && _importedTotal) totalWeeks = _importedTotal;
+  if (_importedTotal && totalWeeks && _importedTotal > totalWeeks) totalWeeks = _importedTotal;
   // The actual date the periodized plan begins (next Monday after signup, OR today if signed up Monday)
   const planStartDateStr = activePlan?.plan_data?.plan_start_date || null;
 
@@ -10188,7 +10456,33 @@ async function renderPlan() {
   let starterDaysRemaining = 0;
   let starterMissingLthr = false;
 
-  if (activePlan && planStartDateStr) {
+  // ═══ IMPORTED PLAN OVERRIDE ═══
+  // If the user imported their plan, they're already in some specific week of an
+  // existing program. Skip starter-week messaging entirely and use the stored
+  // current_week from the profile (e.g., "Week 28 of 80").
+  const isImportedPlan = !!(activePlan?._imported_plan || activePlan?.plan_data?._imported_plan);
+  const importedCurrentWeek = activePlan?._imported_current_week
+    || activePlan?.plan_data?._imported_current_week
+    || null;
+  const importedTotalWeeks = activePlan?._imported_total_weeks
+    || activePlan?.plan_data?._imported_total_weeks
+    || null;
+
+  if (isImportedPlan) {
+    currentState = 'periodized';
+    currentWeekIndex = importedCurrentWeek || 1;
+    if (skeleton && skeleton[currentWeekIndex - 1]) {
+      currentWeekInfo = skeleton[currentWeekIndex - 1];
+    } else if (activePlan?.plan_data?.phase) {
+      // Fallback — fabricate a minimal week info from the plan's phase
+      currentWeekInfo = {
+        phase: activePlan.plan_data.phase,
+        focus: activePlan.plan_data.phase_description || '',
+        is_deload: false,
+        target_volume_hours: null,
+      };
+    }
+  } else if (activePlan && planStartDateStr) {
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     const planStart = new Date(planStartDateStr + 'T12:00:00');
