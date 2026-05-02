@@ -4122,6 +4122,8 @@ async function doLogout() {
   await sb.auth.signOut();
   state.user = null; state.workouts = [];
   state.profile = { runLthr: null, bikeLthr: null };
+  // Reset session flags so the next sign-in gets fresh first-load behavior
+  window._stryxsCoachLoadedThisSession = false;
   showLanding(); navigate('landing');
 }
 
@@ -7406,17 +7408,27 @@ async function renderCoachChat(el, intake) {
     </div>
   `;
 
-  // Scroll chat — if the latest message is long, anchor at its top; else scroll to bottom
+  // Scroll chat —
+  //   • First time the user opens Coach in this session: scroll to TOP of conversation
+  //     so they see the welcome/recap from the beginning.
+  //   • Subsequent renders: if the latest message is long, anchor at its top so they
+  //     can read top-to-bottom. Else scroll to bottom for normal chat flow.
   const chatEl = document.getElementById('chatMessages');
   if (chatEl) {
-    const allMsgs = chatEl.querySelectorAll('.chat-msg');
-    const lastMsg = allMsgs[allMsgs.length - 1];
-    const lastMsgText = lastMsg?.textContent || '';
-    if (lastMsg && lastMsgText.length > 500) {
-      const offsetTop = lastMsg.offsetTop;
-      chatEl.scrollTop = Math.max(0, offsetTop - 16);
+    if (!window._stryxsCoachLoadedThisSession) {
+      // First load this session — show conversation from the start
+      chatEl.scrollTop = 0;
+      window._stryxsCoachLoadedThisSession = true;
     } else {
-      chatEl.scrollTop = chatEl.scrollHeight;
+      const allMsgs = chatEl.querySelectorAll('.chat-msg');
+      const lastMsg = allMsgs[allMsgs.length - 1];
+      const lastMsgText = lastMsg?.textContent || '';
+      if (lastMsg && lastMsgText.length > 500) {
+        const offsetTop = lastMsg.offsetTop;
+        chatEl.scrollTop = Math.max(0, offsetTop - 16);
+      } else {
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
     }
   }
 
@@ -7763,38 +7775,36 @@ async function sendChatMsg() {
       user_id: state.user.id, role: 'coach', content: reply, context_type: 'general_chat',
     });
 
-    // ═══ DETECT "ALL GOOD" AFTER RECAP — TRIGGER REAL PLAN GENERATION ═══
-    // After import, Coach posts a recap message ("⚠️ IMPORTANT — read carefully... Did I get this right?").
-    // If the user replies with an acknowledgment ("all good", "yes", "looks good", etc.),
-    // we should ACTUALLY generate the next week of the plan (not just chat).
+    // ═══ ACK DETECTION (FALLBACK SAFETY NET) ═══
+    // After import, we auto-build the next week immediately. But if the auto-build failed
+    // (network, timeout, etc.) OR the user wants to trigger the next-next week from chat,
+    // detect a positive reply and fire generateNextWeekFromAck.
     try {
-      const isAck = /^\s*(all good|all goof|all-good|allgood|looks good|sounds good|yes|yep|yeah|correct|perfect|right|good|ok|okay|continue|build|go|ready|let'?s go)\s*[!.]?\s*$/i.test(text);
-      if (isAck && activePlan?.plan_data?._imported_plan) {
-        // Check if the message just BEFORE this user msg was a recap or a "next week" trigger
+      // Loose ack regex — matches short positive replies up to ~30 chars
+      const isShortPositive = text.length <= 50 && /\b(all good|allgood|looks good|sounds good|yes|yep|yeah|correct|perfect|right|continue|build( it)?|go|ready|let'?s go|next week|generate)\b/i.test(text);
+      if (isShortPositive && activePlan?.plan_data?._imported_plan) {
         const { data: lastMessages } = await sb.from('coach_messages')
           .select('role, content, context_type')
           .eq('user_id', state.user.id)
           .order('created_at', { ascending: false })
           .limit(4);
         const justBeforeUser = lastMessages?.find(m => m.role === 'coach');
-        const wasRecap = justBeforeUser?.context_type === 'import_profile_recap'
+        const recapContexts = ['import_profile_recap', 'import_next_week_built', 'import_next_week_manual'];
+        const wasRecapOrFallback = recapContexts.includes(justBeforeUser?.context_type)
           || (justBeforeUser?.content || '').includes('Did I get this right')
-          || (justBeforeUser?.content || '').includes('all good and I\'ll keep building');
+          || (justBeforeUser?.content || '').includes('Generate next week →');
 
-        if (wasRecap) {
-          console.log('[Stryxs] User acknowledged recap — triggering real plan generation');
-          // Append a status message
-          msgs.innerHTML += `<div class="chat-msg" id="planBuildingMsg"><div class="msg-avatar">⚙️</div><div class="msg-bubble"><span style="opacity:0.7;">Building your next week of training and adding it to your calendar…</span></div></div>`;
+        if (wasRecapOrFallback) {
+          console.log('[Stryxs] User acknowledged — building next week from chat');
+          msgs.innerHTML += `<div class="chat-msg" id="planBuildingMsg"><div class="msg-avatar">⚙️</div><div class="msg-bubble"><span style="opacity:0.7;">Building the next week and adding it to your calendar…</span></div></div>`;
           msgs.scrollTop = msgs.scrollHeight;
 
           try {
-            // Build next week — same flow as generateNextWeek but inline
             await generateNextWeekFromAck(intake, activePlan);
-
             const buildingMsg = document.getElementById('planBuildingMsg');
             if (buildingMsg) buildingMsg.remove();
 
-            const successMsg = "Done. Next week is now in your calendar — head to the Plan tab to see it. I'll keep building week-by-week as you go.";
+            const successMsg = "Done. Next week is now in your calendar — head to the Plan tab to see it.";
             msgs.innerHTML += renderMsg('coach', successMsg);
             await sb.from('coach_messages').insert({
               user_id: state.user.id, role: 'coach', content: successMsg, context_type: 'general_chat',
@@ -7804,7 +7814,7 @@ async function sendChatMsg() {
             console.error('[Stryxs] Plan build after ack failed:', planErr);
             const buildingMsg = document.getElementById('planBuildingMsg');
             if (buildingMsg) buildingMsg.remove();
-            const errMsg = `Couldn't build the next week automatically. You can try again from the Plan tab → Generate next week. Error: ${planErr.message || 'unknown'}`;
+            const errMsg = `Couldn't build the next week automatically. Try the Plan tab → "Generate next week" button. Error: ${planErr.message || 'unknown'}`;
             msgs.innerHTML += renderMsg('coach', errMsg);
             msgs.scrollTop = msgs.scrollHeight;
           }
@@ -9749,28 +9759,38 @@ async function finalizeImportedPlan(parsedPlan, intake) {
         intake.bike_lthr = profile.training_zones.bike_lthr;
       }
       if (profile.training_zones?.swim_css_per_100m && !intake.swim_css) {
-        intakeUpdate.swim_css = profile.training_zones.swim_css_per_100m;
+        // swim_css isn't a DB column yet — keep it in-memory only on intake for plan generation
         intake.swim_css = profile.training_zones.swim_css_per_100m;
       }
       // If the profile says athlete is at Week 28 of an 80-week plan, reflect that
       if (profile.athlete_profile?.current_week_in_plan) {
-        intakeUpdate.imported_current_week = profile.athlete_profile.current_week_in_plan;
         intake.imported_current_week = profile.athlete_profile.current_week_in_plan;
       }
       if (profile.athlete_profile?.total_plan_weeks) {
-        intakeUpdate.imported_total_weeks = profile.athlete_profile.total_plan_weeks;
         intake.imported_total_weeks = profile.athlete_profile.total_plan_weeks;
       }
 
       if (Object.keys(intakeUpdate).length > 0) {
         try {
-          // Strip fields not in the schema before upserting
-          const dbSafeUpdate = { ...intakeUpdate };
-          delete dbSafeUpdate.imported_current_week;
-          delete dbSafeUpdate.imported_total_weeks;
+          // Allowlist of safe DB columns — anything not in this list gets stripped to avoid 400s
+          const SAFE_INTAKE_COLUMNS = new Set([
+            'run_lthr', 'bike_lthr', 'goal_event', 'race_date', 'experience_level',
+            'race_experience', 'current_weekly_hours', 'preferred_long_day',
+            'available_days', 'sex', 'age', 'weight_kg', 'height_cm', 'unit_preference',
+            'goal_time', 'pb_5k', 'pb_10k', 'pb_half', 'pb_marathon', 'last_race',
+            'injuries', 'has_pool_access', 'has_bike_trainer', 'plan_path', 'completed',
+          ]);
+          const dbSafeUpdate = {};
+          for (const k of Object.keys(intakeUpdate)) {
+            if (SAFE_INTAKE_COLUMNS.has(k)) dbSafeUpdate[k] = intakeUpdate[k];
+          }
           if (Object.keys(dbSafeUpdate).length > 0) {
-            await sb.from('athlete_intake').update(dbSafeUpdate).eq('user_id', state.user.id);
-            console.log('[Stryxs] Auto-filled intake from profile:', Object.keys(dbSafeUpdate));
+            const { error: upErr } = await sb.from('athlete_intake').update(dbSafeUpdate).eq('user_id', state.user.id);
+            if (upErr) {
+              console.warn('[Stryxs] Auto-fill update failed (non-fatal):', upErr);
+            } else {
+              console.log('[Stryxs] Auto-filled intake from profile:', Object.keys(dbSafeUpdate));
+            }
           }
         } catch (e) {
           console.warn('[Stryxs] Could not auto-fill intake from profile:', e);
@@ -9849,6 +9869,47 @@ async function finalizeImportedPlan(parsedPlan, intake) {
           });
         }
       } catch (e) { console.error('[Stryxs] Recap message failed:', e); }
+    }
+
+    // ═══ AUTO-BUILD NEXT WEEK ═══
+    // Don't wait for the user to say "all good" — just build the next week immediately.
+    // The recap is informational. If the user wants to correct something, they can tell
+    // Coach via chat afterward and we'll regenerate. This eliminates the brittle "did the
+    // ack regex fire" class of bugs.
+    if (parsedPlan._imported_plan && parsedPlan._plan_profile) {
+      try {
+        // Reload the active plan we just saved to pull all metadata
+        const { data: justSaved } = await sb.from('training_plans')
+          .select('plan_data')
+          .eq('user_id', state.user.id)
+          .eq('active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (justSaved?.plan_data) {
+          await generateNextWeekFromAck(intake, justSaved);
+          // Post a Coach message announcing the next week is in the calendar
+          const nextWeekMsg = "I've also added the next week to your calendar — head to the Plan tab to see it. After you finish a workout, log it via Strava (linked in Settings) and I'll adjust upcoming weeks based on how you're handling the load.\n\nAnything in the recap above wrong? Reply here and I'll fix it.";
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: nextWeekMsg,
+            context_type: 'import_next_week_built',
+          });
+        }
+      } catch (autoBuildErr) {
+        console.error('[Stryxs] Auto-build next week failed (non-fatal — user can build manually):', autoBuildErr);
+        // Post a fallback message so user knows to build manually
+        try {
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: "Your first week is ready in the Plan tab. To build the next week, head over there and tap 'Generate next week →'. Anything in the recap above wrong? Reply here and I'll fix it.",
+            context_type: 'import_next_week_manual',
+          });
+        } catch (_) {}
+      }
     }
 
     toast('Plan imported successfully');
