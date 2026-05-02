@@ -7483,6 +7483,14 @@ async function regeneratePlanFromReactive(btn) {
       .maybeSingle();
     let skeleton = existingPlan?.plan_data?.skeleton || null;
     let storedPlanStartDate = existingPlan?.plan_data?.plan_start_date || null;
+    // ═══ IMPORTED PLAN PROFILE (if user imported their plan) ═══
+    // Pulling the profile from the stored plan and putting it back on intake so
+    // the next call to generate_plan respects the original imported structure.
+    const importedProfile = existingPlan?.plan_data?._plan_profile || null;
+    if (importedProfile) {
+      intake._plan_profile = importedProfile;
+      console.log('[Stryxs] Restored imported plan profile from stored plan_data');
+    }
 
     // If no skeleton, regenerate one
     if (!skeleton) {
@@ -7548,6 +7556,7 @@ async function regeneratePlanFromReactive(btn) {
     const plan = await callCoach('generate_plan', { intake, weekNumber, skeleton, recentWorkouts: [] });
     if (skeleton) plan.skeleton = skeleton;
     plan.plan_start_date = storedPlanStartDate || regenStartDate; // preserve original anchor
+    if (importedProfile) plan._plan_profile = importedProfile; // PRESERVE the imported profile across regenerations
 
     await savePlanToDb(plan, state.user.id, regenStartDate);
 
@@ -7637,6 +7646,19 @@ async function sendChatMsg() {
     // Get context: profile, this week's plan, recent completed workouts
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
     const recent = state.workouts.slice(-5).reverse();
+
+    // ═══ Pull imported plan profile (if user imported their plan) ═══
+    // This lets Coach answer questions about the plan structure and accept corrections.
+    const { data: activePlan } = await sb.from('training_plans')
+      .select('plan_data')
+      .eq('user_id', state.user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (activePlan?.plan_data?._plan_profile && intake) {
+      intake._plan_profile = activePlan.plan_data._plan_profile;
+    }
 
     // Get this week's planned workouts (and a bit beyond for "what's tomorrow/next" questions)
     const todayDate = new Date();
@@ -9176,6 +9198,11 @@ async function generateNextWeek() {
       .limit(1)
       .maybeSingle();
     const skeleton = activePlan?.plan_data?.skeleton || null;
+    const importedProfile = activePlan?.plan_data?._plan_profile || null;
+    if (importedProfile) {
+      intake._plan_profile = importedProfile;
+      console.log('[Stryxs] Next-week generation: restored imported plan profile');
+    }
 
     // 5. Generate next week plan via Coach (passing skeleton if available)
     const plan = await callCoach('generate_plan', {
@@ -9186,6 +9213,7 @@ async function generateNextWeek() {
     });
 
     // 6. Save plan starting from nextStart (not today)
+    if (importedProfile) plan._plan_profile = importedProfile; // PRESERVE across weeks
     await savePlanToDb(plan, state.user.id, nextStartStr);
 
     toast(`Week ${nextWeekNumber} ready!`);
@@ -9316,6 +9344,19 @@ function showImportReviewModal(parsedPlan, review, intake) {
   };
   const color = verdictColors[review.verdict] || '#fbbf24';
 
+  // Stash the parsedPlan, review, and intake on window so the checkbox handlers can access them
+  // without bloating the inline onclick attributes
+  window._importReviewState = { parsedPlan, review, intake };
+
+  const adjustmentsHtml = (review.suggested_adjustments && review.suggested_adjustments.length > 0)
+    ? review.suggested_adjustments.map((a, i) => `
+        <label style="display: flex; gap: 10px; align-items: flex-start; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;">
+          <input type="checkbox" id="adj-${i}" checked style="margin-top: 2px; flex-shrink: 0; width: 18px; height: 18px; cursor: pointer; accent-color: ${color};" onchange="updateImportApplyButton()">
+          <span style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">${a}</span>
+        </label>
+      `).join('')
+    : '';
+
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🔍</div>
@@ -9341,37 +9382,121 @@ function showImportReviewModal(parsedPlan, review, intake) {
 
       ${review.suggested_adjustments && review.suggested_adjustments.length > 0 ? `
         <div style="margin-bottom: 18px;">
-          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Suggested adjustments:</div>
-          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
-            ${review.suggested_adjustments.map(a => `<li style="margin-bottom: 4px;">${a}</li>`).join('')}
-          </ul>
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Suggested adjustments — pick which to apply:</div>
+          <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 12px;">All checked by default. Uncheck any you don't want.</div>
+          ${adjustmentsHtml}
+          <div style="display: flex; gap: 6px; margin-top: 6px;">
+            <button class="btn ghost" style="font-size: 12px; padding: 6px 10px;" onclick="setAllImportAdjustments(true)">Check all</button>
+            <button class="btn ghost" style="font-size: 12px; padding: 6px 10px;" onclick="setAllImportAdjustments(false)">Uncheck all</button>
+          </div>
         </div>
       ` : ''}
 
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px;">
         ${review.suggested_adjustments && review.suggested_adjustments.length > 0 ? `
-          <button class="btn" style="flex: 1; min-width: 160px; background: var(--accent);" onclick='applyImportAdjustments(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(review).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
-            🔧 Apply Coach's adjustments
+          <button class="btn" id="importApplyBtn" style="flex: 1; min-width: 200px; background: var(--accent);" onclick="applySelectedImportAdjustments()">
+            🔧 Apply selected adjustments
           </button>
-          <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
+          <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(window._importReviewState.parsedPlan, window._importReviewState.intake)'>
             Keep my plan as-is
           </button>
         ` : `
-          <button class="btn" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
+          <button class="btn" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(window._importReviewState.parsedPlan, window._importReviewState.intake)'>
             ✓ Use the plan as-is
           </button>
         `}
-        <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick="discardImportAndBuildNew(${JSON.stringify(intake).replace(/'/g, "&#39;")})">
+        <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick='discardImportAndBuildNew(window._importReviewState.intake)'>
           Build a fresh plan instead
         </button>
       </div>
       ${review.suggested_adjustments && review.suggested_adjustments.length > 0 ? `
         <p style="margin-top: 14px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
-          "Apply" lets Coach modify the plan to align with the methodology. You can still ask Coach to reverse specific changes after.
+          Coach modifies only the changes you check. Uncheck the ones you disagree with — they'll be skipped.
         </p>
       ` : ''}
     </div>
   `;
+}
+
+// Toggle all adjustment checkboxes
+function setAllImportAdjustments(checked) {
+  const review = window._importReviewState?.review;
+  if (!review?.suggested_adjustments) return;
+  for (let i = 0; i < review.suggested_adjustments.length; i++) {
+    const cb = document.getElementById(`adj-${i}`);
+    if (cb) cb.checked = checked;
+  }
+  updateImportApplyButton();
+}
+
+// Update the apply button label based on how many checkboxes are ticked
+function updateImportApplyButton() {
+  const btn = document.getElementById('importApplyBtn');
+  if (!btn) return;
+  const review = window._importReviewState?.review;
+  if (!review?.suggested_adjustments) return;
+  let count = 0;
+  for (let i = 0; i < review.suggested_adjustments.length; i++) {
+    const cb = document.getElementById(`adj-${i}`);
+    if (cb && cb.checked) count++;
+  }
+  if (count === 0) {
+    btn.textContent = 'No adjustments selected — use plan as-is';
+    btn.style.background = '';
+    btn.style.opacity = '0.7';
+  } else if (count === review.suggested_adjustments.length) {
+    btn.textContent = `🔧 Apply all ${count} adjustments`;
+    btn.style.background = 'var(--accent)';
+    btn.style.opacity = '1';
+  } else {
+    btn.textContent = `🔧 Apply ${count} of ${review.suggested_adjustments.length} adjustments`;
+    btn.style.background = 'var(--accent)';
+    btn.style.opacity = '1';
+  }
+}
+
+// Apply only the checked adjustments
+async function applySelectedImportAdjustments() {
+  const state = window._importReviewState;
+  if (!state) return;
+  const { parsedPlan, review, intake } = state;
+
+  // Collect checked adjustments
+  const selected = [];
+  for (let i = 0; i < review.suggested_adjustments.length; i++) {
+    const cb = document.getElementById(`adj-${i}`);
+    if (cb && cb.checked) selected.push(review.suggested_adjustments[i]);
+  }
+
+  // If user unchecked everything, just import as-is
+  if (selected.length === 0) {
+    await finalizeImportedPlan(parsedPlan, intake);
+    return;
+  }
+
+  const el = document.getElementById('coachContent');
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is applying ${selected.length} adjustment${selected.length === 1 ? '' : 's'}…</div>`;
+
+  try {
+    const adjustedPlan = await callCoach('apply_import_adjustments', {
+      importedPlan: parsedPlan,
+      adjustments: selected,
+      intake,
+    });
+
+    if (!adjustedPlan || !adjustedPlan.workouts || adjustedPlan.workouts.length === 0) {
+      throw new Error("Adjustment failed — falling back to plan as-is.");
+    }
+
+    // Preserve the imported profile
+    if (parsedPlan._plan_profile) adjustedPlan._plan_profile = parsedPlan._plan_profile;
+
+    await finalizeImportedPlan(adjustedPlan, intake);
+  } catch (err) {
+    console.error('[Stryxs] Apply selected adjustments failed:', err);
+    toast('Could not apply adjustments — keeping plan as-is. ' + err.message);
+    await finalizeImportedPlan(parsedPlan, intake);
+  }
 }
 
 // Apply Coach's suggested adjustments to the imported plan
@@ -9389,6 +9514,9 @@ async function applyImportAdjustments(parsedPlan, review, intake) {
     if (!adjustedPlan || !adjustedPlan.workouts || adjustedPlan.workouts.length === 0) {
       throw new Error("Adjustment failed — falling back to plan as-is.");
     }
+
+    // Preserve imported profile across adjustments
+    if (parsedPlan._plan_profile) adjustedPlan._plan_profile = parsedPlan._plan_profile;
 
     await finalizeImportedPlan(adjustedPlan, intake);
   } catch (err) {
@@ -9448,6 +9576,26 @@ async function finalizeImportedPlan(parsedPlan, intake) {
           context_type: 'missing_info_request',
         });
       } catch (e) { console.error('[Stryxs] Missing-info msg failed:', e); }
+    }
+
+    // ═══ "DID I GET EVERYTHING?" RECAP ═══
+    // Post a Coach message showing what was extracted from the imported plan, so
+    // the user can verify and correct anything wrong via chat reply.
+    if (parsedPlan._plan_profile) {
+      try {
+        const recapMsg = await callCoach('build_profile_recap_message', {
+          profile: parsedPlan._plan_profile,
+          intake,
+        });
+        if (recapMsg) {
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: recapMsg,
+            context_type: 'import_profile_recap',
+          });
+        }
+      } catch (e) { console.error('[Stryxs] Recap message failed:', e); }
     }
 
     toast('Plan imported successfully');
@@ -11140,11 +11288,13 @@ async function saveAllSettings(silent = false) {
         // Generate week 1 of periodized plan starting on the original plan_start_date
         const planStartStr = activePlan.plan_data.plan_start_date;
         const skeleton = activePlan.plan_data.skeleton || null;
+        const importedProfile = activePlan.plan_data._plan_profile || null;
 
         toast('LTHR saved — building your periodized plan…');
 
         // Get fresh intake (includes LTHR we just saved)
         const { data: freshIntake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+        if (importedProfile) freshIntake._plan_profile = importedProfile;
 
         const periodizedPlan = await callCoach('generate_plan', {
           intake: freshIntake,
@@ -11154,6 +11304,7 @@ async function saveAllSettings(silent = false) {
 
         if (periodizedPlan && periodizedPlan.workouts && periodizedPlan.workouts.length > 0) {
           if (skeleton) periodizedPlan.skeleton = skeleton;
+          if (importedProfile) periodizedPlan._plan_profile = importedProfile;
           await savePlanToDb(periodizedPlan, state.user.id, planStartStr);
           console.log('[Stryxs] Periodized plan generated + saved post-LTHR');
 
