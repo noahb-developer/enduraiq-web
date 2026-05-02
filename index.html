@@ -15,6 +15,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- pdfjs-dist for client-side PDF text extraction (Mozilla's official, browser-mature) -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js"></script>
+<!-- mammoth.js for .docx text extraction (lightweight, browser-friendly) -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
 <script>
   // Configure pdfjs worker (required for parsing). Loaded on-demand only when user uploads.
   if (typeof pdfjsLib !== 'undefined') {
@@ -3957,9 +3959,9 @@ body.on-auth .container {
       <button class="modal-close" onclick="closeImportModal()">×</button>
     </div>
     <div class="modal-body">
-      <p style="margin-bottom: 14px; color: var(--text-dim); font-size: 14px; line-height: 1.55;">Upload a PDF or paste your existing training plan below. Coach will structure it into your calendar — works with plans from coaches, training apps, or AI.</p>
+      <p style="margin-bottom: 14px; color: var(--text-dim); font-size: 14px; line-height: 1.55;">Upload a file or paste your existing training plan below. Coach will structure it into your calendar — works with plans from coaches, training apps, or AI.</p>
 
-      <!-- ═══ PDF DRAG-DROP UPLOAD ═══ -->
+      <!-- ═══ FILE DRAG-DROP UPLOAD ═══ -->
       <div id="importPdfDropZone"
            ondragover="event.preventDefault(); this.classList.add('drag-over');"
            ondragleave="this.classList.remove('drag-over');"
@@ -3967,9 +3969,9 @@ body.on-auth .container {
            onclick="document.getElementById('importPdfFileInput').click();"
            style="border: 2px dashed var(--border); border-radius: 12px; padding: 24px 18px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 14px; background: var(--bg-3);">
         <div style="font-size: 26px; margin-bottom: 6px;">📄</div>
-        <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Drop a PDF here, or click to upload</div>
-        <div style="font-size: 12px; color: var(--text-mute);">Coach reads the text from your PDF automatically</div>
-        <input type="file" id="importPdfFileInput" accept="application/pdf,.pdf" style="display: none;" onchange="handlePdfFileSelected(event)" />
+        <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Tap to upload, or drop a file here</div>
+        <div style="font-size: 12px; color: var(--text-mute);">PDF, Word doc, .txt, .md, .csv — Coach reads it automatically</div>
+        <input type="file" id="importPdfFileInput" accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" style="display: none;" onchange="handlePdfFileSelected(event)" />
       </div>
 
       <div id="importPdfStatus" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5;"></div>
@@ -9599,8 +9601,8 @@ async function showImportPlanFlow(intake) {
       <div class="coach-intro">
         <h2>Import your plan</h2>
         <p>${adaptMode
-          ? "Upload a PDF or paste your existing training plan below. Coach will review it against the methodology and flag any concerns before applying it."
-          : "Upload a PDF or paste your existing training plan below. Coach will load it as-is into your calendar."}</p>
+          ? "Upload a file or paste your existing training plan below. Coach will review it against the methodology and flag any concerns before applying it."
+          : "Upload a file or paste your existing training plan below. Coach will load it as-is into your calendar."}</p></p>
       </div>
     </div>
 
@@ -9608,7 +9610,7 @@ async function showImportPlanFlow(intake) {
       <div class="panel-header">
         <div>
           <div class="panel-title">Upload or paste your plan</div>
-          <div class="panel-sub">PDF, copy/paste from another app, coach, AI, document — anything works</div>
+          <div class="panel-sub">From any coach, app, AI, or document — anything works</div>
         </div>
       </div>
 
@@ -9620,9 +9622,9 @@ async function showImportPlanFlow(intake) {
            onclick="document.getElementById('intakePdfFileInput').click();"
            style="border: 2px dashed var(--border); border-radius: 12px; padding: 22px 18px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 14px; background: var(--bg-3);">
         <div style="font-size: 26px; margin-bottom: 6px;">📄</div>
-        <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Drop a PDF here, or click to upload</div>
-        <div style="font-size: 12px; color: var(--text-mute);">Coach reads the text from your PDF automatically</div>
-        <input type="file" id="intakePdfFileInput" accept="application/pdf,.pdf" style="display: none;" onchange="handleIntakePdfFileSelected(event)" />
+        <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">Tap to upload, or drop a file here</div>
+        <div style="font-size: 12px; color: var(--text-mute);">PDF, Word doc, .txt, .md, .csv — Coach reads it automatically</div>
+        <input type="file" id="intakePdfFileInput" accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" style="display: none;" onchange="handleIntakePdfFileSelected(event)" />
       </div>
 
       <div id="intakePdfStatus" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5;"></div>
@@ -9641,7 +9643,7 @@ async function showImportPlanFlow(intake) {
         <button class="btn ghost" onclick="cancelImportAndStartFresh()">Cancel — build new instead</button>
       </div>
       <p style="margin-top: 12px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
-        Coach parses PDFs, natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
+        Coach parses PDFs, Word docs, text files, natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
       </p>
     </div>
   `;
@@ -10112,15 +10114,31 @@ async function discardImportAndBuildNew(intake) {
 }
 
 function cancelImportAndStartFresh() {
-  // User changed their mind — switch to build_new path and re-do intake (or skip to build)
-  if (confirm('Cancel import and have Coach build a plan from scratch instead?')) {
-    intakeAnswers.plan_path = 'build_new';
-    sb.from('athlete_intake').update({ plan_path: 'build_new' }).eq('user_id', state.user.id);
-    // Reset to intake start
-    intakeAnswers = {};
-    intakeStep = 0;
-    renderCoach();
+  // User changed their mind — bounce them back to the plan_path question (question 0)
+  // so they can re-pick. Preserve their other intake answers so they don't have to
+  // re-fill anything. NO API calls fire here — we don't burn credits on a cancel.
+  if (!confirm('Cancel import and go back? Your other answers are saved — you\'ll just need to pick a different option for "Where are you starting from?"')) {
+    return;
   }
+
+  // Reset just the plan_path so they can re-pick it
+  delete intakeAnswers.plan_path;
+
+  // Mark intake as not-completed in DB so renderCoach re-shows the questions instead of building a plan
+  // (also clear plan_path in DB so it doesn't auto-route again)
+  if (state.user) {
+    sb.from('athlete_intake').update({
+      plan_path: null,
+      completed: false,
+    }).eq('user_id', state.user.id).then(() => {
+      console.log('[Stryxs] Intake reset to plan_path question — user can re-pick');
+    });
+  }
+
+  // Reset to the plan_path question (always question 0)
+  intakeStep = 0;
+  // Re-render — renderCoach will detect completed=false and show the intake question
+  renderCoach();
 }
 
 function openImportModal() {
@@ -10193,44 +10211,77 @@ function showImportPdfStatus(html, kind) {
   setPdfStatus('importPdfStatus', html, kind);
 }
 
-// Extract text from a PDF file using pdfjs-dist, drop into target textarea
+// Extract text from any supported file type — drops result into the target textarea.
+// Supported: PDF, .docx, .txt, .md/.markdown, .csv, .json
 async function extractPdfText(file, statusElId, textareaId) {
-  // File-type guard
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-    setPdfStatus(statusElId, "That file isn't a PDF. Try again with a PDF file.", 'error');
+  const fileName = file.name || 'file';
+  const lower = fileName.toLowerCase();
+  const fileType = file.type || '';
+
+  // Detect file kind by extension and MIME
+  const isPdf = fileType === 'application/pdf' || lower.endsWith('.pdf');
+  const isDocx = fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || lower.endsWith('.docx');
+  const isPlainText = lower.endsWith('.txt') || lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.csv') || lower.endsWith('.json') || lower.endsWith('.text') || fileType.startsWith('text/');
+
+  if (!isPdf && !isDocx && !isPlainText) {
+    setPdfStatus(statusElId, `Sorry, can't read <strong>${fileName}</strong> yet. Supported: PDF, Word doc (.docx), text files (.txt, .md, .csv, .json). Try one of those, or paste your plan as text below.`, 'error');
     return;
   }
-  if (typeof pdfjsLib === 'undefined') {
-    setPdfStatus(statusElId, "PDF reader didn't load. Refresh the page and try again, or paste the plan as text.", 'error');
-    return;
-  }
-  setPdfStatus(statusElId, `<div style="display: flex; align-items: center; gap: 10px;"><div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div><div>Reading <strong>${file.name}</strong>…</div></div>`, 'loading');
+
+  setPdfStatus(statusElId, `<div style="display: flex; align-items: center; gap: 10px;"><div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div><div>Reading <strong>${fileName}</strong>…</div></div>`, 'loading');
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const numPages = pdf.numPages;
     let fullText = '';
-    for (let i = 1; i <= numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n\n';
-    }
-    fullText = fullText.trim();
+    let pageOrCharSummary = '';
 
-    if (fullText.length < 50) {
-      setPdfStatus(statusElId, "This PDF doesn't seem to have selectable text — it might be a scanned document or image-based. For now, please paste your plan as text below. (OCR support is coming soon.)", 'error');
+    if (isPdf) {
+      if (typeof pdfjsLib === 'undefined') {
+        setPdfStatus(statusElId, "PDF reader didn't load. Refresh the page and try again, or paste the plan as text.", 'error');
+        return;
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const numPages = pdf.numPages;
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n\n';
+      }
+      fullText = fullText.trim();
+      pageOrCharSummary = `${numPages} page${numPages === 1 ? '' : 's'}`;
+    } else if (isDocx) {
+      if (typeof mammoth === 'undefined') {
+        setPdfStatus(statusElId, "Word doc reader didn't load. Refresh the page and try again, or paste the plan as text.", 'error');
+        return;
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      fullText = (result?.value || '').trim();
+      pageOrCharSummary = 'Word doc';
+    } else if (isPlainText) {
+      // .txt, .md, .csv, .json — read as text
+      fullText = (await file.text()).trim();
+      const ext = (lower.split('.').pop() || 'text').toUpperCase();
+      pageOrCharSummary = `${ext} file`;
+    }
+
+    if (!fullText || fullText.length < 30) {
+      if (isPdf) {
+        setPdfStatus(statusElId, "This PDF doesn't seem to have selectable text — it might be a scanned document or image-based. For now, please paste your plan as text below. (OCR support is coming soon.)", 'error');
+      } else {
+        setPdfStatus(statusElId, `This file is too short or empty. Try a file with more content, or paste your plan as text below.`, 'error');
+      }
       return;
     }
 
     const ta = document.getElementById(textareaId);
     if (ta) ta.value = fullText;
-    setPdfStatus(statusElId, `✓ Extracted ${fullText.length.toLocaleString()} characters from <strong>${file.name}</strong> (${numPages} page${numPages === 1 ? '' : 's'}). Review the text below, then click <strong>Import →</strong>.`, 'success');
-    console.log('[Stryxs] PDF extracted:', file.name, fullText.length, 'chars,', numPages, 'pages');
+    setPdfStatus(statusElId, `✓ Extracted ${fullText.length.toLocaleString()} characters from <strong>${fileName}</strong> (${pageOrCharSummary}). Review the text below, then click <strong>Import →</strong>.`, 'success');
+    console.log('[Stryxs] File extracted:', fileName, fullText.length, 'chars,', pageOrCharSummary);
   } catch (err) {
-    console.error('[Stryxs] PDF extraction failed:', err);
-    setPdfStatus(statusElId, `Couldn't read this PDF (${err.message || 'unknown error'}). Try pasting the plan as text instead.`, 'error');
+    console.error('[Stryxs] File extraction failed:', err);
+    setPdfStatus(statusElId, `Couldn't read this file (${err.message || 'unknown error'}). Try pasting the plan as text instead.`, 'error');
   }
 }
 
