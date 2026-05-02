@@ -6230,13 +6230,9 @@ function lastRacePlaceholder(goal) {
 }
 
 function isQuestionRelevant(q, answers) {
-  // Plan import path skips most build-from-scratch questions
-  if (answers.plan_path === 'import_use' || answers.plan_path === 'import_adapt') {
-    // Only essential questions for imports: name, units, sex, age, weight, height, goal_event, race_date, available_days, equipment, has_pool_access, has_bike_trainer, preferred_long_day, injuries
-    // Skip: experience_level, race_experience, current_weekly_hours, all PB fields, goal_time, last_race
-    const skipForImport = ['experience_level', 'race_experience', 'current_weekly_hours', 'goal_time', 'last_race', 'pb_5k', 'pb_10k', 'pb_half', 'pb_marathon'];
-    if (skipForImport.includes(q.id)) return false;
-  }
+  // Note: all intake questions are now asked even on import paths. The answers feed
+  // limiter detection, fitness assessment, and Coach commentary on imported workouts —
+  // not just plan generation. The import flow does NOT need a reduced intake.
   if (q.condition && !q.condition(answers)) return false;
   if (q.relevant_when && !q.relevant_when(answers)) return false;
   return true;
@@ -8976,9 +8972,9 @@ async function renderProgress() {
 
   const monthName = today.toLocaleDateString('en-US', { month: 'long' });
 
-  const sportColor = { run: '#60a5fa', running: '#60a5fa', bike: '#fb923c', cycling: '#fb923c', swim: '#4ade80', swimming: '#4ade80', strength: '#a78bfa', gym: '#a78bfa', mobility: '#94a3b8', stability: '#94a3b8', other: '#94a3b8' };
-  const sportLabel = { run: 'Run', running: 'Run', bike: 'Bike', cycling: 'Bike', swim: 'Swim', swimming: 'Swim', strength: 'Gym', gym: 'Gym', mobility: 'Mobility', stability: 'Mobility', other: 'Other' };
-  const sportEmoji = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', mobility: '🧘', stability: '🧘', other: '⚡' };
+  const sportColor = { run: '#60a5fa', running: '#60a5fa', bike: '#fb923c', cycling: '#fb923c', swim: '#4ade80', swimming: '#4ade80', strength: '#a78bfa', gym: '#a78bfa', mobility: '#94a3b8', stability: '#94a3b8', drills: '#fbbf24', strides: '#fbbf24', other: '#94a3b8' };
+  const sportLabel = { run: 'Run', running: 'Run', bike: 'Bike', cycling: 'Bike', swim: 'Swim', swimming: 'Swim', strength: 'Gym', gym: 'Gym', mobility: 'Mobility', stability: 'Mobility', drills: 'Drills', strides: 'Drills', other: 'Other' };
+  const sportEmoji = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', mobility: '🧘', stability: '🧘', drills: '⚡', strides: '⚡', other: '⚡' };
 
   container.innerHTML = `
     <div class="panel" style="margin-bottom: 20px;">
@@ -9230,15 +9226,15 @@ async function showImportPlanFlow(intake) {
           <div class="panel-sub">Copy/paste from another app, coach, AI, document — anything works</div>
         </div>
       </div>
-      <textarea id="importPlanText" placeholder="Example:&#10;Mon: Easy run 45 min Z2&#10;Tue: Bike intervals 4x6 min @ threshold + 3 min recovery&#10;Wed: Swim 60 min — 200m warmup, 8x100 @ pace, cooldown&#10;Thu: Rest&#10;Fri: Tempo run 60 min&#10;Sat: Long bike 3 hr Z2&#10;Sun: Long run 90 min Z2" style="width: 100%; min-height: 240px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical;"></textarea>
+      <textarea id="importPlanText" placeholder="Paste any format. Examples:&#10;&#10;Mon: Easy run 45 min Z2&#10;Tue: 4x800m at 5K pace, 90s recovery&#10;Wed: Rest&#10;Thu: Tempo run 8 km&#10;Fri: Easy 30 min&#10;Sat: Long run 75 min Z2&#10;Sun: Rest&#10;&#10;Or natural language. Or a TrainingPeaks export. Or a coach's email. Whatever you have." style="width: 100%; min-height: 240px; padding: 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical;"></textarea>
       <div style="display: flex; gap: 10px; margin-top: 14px;">
         <button class="btn" style="flex: 1;" onclick="processImportFromIntake(${JSON.stringify(intake).replace(/"/g, '&quot;').replace(/'/g, '&#39;')}, ${adaptMode})">
-          ${adaptMode ? '🔧 Import + review' : '📥 Import as-is'}
+          ${adaptMode ? '🔧 Import + review against methodology' : '📥 Import as-is'}
         </button>
         <button class="btn ghost" onclick="cancelImportAndStartFresh()">Cancel — build new instead</button>
       </div>
       <p style="margin-top: 12px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
-        Coach can parse natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or even pasted screenshots in text form. Just paste whatever you have.
+        Coach parses natural language ("easy run 45 min", "8x400m @ 5K pace"), structured tables, JSON, or pasted screenshots in text form. ${adaptMode ? "Coach will review against methodology and suggest adjustments. You decide what to accept." : "Plan loads as-is. Coach won't change it."}
       </p>
     </div>
   `;
@@ -9353,15 +9349,54 @@ function showImportReviewModal(parsedPlan, review, intake) {
       ` : ''}
 
       <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button class="btn" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
-          ✓ Use the plan as-is
-        </button>
+        ${review.suggested_adjustments && review.suggested_adjustments.length > 0 ? `
+          <button class="btn" style="flex: 1; min-width: 160px; background: var(--accent);" onclick='applyImportAdjustments(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(review).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
+            🔧 Apply Coach's adjustments
+          </button>
+          <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
+            Keep my plan as-is
+          </button>
+        ` : `
+          <button class="btn" style="flex: 1; min-width: 140px;" onclick='finalizeImportedPlan(${JSON.stringify(parsedPlan).replace(/'/g, "&#39;")}, ${JSON.stringify(intake).replace(/'/g, "&#39;")})'>
+            ✓ Use the plan as-is
+          </button>
+        `}
         <button class="btn ghost" style="flex: 1; min-width: 140px;" onclick="discardImportAndBuildNew(${JSON.stringify(intake).replace(/'/g, "&#39;")})">
           Build a fresh plan instead
         </button>
       </div>
+      ${review.suggested_adjustments && review.suggested_adjustments.length > 0 ? `
+        <p style="margin-top: 14px; font-size: 12px; color: var(--text-mute); line-height: 1.55;">
+          "Apply" lets Coach modify the plan to align with the methodology. You can still ask Coach to reverse specific changes after.
+        </p>
+      ` : ''}
     </div>
   `;
+}
+
+// Apply Coach's suggested adjustments to the imported plan
+async function applyImportAdjustments(parsedPlan, review, intake) {
+  const el = document.getElementById('coachContent');
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Coach is applying the adjustments to your plan...</div>`;
+
+  try {
+    const adjustedPlan = await callCoach('apply_import_adjustments', {
+      importedPlan: parsedPlan,
+      adjustments: review.suggested_adjustments,
+      intake,
+    });
+
+    if (!adjustedPlan || !adjustedPlan.workouts || adjustedPlan.workouts.length === 0) {
+      throw new Error("Adjustment failed — falling back to plan as-is.");
+    }
+
+    await finalizeImportedPlan(adjustedPlan, intake);
+  } catch (err) {
+    console.error('[Stryxs] Apply adjustments failed:', err);
+    toast('Could not apply adjustments — keeping plan as-is. ' + err.message);
+    // Fall back to importing the plan as-is
+    await finalizeImportedPlan(parsedPlan, intake);
+  }
 }
 
 async function finalizeImportedPlan(parsedPlan, intake) {
@@ -9392,6 +9427,28 @@ async function finalizeImportedPlan(parsedPlan, intake) {
         });
       }
     } catch (e) { console.error('Intro msg failed:', e); }
+
+    // ═══ MISSING INFO HANDOFF ═══
+    // If backend flagged missing intake fields, post a friendly Coach message asking
+    // for them so the user can answer in chat (instead of being blocked by a form).
+    if (Array.isArray(parsedPlan._missing_info) && parsedPlan._missing_info.length > 0) {
+      const missingLabels = {
+        goal_event: "what you're training for",
+        preferred_long_day: "your preferred long workout day",
+        available_days: "which days you can train",
+        fh_primary_sports: "which sports you want to train (run, bike, swim)",
+      };
+      const lines = parsedPlan._missing_info.map(k => `• ${missingLabels[k] || k}`).join('\n');
+      const missingMsg = `Heads up — I imported your plan, but to give you the best follow-up advice I'm missing a few details:\n\n${lines}\n\nWhen you have a moment, drop the answers here and I'll factor them in. No rush — your plan is live regardless.`;
+      try {
+        await sb.from('coach_messages').insert({
+          user_id: state.user.id,
+          role: 'coach',
+          content: missingMsg,
+          context_type: 'missing_info_request',
+        });
+      } catch (e) { console.error('[Stryxs] Missing-info msg failed:', e); }
+    }
 
     toast('Plan imported successfully');
     await renderCoach();
