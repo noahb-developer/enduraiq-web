@@ -9756,10 +9756,10 @@ async function renderCoachChat(el, intake) {
             <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
           </div>
         </button>
-        <button class="plan-mgmt-card" onclick="openResetModal('regenerate')">
+        <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
           <div class="plan-mgmt-card-head">
             <span class="plan-mgmt-card-icon">🔄</span>
-            <span class="plan-mgmt-card-title">Generate new plan</span>
+            <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
           </div>
           <div class="plan-mgmt-card-body">
             <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
@@ -10611,6 +10611,12 @@ async function saveEditCurrentWeek() {
 }
 
 function openResetModal(type) {
+  // Defense in depth — regenerate is Pro-only ('full' reset is free since it just deletes data)
+  if (type === 'regenerate' && !isUserPro()) {
+    toast('Generating new plans is a Pro feature. Upgrade to unlock.', 5000);
+    navigate('upgrade');
+    return;
+  }
   // type: 'regenerate' (keep profile, new plan) or 'full' (clear everything)
   const modal = document.getElementById('confirmModal');
   const title = document.getElementById('confirmTitle');
@@ -12054,6 +12060,12 @@ async function generateNextWeekFromAck(intake, activePlan) {
 
 async function generateNextWeek() {
   if (!state.user) return;
+  // Defense in depth — Generate next week is Pro-only (after starter)
+  if (!isUserPro()) {
+    toast('Ongoing weekly plans are a Pro feature. Upgrade to continue.', 5000);
+    navigate('upgrade');
+    return;
+  }
 
   const btn = document.getElementById('generateNextWeekBtn');
   if (btn) {
@@ -14439,9 +14451,12 @@ async function renderPlan() {
         ${planLockedByLthr ? `
           <button class="btn ghost" id="generateNextWeekBtn" disabled style="width: 100%; opacity: 0.55; cursor: not-allowed;" title="Enter LTHR in Settings to unlock">🔒 LTHR required first</button>
           <button class="btn" style="width: 100%; margin-top: 8px; font-size: 13px;" onclick="navigate('settings')">Enter LTHR in Settings →</button>
-        ` : `
+        ` : (isUserPro() ? `
           <button class="btn" id="generateNextWeekBtn" onclick="generateNextWeek()" style="width: 100%;">Generate next week →</button>
-        `}
+        ` : `
+          <button class="btn ghost" id="generateNextWeekBtn" onclick="navigate('upgrade')" style="width: 100%; opacity: 0.85;">⭐ Generate next week (Pro)</button>
+          <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center; line-height: 1.5;">Free includes your starter week. Upgrade for ongoing periodized weeks.</div>
+        `)}
       </div>
 
       <div style="margin-top: 14px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
