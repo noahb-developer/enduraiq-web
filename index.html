@@ -6016,17 +6016,130 @@ function renderSummaryWorkout(a) {
         ${dateStr ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">${dateStr}</div>` : ''}
       </div>
       <div class="analysis-body">
-        <div style="padding: 18px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 10px; line-height: 1.6;">
-          <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
-            <strong style="color: var(--text);">ℹ️ Summary view</strong>
-          </div>
-          <div style="font-size: 13px; color: var(--text-dim);">
-            This workout was synced from Strava. For deeper analysis (cardiac drift, zone distribution, intensity targets), upload the CSV file from your watch on the Upload page. ${stravaLink}
-          </div>
-        </div>
+        ${(() => {
+          // Choose the right message based on what actually went wrong (or didn't).
+          // Each branch tells the user something useful instead of the old generic CSV instruction.
+          const isStrava = a.source === 'strava';
+          const dbId = a._dbId; // present on workouts loaded from DB
+          if (isStrava && a._no_hr_data) {
+            return `
+              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
+                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
+                  <strong style="color: var(--text);">📊 Basic summary only</strong>
+                </div>
+                <div style="font-size: 13px; color: var(--text-dim);">
+                  This activity was recorded without heart rate data, so deep analysis (zone distribution, cardiac drift) isn't possible.
+                  Wear a heart rate monitor on future workouts to unlock the full analysis. ${stravaLink}
+                </div>
+              </div>`;
+          }
+          if (isStrava && a._unsupported) {
+            return `
+              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
+                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
+                  <strong style="color: var(--text);">📊 Activity logged</strong>
+                </div>
+                <div style="font-size: 13px; color: var(--text-dim);">
+                  Deep analysis (cardiac drift, zone distribution) is currently only available for runs and rides.
+                  Coach still uses this activity for trend tracking and weekly volume. ${stravaLink}
+                </div>
+              </div>`;
+          }
+          if (isStrava && (a._streams_failed || a._too_short || a.summary_only)) {
+            return `
+              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
+                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 10px;">
+                  <strong style="color: var(--text);">📊 Deep analysis available</strong>
+                </div>
+                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 14px;">
+                  This workout was synced before deep analysis was available, or initial analysis didn't complete.
+                  Tap below to fetch heart rate data and unlock zones, drift, and Coach's read.
+                </div>
+                ${dbId ? `
+                  <button class="btn" id="reanalyzeBtn-${dbId}" onclick="reanalyzeStravaWorkout('${dbId}')" style="font-size: 13px; padding: 8px 16px;">
+                    🔄 Re-analyze with heart rate data
+                  </button>
+                  <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute);">${stravaLink}</div>
+                ` : `<div style="font-size: 12px; color: var(--text-mute);">${stravaLink}</div>`}
+              </div>`;
+          }
+          // Default fallback (CSV uploads with no analysis, edge cases)
+          return `
+            <div style="padding: 18px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 10px; line-height: 1.6;">
+              <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
+                <strong style="color: var(--text);">ℹ️ Summary view</strong>
+              </div>
+              <div style="font-size: 13px; color: var(--text-dim);">
+                For deeper analysis (cardiac drift, zone distribution, intensity targets), upload a CSV file from your watch on the Upload page.
+              </div>
+            </div>`;
+        })()}
       </div>
     </div>
   `;
+}
+
+// Re-analyze a Strava workout — fetches streams, runs analysis, updates the workout.
+// Called when user taps the "Re-analyze with heart rate data" button on summary cards.
+async function reanalyzeStravaWorkout(dbId) {
+  const btn = document.getElementById(`reanalyzeBtn-${dbId}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.innerHTML = '<span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Fetching heart rate data...';
+  }
+  try {
+    const result = await callStrava('reanalyze_activity', { workout_id: dbId });
+    if (!result?.success) {
+      throw new Error(result?.error || 'Re-analysis failed');
+    }
+
+    // Three outcomes:
+    if (result.has_deep_analysis) {
+      // Deep analysis succeeded — reload workouts so all places update, then re-render
+      toast('✓ Deep analysis ready');
+      await loadWorkouts();
+      // Find the workout in state and re-render the appropriate detail view
+      const idx = state.workouts.findIndex(w => w._dbId === dbId);
+      if (idx >= 0) {
+        // Try to refresh whichever page is showing this workout
+        const historyDetail = document.getElementById(`historyDetail-${idx}`);
+        if (historyDetail && historyDetail.style.display !== 'none') {
+          historyDetail.innerHTML = renderAnalysis(state.workouts[idx]);
+        }
+        // Also refresh today's-analyses if active
+        if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
+          renderTodaysAnalyses().catch(() => {});
+        }
+      }
+    } else if (result.no_hr_data) {
+      toast('Activity has no heart rate data — wear a HR monitor next time');
+      // Reload + re-render so the message updates from "Re-analyze" to "no HR data"
+      await loadWorkouts();
+      const idx = state.workouts.findIndex(w => w._dbId === dbId);
+      if (idx >= 0) {
+        const historyDetail = document.getElementById(`historyDetail-${idx}`);
+        if (historyDetail && historyDetail.style.display !== 'none') {
+          historyDetail.innerHTML = renderAnalysis(state.workouts[idx]);
+        }
+      }
+    } else if (result.streams_failed || result.too_short) {
+      toast('Re-analysis didn\'t complete. Try again in a minute.');
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '🔄 Try again';
+      }
+    }
+  } catch (err) {
+    console.error('[Stryxs] Re-analysis failed:', err);
+    toast('Could not re-analyze: ' + (err.message || 'unknown error'));
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.innerHTML = '🔄 Try again';
+    }
+  }
 }
 
 function renderRun(a) {
