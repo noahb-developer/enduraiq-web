@@ -6361,13 +6361,39 @@ async function renderInsightsFromDb() {
     .order('generated_at', { ascending: false });
 
   if (!insights || insights.length === 0) {
-    list.innerHTML = `
-      <div class="panel" style="text-align: center;">
-        <div style="font-size: 32px; margin-bottom: 8px;">🪴</div>
-        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No patterns to surface yet</div>
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55;">Coach needs at least 5 workouts logged to detect patterns. Keep training and check back.</div>
-      </div>
-    `;
+    // ═══ CONTEXT-AWARE EMPTY STATE ═══
+    // Check how many TRAINING workouts the user actually has. If 5+, the empty state should
+    // offer regeneration instead of saying "log more workouts." If under 5, real "log more" advice.
+    let trainingWorkoutCount = 0;
+    try {
+      const { count } = await sb.from('workouts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', state.user.id)
+        .neq('activity_classification', 'daily_activity');
+      trainingWorkoutCount = count || 0;
+    } catch (_) {
+      trainingWorkoutCount = (state.workouts || []).filter(w => w.activity_classification !== 'daily_activity').length;
+    }
+
+    if (trainingWorkoutCount >= 5) {
+      // User has data but no insights yet — likely hasn't run generation. Offer it directly.
+      list.innerHTML = `
+        <div class="panel" style="text-align: center;">
+          <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No patterns yet</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">You have ${trainingWorkoutCount} training workouts logged. Tap below to have Coach analyze them for patterns.</div>
+          <button class="btn" style="font-size: 13px; padding: 8px 16px;" onclick="loadInsightsIntoTrends(true)">↻ Generate insights</button>
+        </div>
+      `;
+    } else {
+      list.innerHTML = `
+        <div class="panel" style="text-align: center;">
+          <div style="font-size: 32px; margin-bottom: 8px;">🪴</div>
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No patterns to surface yet</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55;">Coach needs at least 5 training workouts to detect patterns. You have ${trainingWorkoutCount}. Keep training and check back.</div>
+        </div>
+      `;
+    }
     return;
   }
 
@@ -6407,9 +6433,31 @@ function renderInsightCard(p) {
   };
   const s = sevStyle[p.severity] || sevStyle.info;
   const isApplied = p.status === 'applied';
-  // Apply button shows on actionable/urgent insights that have a recommendation, NOT yet applied,
-  // and NOT informational (info-only patterns are observations, not actions)
-  const canApply = !isApplied && (p.severity === 'urgent' || p.severity === 'actionable') && p.recommendation;
+
+  // ═══ APPLY BUTTON LOGIC ═══
+  // Hide the Apply button on insights that can't be auto-applied to the plan:
+  // - info-only severity (positive observations, no action needed in the plan)
+  // - adherence_pattern (user-driven, plan changes don't help)
+  // - fitness_marker (positive — informational only)
+  // - finding/title mentions data quality / equipment / behavioral asks
+  const insightText = `${p.title || ''} ${p.finding || ''} ${p.recommendation || ''}`.toLowerCase();
+  const behavioralKeywords = [
+    'record hr', 'hr data', 'heart rate strap', 'no hr', 'zero hr', '0 of',
+    'log every', 'log all', 'log your', 'tag', 'classify',
+    'equipment', 'power meter', 'gear',
+    'sleep more', 'eat ', 'diet', 'nutrition habit',
+    'see a doctor', 'physio', 'medical',
+  ];
+  const isBehavioral = behavioralKeywords.some(kw => insightText.includes(kw));
+  const nonApplicablePatternTypes = ['adherence_pattern', 'fitness_marker', 'pace_at_hr_improvement'];
+  const isNonApplicablePattern = nonApplicablePatternTypes.includes(p.pattern_type);
+
+  const canApply = !isApplied
+    && (p.severity === 'urgent' || p.severity === 'actionable')
+    && p.recommendation
+    && !isBehavioral
+    && !isNonApplicablePattern;
+
   // Undo available within 24h of apply
   const canUndo = isApplied && p.applied_at && (Date.now() - new Date(p.applied_at).getTime() < 24 * 60 * 60 * 1000);
 
@@ -6429,6 +6477,7 @@ function renderInsightCard(p) {
           ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
           ${isApplied && p.data_points?.change_summary ? `<div style="margin-top: 10px; font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(0, 229, 160, 0.04); border: 1px dashed rgba(0, 229, 160, 0.2); border-radius: 8px;"><strong style="color: var(--accent);">What Coach changed:</strong> ${escapeHtml(p.data_points.change_summary)}</div>` : ''}
           <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="explainInsightInChat('${p.id}', this)" title="Get a deeper explanation in Coach chat">💬 Why?</button>
             ${canApply ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>` : ''}
             ${canUndo ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="undoAppliedInsight('${p.id}', this)">↶ Undo</button>` : ''}
             ${!isApplied ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissTrendInsight('${p.id}')">Dismiss</button>` : ''}
@@ -6593,24 +6642,42 @@ async function applyInsightToPlan(insightId, btnEl) {
       plannedWorkouts: planned,
     }, { timeoutMs: 60000 });
 
-    if (!result?.modified_workouts || result.modified_workouts.length === 0) {
-      toast('Coach didn\'t need to modify anything for this insight.');
-      // Mark as applied anyway so it's clear user took action
-      await sb.from('training_insights')
-        .update({
-          status: 'applied',
-          applied_at: new Date().toISOString(),
-          data_points: { ...(insight.data_points || {}), change_summary: result?.change_summary || 'No changes were needed.', previous_workouts: [] },
-        })
-        .eq('id', insightId);
-      await renderInsightsFromDb();
-      await renderInsightsMiniCard();
+    console.log('[Stryxs] apply_insight result:', { not_applicable: result?.not_applicable, modified_count: result?.modified_workouts?.length, reason: result?.reason });
+
+    // ═══ NOT APPLICABLE PATH ═══
+    // Backend tells us this insight can't be auto-applied (behavioral, data quality, positive marker, etc.)
+    // OR returned 0 modifications. Either way: do NOT mark it as applied, do NOT post a misleading
+    // "Plan updated" message. Just tell the user what's up and leave the insight active.
+    const notApplicable = result?.not_applicable === true || !result?.modified_workouts || result.modified_workouts.length === 0;
+
+    if (notApplicable) {
+      const explanation = result?.change_summary || "Coach didn't find anything in the upcoming plan to adjust for this insight. The recommendation may need your direct action.";
+      toast('Coach can\'t auto-apply this one — see the explanation in chat');
+
+      // Post a HONEST Coach chat message explaining why nothing changed
+      try {
+        const message = `**About applying "${insight.title}"**\n\n${explanation}\n\n${insight.recommendation ? `The recommendation here is for YOU to take action: ${insight.recommendation}` : 'No plan changes were made.'}`;
+        await sb.from('coach_messages').insert({
+          user_id: state.user.id,
+          role: 'coach',
+          content: message,
+          context_type: 'insight_not_applicable',
+        });
+        if (typeof setCoachUnread === 'function') setCoachUnread(true);
+      } catch (e) {
+        console.error('[Stryxs] Not-applicable message failed:', e);
+      }
+
+      // Reset button — insight stays in active state
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = '⚡ Apply to plan';
+      }
       return;
     }
 
-    // ═══ STORE BEFORE STATE for undo ═══
-    // Find the original rows that match the indices Coach modified, save them
-    // so undo can restore. We save the FULL pre-mod row.
+    // ═══ ACTUAL APPLICATION PATH ═══
+    // Backend returned real modifications. Apply them, store BEFORE state for undo.
     const previousWorkouts = result.modified_workouts.map(mod => {
       const orig = planned[mod.index];
       if (!orig) return null;
@@ -6640,6 +6707,17 @@ async function applyInsightToPlan(insightId, btnEl) {
       }
     }
 
+    // Defensive: if nothing actually got modified (all rows failed), bail without marking applied
+    if (modifiedCount === 0) {
+      toast('Could not modify any workouts — try again');
+      console.error('[Stryxs] All workout updates failed despite backend returning modifications');
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = '⚡ Apply to plan';
+      }
+      return;
+    }
+
     // Mark insight as applied + store BEFORE state
     await sb.from('training_insights')
       .update({
@@ -6653,7 +6731,7 @@ async function applyInsightToPlan(insightId, btnEl) {
       })
       .eq('id', insightId);
 
-    // Post a Coach chat message confirming the change
+    // Post Coach chat message — only when REAL changes happened
     try {
       const message = `✓ **Plan updated based on insight: "${insight.title}"**\n\n${result.change_summary}\n\n_${modifiedCount} workout${modifiedCount === 1 ? '' : 's'} adjusted in the upcoming week. You can undo within 24 hours from the Trends tab._`;
       await sb.from('coach_messages').insert({
@@ -6676,6 +6754,75 @@ async function applyInsightToPlan(insightId, btnEl) {
     if (btnEl) {
       btnEl.disabled = false;
       btnEl.textContent = '⚡ Apply to plan';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPLAIN INSIGHT IN CHAT — conversational refinement loop
+// User taps "💬 Why?" on an insight → this calls backend's explain_insight,
+// posts BOTH the user's question AND Coach's deeper response to coach_messages,
+// then navigates to Coach tab so user reads the explanation.
+// ═══════════════════════════════════════════════════════════
+async function explainInsightInChat(insightId, btnEl) {
+  if (!state.user) return;
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = 'Asking Coach…';
+  }
+
+  try {
+    const { data: insight } = await sb.from('training_insights').select('*').eq('id', insightId).single();
+    if (!insight) throw new Error('Insight not found');
+
+    // Post the user's "question" to chat first so the conversation reads naturally
+    const userQuestion = `Why did you flag this? "${insight.title}"`;
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id,
+      role: 'user',
+      content: userQuestion,
+      context_type: 'insight_question',
+    });
+
+    // Pull intake + recent workouts for context
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+    const { data: rawWorkouts } = await sb.from('workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .neq('activity_classification', 'daily_activity')
+      .order('created_at', { ascending: false })
+      .limit(15);
+
+    const result = await callCoach('explain_insight', {
+      insight,
+      intake,
+      recentWorkouts: rawWorkouts || [],
+    }, { timeoutMs: 45000 });
+
+    const explanation = result?.explanation || "I'm having trouble explaining this one in detail. Try refreshing your insights.";
+
+    // Post Coach's deeper explanation
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id,
+      role: 'coach',
+      content: explanation,
+      context_type: 'insight_explanation',
+    });
+
+    if (typeof setCoachUnread === 'function') setCoachUnread(true);
+    // Reset the Coach session-loaded flag so renderCoach scrolls to the new explanation
+    window._stryxsCoachLoadedThisSession = false;
+
+    toast('Coach replied — head to Coach tab');
+    // Navigate to Coach tab so user can read the explanation
+    navigate('coach');
+  } catch (err) {
+    console.error('[Stryxs] explainInsightInChat failed:', err);
+    toast('Could not get explanation: ' + (err.message || 'unknown'));
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = '💬 Why?';
     }
   }
 }
