@@ -68,6 +68,18 @@ html, body {
   -webkit-touch-callout: none;
   text-rendering: optimizeLegibility;
   overscroll-behavior-x: none;
+  /* Custom scrollbar — minimalist dark, no chunky browser default */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 8px; height: 8px; }
+html::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+html::-webkit-scrollbar-thumb:hover, body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 /* Force ALL text to wrap inside containers, never overflow horizontally */
 * {
@@ -1103,14 +1115,20 @@ select option {
 
 /* ════════ DASHBOARD ════════ */
 .dash-header {
-  display: flex; justify-content: space-between; align-items: flex-end;
-  margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 18px; gap: 12px;
 }
 
 .dash-greeting h2 {
-  font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
+  font-size: 24px; font-weight: 800; letter-spacing: -0.6px;
+  line-height: 1.1;
 }
-.dash-greeting p { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+.dash-greeting p { color: var(--text-dim); font-size: 13px; margin-top: 4px; line-height: 1.4; }
+@media (max-width: 720px) {
+  .dash-header { margin-bottom: 14px; gap: 10px; }
+  .dash-greeting h2 { font-size: 20px; letter-spacing: -0.4px; }
+  .dash-greeting p { font-size: 12px; }
+}
 
 .stat-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1926,19 +1944,43 @@ select option {
   height: 65vh; min-height: 400px;
   overflow: hidden;
 }
+@media (max-width: 720px) {
+  /* On mobile use most of the visible viewport so messages have proper room */
+  .coach-chat {
+    height: calc(100vh - 220px);
+    min-height: 420px;
+    border-radius: 12px;
+  }
+}
 
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 20px;
   display: flex; flex-direction: column; gap: 14px;
+  /* Custom minimalist scrollbar — matches the dark theme, doesn't draw attention */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+.chat-messages::-webkit-scrollbar { width: 6px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+@media (max-width: 720px) {
+  .chat-messages { padding: 14px 12px; gap: 12px; }
 }
 
 .chat-msg {
-  display: flex; gap: 10px; max-width: 85%;
+  display: flex; gap: 10px;
+  /* Wider message bubbles — old 85% felt cramped, especially for Coach's longer replies */
+  max-width: 92%;
   min-width: 0;
 }
 .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
 @media (max-width: 720px) {
-  .chat-msg { max-width: 92%; gap: 8px; }
+  /* On mobile we go close to full width — saves the squished feel */
+  .chat-msg { max-width: 96%; gap: 8px; }
 }
 
 .chat-msg .msg-avatar {
@@ -1953,15 +1995,23 @@ select option {
 }
 
 .chat-msg .msg-bubble {
-  padding: 10px 14px; border-radius: 14px;
-  background: var(--bg-3); font-size: 14px; line-height: 1.55;
+  padding: 11px 15px; border-radius: 14px;
+  background: var(--bg-3); font-size: 14px; line-height: 1.6;
   min-width: 0;
-  flex: 1;
+  /* flex: 0 1 auto — bubbles shrink and grow to natural content width, not full row */
+  flex: 0 1 auto;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 .chat-msg.user .msg-bubble {
   background: var(--accent); color: var(--bg);
+}
+@media (max-width: 720px) {
+  .chat-msg .msg-bubble {
+    padding: 10px 13px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
 }
 
 /* Markdown formatting inside chat bubbles */
@@ -1981,16 +2031,36 @@ select option {
   display: flex; gap: 8px; padding: 14px;
   border-top: 1px solid var(--border);
   background: var(--bg-2);
+  align-items: flex-end;
+}
+@media (max-width: 720px) {
+  .chat-input-row { padding: 10px; gap: 6px; }
 }
 
-.chat-input-row input {
+.chat-input-row textarea {
   flex: 1; padding: 12px 14px;
   background: var(--bg-3); border: 1px solid var(--border);
   color: var(--text); border-radius: 10px;
   font-size: 14px; font-family: inherit; outline: none;
+  /* Auto-grow vertically up to 5 lines, no horizontal scroll */
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.4;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
-.chat-input-row input:focus { border-color: var(--accent); }
-.chat-input-row .btn { padding: 12px 18px; flex-shrink: 0; }
+.chat-input-row textarea::-webkit-scrollbar { width: 4px; }
+.chat-input-row textarea::-webkit-scrollbar-track { background: transparent; }
+.chat-input-row textarea::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 999px; }
+.chat-input-row textarea:focus { border-color: var(--accent); }
+.chat-input-row .btn {
+  padding: 12px 18px;
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: 44px;
+}
 
 /* Coming soon banner inside Coach */
 .coach-stub {
@@ -2299,8 +2369,7 @@ select option {
   .showcase-stats { grid-template-columns: 1fr; }
   .showcase { padding: 18px; margin-bottom: 40px; }
   .compare { grid-template-columns: 1fr 1fr; }
-  .dash-header { flex-direction: column; align-items: flex-start; }
-  .dash-header .btn { width: 100%; }
+  /* dash-header now handled in main .dash-header block — kept side-by-side on mobile too */
 }
 
 @media (max-width: 480px) {
@@ -3784,28 +3853,38 @@ body.on-auth .container {
 
 <!-- DASHBOARD -->
 <div class="page" id="page-dashboard">
-  <div class="dash-header">
-    <div class="dash-greeting">
-      <h2 id="greetingText">Welcome back</h2>
-      <p id="greetingSub">Here's your training overview</p>
+  <!-- ═══ HEADER: contextual greeting + race countdown ═══ -->
+  <div class="dash-header" style="margin-bottom: 18px;">
+    <div class="dash-greeting" style="flex: 1; min-width: 0;">
+      <h2 id="greetingText" style="margin-bottom: 4px;">Welcome back</h2>
+      <p id="greetingSub" style="font-size: 13px; color: var(--text-dim); line-height: 1.4;">Loading your day…</p>
     </div>
-    <button class="btn" onclick="navigate('upload')">+ Analyze workout</button>
+    <div id="raceCountdownChip" style="display: none;"></div>
   </div>
 
+  <!-- Coach banner if intake not done — kept -->
+  <div id="coachBanner" style="display: none;"></div>
+
+  <!-- ═══ TODAY: planned workout for today (or rest / no plan) ═══ -->
+  <div id="todayCard"></div>
+
+  <!-- ═══ THIS WEEK: 7-day progress strip ═══ -->
+  <div id="weekStripCard"></div>
+
+  <!-- ═══ COACH INSIGHTS (reactive plan adjustments) — kept ═══ -->
   <div id="insightsContainer"></div>
 
+  <!-- ═══ TREND INSIGHTS MINI-CARD — kept ═══ -->
   <div id="trendInsightsCard"></div>
 
-  <div class="stat-grid" id="statGrid"></div>
+  <!-- ═══ RACE PROJECTION MINI ═══ -->
+  <div id="raceProjectionMini"></div>
 
-  <div id="progressContainer"></div>
-
-  <div id="projectionsContainer"></div>
-
+  <!-- ═══ RECENT WORKOUTS (kept at bottom) ═══ -->
   <div class="panel">
     <div class="panel-header">
       <div>
-        <div class="panel-title">Recent Workouts</div>
+        <div class="panel-title">Recent workouts</div>
         <div class="panel-sub" id="recentCount">No workouts yet</div>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
@@ -3816,7 +3895,10 @@ body.on-auth .container {
     <div id="dashRecent"></div>
   </div>
 
-  <!-- Fitness Trend removed — will be replaced with composite metric later -->
+  <!-- Hidden — kept for backward compatibility but not rendered into anymore -->
+  <div class="stat-grid" id="statGrid" style="display: none;"></div>
+  <div id="progressContainer" style="display: none;"></div>
+  <div id="projectionsContainer" style="display: none;"></div>
 </div>
 
 <!-- COACH -->
@@ -5532,113 +5614,52 @@ function renderSwim(a) {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════
 async function renderDashboard() {
-  const greeting = state.user ? `Welcome back, ${state.user.name.split(' ')[0]}` : 'Welcome';
-  document.getElementById('greetingText').textContent = greeting;
-  const count = state.workouts.length;
-  document.getElementById('greetingSub').textContent = count === 0 ? 'Upload your first workout to get started' : `${count} workout${count>1?'s':''} analyzed`;
+  if (!state.user) return;
 
-  // Check if intake is done — show Meet Coach banner if not
-  if (state.user) {
-    const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
-    const banner = document.getElementById('coachBanner');
-    if (banner && (!intake || !intake.completed)) {
-      banner.style.display = 'block';
-    } else if (banner) {
-      banner.style.display = 'none';
-    }
+  // ═══ STEP 1: CONTEXTUAL GREETING + RACE COUNTDOWN ═══
+  await renderDashGreeting();
+
+  // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
+  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+  const banner = document.getElementById('coachBanner');
+  if (banner && (!intake || !intake.completed)) {
+    banner.style.display = 'block';
+    banner.innerHTML = `
+      <div class="panel" style="background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border-color: rgba(0, 229, 160, 0.25); margin-bottom: 16px;">
+        <div style="display: flex; gap: 14px; align-items: center;">
+          <div style="font-size: 28px;">🧠</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Meet your Coach</div>
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5;">Quick 2-minute intake unlocks your personalized plan.</div>
+          </div>
+          <button class="btn" onclick="navigate('coach')" style="font-size: 13px;">Start →</button>
+        </div>
+      </div>
+    `;
+  } else if (banner) {
+    banner.style.display = 'none';
   }
 
-  // Render any active Coach insights (reactive plan-suggestion messages)
-  await renderCoachInsights();
+  // ═══ STEP 3: TODAY card (planned workout / rest / no plan) ═══
+  await renderDashTodayCard(intake);
 
-  // Render the new TREND INSIGHTS mini-card (top pattern + link to Trends page)
+  // ═══ STEP 4: THIS WEEK 7-day strip ═══
+  await renderDashWeekStrip();
+
+  // ═══ STEP 5: insight cards (existing) ═══
+  await renderCoachInsights();
   await renderInsightsMiniCard();
 
-  // Render streaks + progress section
-  await renderProgress();
+  // ═══ STEP 6: Race projection MINI (single line) ═══
+  await renderDashRaceProjectionMini(intake);
 
-  // Render race projections panel
-  renderProjections();
-
-  const recent = state.workouts.slice(-7);
-  const runs = recent.filter(w => w.sport === 'run');
-  const bikes = recent.filter(w => w.sport === 'bike');
-  const swims = recent.filter(w => w.sport === 'swim');
-  const gyms = recent.filter(w => w.sport === 'strength' || w.sport === 'gym');
-  const others = recent.filter(w => !['run', 'bike', 'swim', 'strength', 'gym'].includes(w.sport));
-
-  // Helper to compute drift for a sport set
-  const driftForSport = (workouts) => {
-    const withDrift = workouts.filter(w => w.drift !== null && w.drift !== undefined && !isNaN(w.drift));
-    return withDrift.length ? withDrift.reduce((s,w) => s + w.drift, 0) / withDrift.length : null;
-  };
-  // Initial sport for drift card (default: pick first sport with data)
-  if (!state.dashDriftSport) {
-    if (runs.length) state.dashDriftSport = 'run';
-    else if (bikes.length) state.dashDriftSport = 'bike';
-    else if (swims.length) state.dashDriftSport = 'swim';
-    else state.dashDriftSport = 'overall';
-  }
-  if (!state.dashLthrSport) state.dashLthrSport = 'run';
-
-  const totalKm = recent.reduce((s,w) => s + (w.distance || 0), 0);
-
-  // Compute drift for selected sport
-  let currentDrift = null;
-  let driftCount = 0;
-  if (state.dashDriftSport === 'overall') {
-    const all = [...runs, ...bikes, ...swims];
-    currentDrift = driftForSport(all);
-    driftCount = all.filter(w => w.drift !== null && w.drift !== undefined).length;
-  } else {
-    const sportWorkouts = state.dashDriftSport === 'run' ? runs : state.dashDriftSport === 'bike' ? bikes : swims;
-    currentDrift = driftForSport(sportWorkouts);
-    driftCount = sportWorkouts.filter(w => w.drift !== null && w.drift !== undefined).length;
-  }
-
-  // LTHR for selected sport
-  const currentLthr = state.dashLthrSport === 'run' ? state.profile.runLthr : state.profile.bikeLthr;
-  const lthrLabel = state.dashLthrSport === 'run' ? 'Run LTHR' : 'Bike LTHR';
-
-  document.getElementById('statGrid').innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">Workouts (7d)</div>
-      <div class="stat-value">${recent.length}</div>
-      <div class="stat-meta">${runs.length} run · ${bikes.length} bike · ${swims.length} swim${gyms.length > 0 ? ' · ' + gyms.length + ' gym' : ''}${others.length > 0 ? ' · ' + others.length + ' other' : ''}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Distance</div>
-      <div class="stat-value">${totalKm.toFixed(1)}<span class="stat-unit">km</span></div>
-      <div class="stat-meta">last 7 days</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label-row">
-        <div class="stat-label">Avg Cardiac Drift</div>
-        ${renderStatPicker('dashDrift', state.dashDriftSport, ['overall', 'run', 'bike', 'swim'], 'setDashDriftSport')}
-      </div>
-      <div class="stat-value">${currentDrift !== null ? currentDrift.toFixed(1) + '%' : '—'}</div>
-      <div class="stat-meta ${currentDrift!==null && currentDrift < 5 ? 'good' : currentDrift !== null && currentDrift > 8 ? 'bad' : ''}">${currentDrift === null ? (driftCount === 0 ? 'no data yet' : 'no drift data') : currentDrift < 5 ? '✓ strong aerobic' : currentDrift < 8 ? 'building' : 'needs work'}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label-row">
-        <div class="stat-label">${lthrLabel}</div>
-        ${renderStatPicker('dashLthr', state.dashLthrSport, ['run', 'bike'], 'setDashLthrSport')}
-      </div>
-      <div class="stat-value">${currentLthr || '—'}</div>
-      <div class="stat-meta">${currentLthr ? `Z2: ${Math.floor(currentLthr*0.81)}-${Math.floor(currentLthr*0.9)} bpm` : 'set in settings'}</div>
-    </div>
-  `;
-
-  // Recent workouts — compact list grouped by sport, filtered by time range
+  // ═══ STEP 7: Recent workouts (existing logic, kept) ═══
   if (!state.dashRecentRange) state.dashRecentRange = 'week';
-
-  // Render the time range picker
   const rangePicker = document.getElementById('recentRangePicker');
   if (rangePicker) {
     rangePicker.innerHTML = renderStatPicker('dashRecentRange', state.dashRecentRange, ['week', 'month', 'all'], 'setDashRecentRange');
   }
 
-  // Filter workouts by selected range
   const now = new Date();
   let cutoff = null;
   if (state.dashRecentRange === 'week') {
@@ -5659,10 +5680,9 @@ async function renderDashboard() {
   const rangeLabel = state.dashRecentRange === 'week' ? 'this week' : state.dashRecentRange === 'month' ? 'this month' : 'all time';
 
   if (recentList.length === 0) {
-    rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts ${rangeLabel}</div><div class="empty-desc">${state.workouts.length > 0 ? 'Try a longer time range' : 'Upload your first workout to see analysis here'}</div></div>`;
-    document.getElementById('recentCount').textContent = state.workouts.length === 0 ? 'Upload your first workout' : `0 workouts ${rangeLabel}`;
+    rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts ${rangeLabel}</div><div class="empty-desc">${state.workouts.length > 0 ? 'Try a longer time range' : 'Connect Strava in Settings or upload a CSV from Analyze tab'}</div></div>`;
+    document.getElementById('recentCount').textContent = state.workouts.length === 0 ? 'No workouts yet' : `0 workouts ${rangeLabel}`;
   } else {
-    // Group by sport
     const sportGroups = {};
     const sportEmojis = { run: '🏃', running: '🏃', bike: '🚴', cycling: '🚴', swim: '🏊', swimming: '🏊', strength: '💪', gym: '💪', mobility: '🧘', stability: '🧘', other: '⚡' };
     const sportLabels = { run: 'Run', running: 'Run', bike: 'Bike', cycling: 'Bike', swim: 'Swim', swimming: 'Swim', strength: 'Gym', gym: 'Gym', mobility: 'Mobility', stability: 'Mobility', other: 'Other' };
@@ -5671,11 +5691,10 @@ async function renderDashboard() {
       if (!sportGroups[key]) sportGroups[key] = { count: 0, distance: 0, hours: 0 };
       sportGroups[key].count++;
       sportGroups[key].distance += parseFloat(w.distance) || 0;
-      // Compute hours: try duration (sec) first, fall back to time string
       let secs = 0;
       if (w.duration) {
         const d = parseFloat(w.duration) || 0;
-        secs = d > 600 ? d : d * 60; // if duration is small, it's already in minutes
+        secs = d > 600 ? d : d * 60;
       } else if (w.time && w.time !== 'N/A') {
         secs = parseTimeToSeconds(w.time);
       }
@@ -5706,6 +5725,343 @@ async function renderDashboard() {
       </div>
     `;
     document.getElementById('recentCount').textContent = `${recentList.length} workout${recentList.length === 1 ? '' : 's'} ${rangeLabel}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD HELPERS — contextual greeting, today, week strip, race countdown
+// ═══════════════════════════════════════════════════════════
+
+async function renderDashGreeting() {
+  const greetingEl = document.getElementById('greetingText');
+  const subEl = document.getElementById('greetingSub');
+  if (!greetingEl || !subEl) return;
+
+  const name = state.user?.name?.split(' ')[0] || 'Athlete';
+  const hour = new Date().getHours();
+  let timeOfDay;
+  if (hour < 12) timeOfDay = 'Good morning';
+  else if (hour < 18) timeOfDay = 'Good afternoon';
+  else timeOfDay = 'Good evening';
+
+  greetingEl.textContent = `${timeOfDay}, ${name}`;
+
+  // Build subtitle based on context: completed today's workout? have plan? rest day?
+  const today = new Date().toISOString().split('T')[0];
+  const todaysCompleted = (state.workouts || []).find(w => {
+    const d = (w.date || w.created_at || '').split('T')[0];
+    return d === today;
+  });
+
+  if (todaysCompleted) {
+    subEl.textContent = `Nice work on today's ${todaysCompleted.sport || 'workout'}.`;
+  } else {
+    const count = state.workouts.length;
+    subEl.textContent = count === 0
+      ? 'Connect Strava in Settings to start logging workouts.'
+      : `${count} workout${count > 1 ? 's' : ''} logged · keep going.`;
+  }
+}
+
+// Race countdown chip (top-right of dashboard header)
+async function renderDashRaceCountdown(intake) {
+  const chip = document.getElementById('raceCountdownChip');
+  if (!chip) return;
+  if (!intake?.race_date) {
+    chip.style.display = 'none';
+    return;
+  }
+
+  const raceDate = new Date(intake.race_date + 'T12:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffMs = raceDate.getTime() - today.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    chip.style.display = 'none';
+    return;
+  }
+
+  let label;
+  if (diffDays === 0) label = 'Race day!';
+  else if (diffDays < 30) label = `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+  else if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    const days = diffDays % 30;
+    label = days > 0 ? `${months}mo ${days}d` : `${months}mo`;
+  } else {
+    const years = Math.floor(diffDays / 365);
+    const months = Math.floor((diffDays % 365) / 30);
+    label = months > 0 ? `${years}y ${months}mo` : `${years}y`;
+  }
+
+  const eventName = formatGoal(intake.goal_event) || 'Race';
+
+  chip.style.display = 'flex';
+  chip.style.cssText = `
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(80, 130, 255, 0.05));
+    border: 1px solid rgba(0, 229, 160, 0.25);
+    border-radius: 10px;
+    cursor: pointer;
+  `;
+  chip.onclick = () => navigate('race-planner');
+  chip.innerHTML = `
+    <div style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">${escapeHtml(eventName)}</div>
+    <div style="font-size: 14px; color: var(--accent); font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-top: 1px;">${label}</div>
+  `;
+}
+
+// Today card: shows the planned workout for today, or rest day, or "no plan yet"
+async function renderDashTodayCard(intake) {
+  const card = document.getElementById('todayCard');
+  if (!card) return;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Pull today's planned workout if it exists
+  let todaysPlanned = null;
+  let alreadyCompleted = false;
+  try {
+    const { data: planned } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('scheduled_date', today)
+      .order('id', { ascending: true });
+    if (planned && planned.length > 0) {
+      todaysPlanned = planned[0]; // first one of the day (some days have brick = 2 workouts)
+    }
+    // Check if user has logged a workout today
+    const { data: completedToday } = await sb.from('workouts')
+      .select('id, sport')
+      .eq('user_id', state.user.id)
+      .gte('created_at', today + 'T00:00:00')
+      .lte('created_at', today + 'T23:59:59')
+      .neq('activity_classification', 'daily_activity')
+      .limit(1);
+    alreadyCompleted = !!(completedToday && completedToday.length > 0);
+  } catch (e) {
+    console.warn('[Stryxs] todayCard query failed:', e);
+  }
+
+  // ═══ STATE 1: No plan yet ═══
+  if (!intake?.completed) {
+    card.innerHTML = `
+      <div class="panel" style="margin-bottom: 14px; background: rgba(255, 255, 255, 0.02); border-style: dashed;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 28px;">🎯</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">No plan yet</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Talk to Coach to build your personalized training plan.</div>
+          </div>
+          <button class="btn ghost" onclick="navigate('coach')" style="font-size: 12px;">→</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ═══ STATE 2: No workout planned today (rest day) ═══
+  if (!todaysPlanned) {
+    card.innerHTML = `
+      <div class="panel" style="margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 28px;">🛌</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Rest day</div>
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Recovery is training too. Hydrate, sleep, eat.</div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ═══ STATE 3: Today has a planned workout ═══
+  const sportEmoji = { run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', gym: '💪', mobility: '🧘', rest: '🛌' }[todaysPlanned.sport] || '⚡';
+  const duration = todaysPlanned.duration_minutes ? `${todaysPlanned.duration_minutes}min` : '';
+  const distance = todaysPlanned.distance_km ? `${todaysPlanned.distance_km}km` : '';
+  const wType = todaysPlanned.workout_type || todaysPlanned.intensity_label || '';
+  const title = wType
+    ? `${todaysPlanned.sport.charAt(0).toUpperCase() + todaysPlanned.sport.slice(1)} · ${wType}`
+    : todaysPlanned.sport.charAt(0).toUpperCase() + todaysPlanned.sport.slice(1);
+  const meta = [duration, distance].filter(Boolean).join(' · ');
+  const completedBadge = alreadyCompleted
+    ? `<div style="font-size: 11px; color: var(--accent); font-weight: 700; padding: 4px 10px; background: rgba(0, 229, 160, 0.12); border: 1px solid rgba(0, 229, 160, 0.3); border-radius: 999px;">✓ Completed</div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="panel" style="margin-bottom: 14px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.04), transparent); border-color: rgba(0, 229, 160, 0.2); cursor: pointer;" onclick="navigate('plan')">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="font-size: 32px; flex-shrink: 0;">${sportEmoji}</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px;">Today</div>
+          <div style="font-size: 15px; font-weight: 700; margin-bottom: 2px;">${escapeHtml(title)}</div>
+          ${meta ? `<div style="font-size: 12px; color: var(--text-dim);">${escapeHtml(meta)}</div>` : ''}
+          ${todaysPlanned.workout_notes ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 4px; line-height: 1.5;">${escapeHtml(todaysPlanned.workout_notes.slice(0, 100))}${todaysPlanned.workout_notes.length > 100 ? '…' : ''}</div>` : ''}
+        </div>
+        <div style="flex-shrink: 0;">
+          ${completedBadge || `<div style="color: var(--text-mute); font-size: 18px;">→</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 7-day visual progress strip — shows planned vs completed for past + upcoming days
+async function renderDashWeekStrip() {
+  const card = document.getElementById('weekStripCard');
+  if (!card) return;
+
+  // Build a 7-day window centered around today: 3 past, today, 3 future
+  const days = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let offset = -3; offset <= 3; offset++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    days.push({
+      date: d,
+      dateStr: d.toISOString().split('T')[0],
+      isToday: offset === 0,
+      isPast: offset < 0,
+      label: d.toLocaleDateString('en-US', { weekday: 'short' })[0], // M T W T F S S
+    });
+  }
+
+  // Pull planned + completed workouts for this window
+  const startStr = days[0].dateStr;
+  const endStr = days[days.length - 1].dateStr;
+  let planned = [];
+  let completed = [];
+  try {
+    const { data: pl } = await sb.from('planned_workouts')
+      .select('scheduled_date, sport')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', startStr)
+      .lte('scheduled_date', endStr);
+    planned = pl || [];
+
+    const { data: comp } = await sb.from('workouts')
+      .select('created_at, sport, activity_classification')
+      .eq('user_id', state.user.id)
+      .gte('created_at', startStr + 'T00:00:00')
+      .lte('created_at', endStr + 'T23:59:59');
+    completed = (comp || []).filter(w => w.activity_classification !== 'daily_activity');
+  } catch (e) {
+    console.warn('[Stryxs] week strip query failed:', e);
+  }
+
+  // Map: dateStr → { hasPlanned: bool, hasCompleted: bool }
+  const dayMap = {};
+  for (const d of days) dayMap[d.dateStr] = { hasPlanned: false, hasCompleted: false };
+  for (const p of planned) {
+    if (dayMap[p.scheduled_date]) dayMap[p.scheduled_date].hasPlanned = true;
+  }
+  for (const c of completed) {
+    const d = (c.created_at || '').split('T')[0];
+    if (dayMap[d]) dayMap[d].hasCompleted = true;
+  }
+
+  card.innerHTML = `
+    <div class="panel" style="margin-bottom: 14px; padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 700; color: var(--text);">This week</div>
+        <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="navigate('plan')">View calendar →</button>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: space-between;">
+        ${days.map(d => {
+          const dm = dayMap[d.dateStr];
+          let dotColor = 'rgba(255, 255, 255, 0.08)';
+          let dotLabel = '';
+          if (dm.hasCompleted) {
+            dotColor = 'var(--accent)';
+            dotLabel = '✓';
+          } else if (dm.hasPlanned && d.isPast) {
+            dotColor = 'rgba(239, 68, 68, 0.6)';
+            dotLabel = '·';
+          } else if (dm.hasPlanned) {
+            dotColor = 'rgba(80, 130, 255, 0.6)';
+            dotLabel = '';
+          }
+          const dayNum = d.date.getDate();
+          return `
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; ${d.isToday ? 'opacity: 1;' : 'opacity: 0.85;'}">
+              <div style="font-size: 10px; color: ${d.isToday ? 'var(--accent)' : 'var(--text-mute)'}; font-weight: ${d.isToday ? '800' : '600'}; text-transform: uppercase;">${d.label}</div>
+              <div style="width: 28px; height: 28px; border-radius: 50%; background: ${dotColor}; display: flex; align-items: center; justify-content: center; ${d.isToday ? 'box-shadow: 0 0 0 2px var(--accent);' : ''} font-size: 10px; color: ${dm.hasCompleted ? 'var(--bg)' : 'var(--text-dim)'}; font-weight: 800;">${dotLabel || dayNum}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div style="display: flex; gap: 14px; margin-top: 10px; font-size: 10px; color: var(--text-mute);">
+        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></div>Done</div>
+        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(80, 130, 255, 0.6);"></div>Planned</div>
+        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(239, 68, 68, 0.6);"></div>Missed</div>
+      </div>
+    </div>
+  `;
+}
+
+// Compact race projection mini — single line, links to Race Plan tab
+async function renderDashRaceProjectionMini(intake) {
+  const card = document.getElementById('raceProjectionMini');
+  if (!card) return;
+
+  // Hide entirely if no goal event
+  if (!intake?.goal_event || intake.goal_event === 'general' || intake.goal_event === 'general_fitness') {
+    card.innerHTML = '';
+    return;
+  }
+
+  // Use cached projection if available
+  let projTime = '—';
+  let confidence = null;
+  if (typeof _projectionsCache !== 'undefined' && _projectionsCache?.proj?.primary_projection) {
+    projTime = _projectionsCache.proj.primary_projection.time || _projectionsCache.proj.primary_projection.predicted_time || '—';
+    confidence = _projectionsCache.proj.data_sufficiency || null;
+  }
+
+  // Update race countdown chip with intake context (depends on goal/race_date)
+  await renderDashRaceCountdown(intake);
+
+  const eventName = formatGoal(intake.goal_event) || 'race';
+
+  card.innerHTML = `
+    <div class="panel" style="margin-bottom: 14px; cursor: pointer;" onclick="navigate('race-planner')">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="font-size: 22px; flex-shrink: 0;">🎯</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 2px;">Projected ${escapeHtml(eventName)}</div>
+          <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+            <div style="font-size: 18px; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">${escapeHtml(projTime)}</div>
+            ${confidence ? `<div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase;">${escapeHtml(confidence)} confidence</div>` : ''}
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0;">View more →</div>
+      </div>
+    </div>
+  `;
+
+  // Trigger projection refresh in background if cache is empty (don't await — non-blocking)
+  if (typeof _projectionsCache === 'undefined' || !_projectionsCache?.proj) {
+    setTimeout(() => {
+      if (typeof renderProjections === 'function') {
+        renderProjections().then(() => {
+          // After fetch, update the mini-card
+          if (_projectionsCache?.proj?.primary_projection) {
+            const pTime = _projectionsCache.proj.primary_projection.time || _projectionsCache.proj.primary_projection.predicted_time || '—';
+            const pConf = _projectionsCache.proj.data_sufficiency;
+            const timeEl = card.querySelector('div[style*="font-family: \'JetBrains"]');
+            if (timeEl) timeEl.textContent = pTime;
+          }
+        }).catch(() => {});
+      }
+    }, 500);
   }
 }
 
@@ -8353,7 +8709,7 @@ async function renderCoachChat(el, intake) {
           : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
       </div>
       <div class="chat-input-row">
-        <input type="text" id="chatInput" placeholder="Ask Coach anything..." onkeydown="if(event.key==='Enter')sendChatMsg()" />
+        <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
         <button class="btn" onclick="sendChatMsg()">Send</button>
       </div>
     </div>
@@ -8719,6 +9075,23 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Auto-grow chat input textarea as user types — caps at the CSS max-height
+function autoResizeChatInput(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// Chat input keyboard:
+//   - Enter: send (matches old behavior)
+//   - Shift+Enter: newline
+function handleChatInputKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendChatMsg();
+  }
+}
+
 async function sendChatMsg() {
   const input = document.getElementById('chatInput');
   const msgs = document.getElementById('chatMessages');
@@ -8726,6 +9099,8 @@ async function sendChatMsg() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  // Reset textarea height after clearing so it shrinks back
+  input.style.height = 'auto';
   input.disabled = true;
 
   // Append user msg immediately
@@ -12660,8 +13035,8 @@ async function renderPlan() {
             })()}
           </div>
           ${currentWeekInfo.target_volume_hours ? `
-            <div style="text-align: right;">
-              <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Target</div>
+            <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end;">
+              <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 2px;">Target</div>
               <div style="font-size: 22px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; line-height: 1;">${currentWeekInfo.target_volume_hours}h</div>
             </div>
           ` : ''}
