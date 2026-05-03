@@ -3757,6 +3757,10 @@ body.on-auth .container {
     <span class="avatar-menu-icon">⚙</span>
     <span>Settings</span>
   </button>
+  <button class="avatar-menu-item" id="avatarUpgradeItem" onclick="navigateAndCloseAvatarMenu('upgrade')" style="display: none;">
+    <span class="avatar-menu-icon">⭐</span>
+    <span id="avatarUpgradeLabel">Upgrade to Pro</span>
+  </button>
   <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('help')">
     <span class="avatar-menu-icon">💡</span>
     <span>Help &amp; FAQ</span>
@@ -4084,6 +4088,9 @@ body.on-auth .container {
   <!-- Coach banner if intake not done — kept -->
   <div id="coachBanner" style="display: none;"></div>
 
+  <!-- Trial banner — populated by renderDashboard via renderTrialBanner() -->
+  <div id="trialBannerContainer"></div>
+
   <!-- ═══ TODAY: planned workout for today (or rest / no plan) ═══ -->
   <div id="todayCard"></div>
 
@@ -4215,6 +4222,11 @@ body.on-auth .container {
   <div class="section-title">Training Trends</div>
   <p class="section-sub">Patterns across your recent training. The bigger picture Strava and Garmin don't show.</p>
   <div id="trendsContent"></div>
+</div>
+
+<!-- UPGRADE / PRICING -->
+<div class="page" id="page-upgrade">
+  <div id="upgradeContent"></div>
 </div>
 
 <!-- HELP -->
@@ -4500,6 +4512,82 @@ function getUserSubscriptionStatus() {
   if (p.subscriptionTier === 'pro' && (!p.proUntil || new Date(p.proUntil) > new Date())) return 'pro';
   if (p.subscriptionTier === 'pro_trial' && p.trialEndsAt && new Date(p.trialEndsAt) > new Date()) return 'trial';
   return 'free';
+}
+
+// ═══════════════════════════════════════════════════════════
+// UPGRADE CARDS — shown to free users when they hit gated features
+// Used everywhere that's Pro-only. Single source of truth so visual style + CTA stay consistent.
+// ═══════════════════════════════════════════════════════════
+
+// Returns HTML for a Pro upgrade card. Use this in any feature that's gated.
+// `opts.featureName` — what they're trying to use (e.g. "Coach chat", "Trends")
+// `opts.description` — short benefit-focused sentence
+// `opts.icon` — emoji shown in the card header
+// `opts.compact` — if true, smaller card for inline placement
+function renderUpgradeCard(opts = {}) {
+  const featureName = opts.featureName || 'this feature';
+  const description = opts.description || 'Upgrade to Pro to unlock everything.';
+  const icon = opts.icon || '⭐';
+  const compact = !!opts.compact;
+  const padding = compact ? '18px' : '32px 24px';
+  const titleSize = compact ? '15px' : '18px';
+  const iconSize = compact ? '32px' : '44px';
+  return `
+    <div class="empty" style="padding: ${padding}; background: linear-gradient(180deg, rgba(0, 255, 163, 0.04), rgba(0, 255, 163, 0.01)); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 14px;">
+      <div style="font-size: ${iconSize}; margin-bottom: 10px;">${icon}</div>
+      <div style="font-size: ${titleSize}; font-weight: 700; color: var(--text); margin-bottom: 8px; letter-spacing: -0.3px;">
+        ${featureName} is a Pro feature
+      </div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; max-width: 360px; margin: 0 auto 16px;">
+        ${description}
+      </div>
+      <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+        <button class="btn" onclick="navigate('upgrade')" style="font-size: 13px; padding: 9px 18px;">
+          Upgrade to Pro →
+        </button>
+        ${compact ? '' : `
+          <button class="btn ghost" onclick="navigate('help')" style="font-size: 13px; padding: 9px 18px;">
+            Compare plans
+          </button>
+        `}
+      </div>
+    </div>`;
+}
+
+// Inline upgrade nudge — much smaller, used in lists/feeds where a full card would overwhelm.
+// Example: "You've used your free race plan. Upgrade for unlimited."
+function renderUpgradeInline(message) {
+  return `
+    <div style="padding: 14px 16px; background: rgba(0, 255, 163, 0.06); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; min-width: 200px;">
+        <span style="margin-right: 6px;">⭐</span>${message}
+      </div>
+      <button class="btn" onclick="navigate('upgrade')" style="font-size: 12px; padding: 7px 14px; flex-shrink: 0;">
+        Upgrade →
+      </button>
+    </div>`;
+}
+
+// Trial banner — shown on dashboard when user is in active trial.
+// Tells them how many days left + gives upgrade CTA. Auto-hides for free + paid users.
+function renderTrialBanner() {
+  if (!isInTrial()) return '';
+  const days = getTrialDaysLeft();
+  const urgency = days <= 2;
+  const bg = urgency ? 'rgba(251, 191, 36, 0.06)' : 'rgba(0, 255, 163, 0.05)';
+  const border = urgency ? 'rgba(251, 191, 36, 0.25)' : 'rgba(0, 255, 163, 0.2)';
+  const accent = urgency ? '#fbbf24' : 'var(--accent)';
+  return `
+    <div style="padding: 12px 16px; background: ${bg}; border: 1px solid ${border}; border-radius: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; min-width: 200px;">
+        <span style="color: ${accent}; font-weight: 600;">⏱ Pro trial — ${days} day${days === 1 ? '' : 's'} left</span>
+        <span style="margin: 0 8px; color: var(--text-mute);">·</span>
+        <span>Upgrade anytime to keep all features.</span>
+      </div>
+      <button class="btn" onclick="navigate('upgrade')" style="font-size: 12px; padding: 7px 14px; flex-shrink: 0;">
+        Upgrade →
+      </button>
+    </div>`;
 }
 
 async function saveProfileData() {
@@ -5055,6 +5143,7 @@ function navigate(page) {
   if (page === 'trends') renderTrends();
   if (page === 'settings') renderSettings();
   if (page === 'help') renderHelpCategories();
+  if (page === 'upgrade') renderUpgradePage();
   if (page === 'upload') {
     updateStravaConnectCard();
     renderTodaysAnalyses();
@@ -5137,6 +5226,19 @@ function toggleAvatarMenu(event) {
     const header = document.getElementById('avatarMenuHeader');
     if (header && state.user) {
       header.innerHTML = `<strong>${state.user.name || 'Athlete'}</strong><span>${state.user.email || ''}</span>`;
+    }
+    // Show/hide the "Upgrade to Pro" menu item based on subscription state.
+    // Free + trial users see it (with different label). Pro users don't.
+    const upgradeItem = document.getElementById('avatarUpgradeItem');
+    const upgradeLabel = document.getElementById('avatarUpgradeLabel');
+    if (upgradeItem && upgradeLabel) {
+      const status = getUserSubscriptionStatus();
+      if (status === 'pro') {
+        upgradeItem.style.display = 'none';
+      } else {
+        upgradeItem.style.display = '';
+        upgradeLabel.textContent = status === 'trial' ? `Upgrade (${getTrialDaysLeft()}d trial left)` : 'Upgrade to Pro';
+      }
     }
     // Position the menu directly below the avatar button on desktop
     const avatarBtn = document.querySelector('.nav .nav-user-btn');
@@ -6126,12 +6228,17 @@ function renderSummaryWorkout(a) {
                   This workout was synced before deep analysis was available, or initial analysis didn't complete.
                   Tap below to fetch heart rate data and unlock zones, drift, and Coach's read.
                 </div>
-                ${dbId ? `
+                ${dbId ? (isUserPro() ? `
                   <button class="btn" id="reanalyzeBtn-${dbId}" onclick="reanalyzeStravaWorkout('${dbId}')" style="font-size: 13px; padding: 8px 16px;">
                     🔄 Re-analyze with heart rate data
                   </button>
                   <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute);">${stravaLink}</div>
-                ` : `<div style="font-size: 12px; color: var(--text-mute);">${stravaLink}</div>`}
+                ` : `
+                  <button class="btn" onclick="navigate('upgrade')" style="font-size: 13px; padding: 8px 16px;">
+                    ⭐ Upgrade to unlock deep analysis
+                  </button>
+                  <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute);">Deep analysis (drift, zones, Coach's Read) is a Pro feature. ${stravaLink}</div>
+                `) : `<div style="font-size: 12px; color: var(--text-mute);">${stravaLink}</div>`}
               </div>`;
           }
           // Default fallback (CSV uploads with no analysis, edge cases)
@@ -6161,6 +6268,12 @@ function renderSummaryWorkout(a) {
 window._reanalyzingWorkouts = window._reanalyzingWorkouts || {};
 
 async function reanalyzeStravaWorkout(dbId) {
+  // Defense in depth — should never happen via UI, but block if a free user somehow triggers
+  if (!isUserPro()) {
+    toast('Deep analysis is a Pro feature. Upgrade to unlock.', 5000);
+    navigate('upgrade');
+    return;
+  }
   // Block double-clicks per workout
   if (window._reanalyzingWorkouts[dbId]) {
     console.log('[Stryxs] Re-analysis already in progress for', dbId);
@@ -6419,6 +6532,12 @@ async function renderDashboard() {
 
   // ═══ STEP 1: CONTEXTUAL GREETING + RACE COUNTDOWN ═══
   await renderDashGreeting();
+
+  // ═══ STEP 1b: TRIAL BANNER (only fires if user is in active trial) ═══
+  const trialBannerEl = document.getElementById('trialBannerContainer');
+  if (trialBannerEl) {
+    trialBannerEl.innerHTML = renderTrialBanner();
+  }
 
   // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
   const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
@@ -7155,13 +7274,25 @@ function renderHistoryItem(w, idx) {
 // ═══════════════════════════════════════════════════════════
 function renderHistory() {
   const list = document.getElementById('historyList');
-  document.getElementById('historyCount').textContent = state.workouts.length === 0 ? 'No workouts yet' : `${state.workouts.length} workout${state.workouts.length>1?'s':''} analyzed`;
-  if (state.workouts.length === 0) {
+  const totalCount = state.workouts.length;
+  document.getElementById('historyCount').textContent = totalCount === 0 ? 'No workouts yet' : `${totalCount} workout${totalCount>1?'s':''} analyzed`;
+  if (totalCount === 0) {
     list.innerHTML = `<div class="empty"><div class="empty-icon">📂</div><div class="empty-title">No workouts yet</div><div class="empty-desc">Upload your first workout to build your training history</div></div>`;
     return;
   }
   const sorted = [...state.workouts].reverse();
-  list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, state.workouts.length - 1 - i)).join('');
+
+  // Free users see only the 5 most recent. Pro = unlimited.
+  const FREE_HISTORY_LIMIT = 5;
+  const userIsPro = isUserPro();
+  if (!userIsPro && sorted.length > FREE_HISTORY_LIMIT) {
+    const visible = sorted.slice(0, FREE_HISTORY_LIMIT);
+    const hiddenCount = sorted.length - FREE_HISTORY_LIMIT;
+    list.innerHTML = visible.map((w, i) => renderHistoryItem(w, totalCount - 1 - i)).join('') +
+      renderUpgradeInline(`<strong style="color: var(--text);">${hiddenCount} more workout${hiddenCount === 1 ? '' : 's'} hidden.</strong> Upgrade to Pro for unlimited history.`);
+    return;
+  }
+  list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, totalCount - 1 - i)).join('');
 }
 
 // Show a confirm dialog with classification options (called from "misclick? change" link)
@@ -7315,6 +7446,17 @@ async function viewHistoryDetail(idx) {
 // ═══════════════════════════════════════════════════════════
 function renderTrends() {
   const el = document.getElementById('trendsContent');
+
+  // ─── Gate: Trends is Pro-only ───
+  if (!isUserPro()) {
+    el.innerHTML = renderUpgradeCard({
+      featureName: 'Training Trends',
+      description: 'Unlock weekly pattern analysis — drift trends, intensity distribution, volume changes, adherence patterns. The bigger picture Strava and Garmin don\'t show.',
+      icon: '📈',
+    });
+    return;
+  }
+
   if (state.workouts.length < 3) {
     // Different empty states based on whether user has zero vs some workouts
     if (state.workouts.length === 0) {
@@ -9561,8 +9703,16 @@ async function renderCoachChat(el, intake) {
           : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me — check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
       </div>
       <div class="chat-input-row">
-        <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
-        <button class="btn" onclick="sendChatMsg()">Send</button>
+        ${isUserPro() ? `
+          <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
+          <button class="btn" onclick="sendChatMsg()">Send</button>
+        ` : `
+          <div style="flex: 1; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">🔒</span>
+            <span>Coach chat is a Pro feature. Upgrade to ask anything.</span>
+          </div>
+          <button class="btn" onclick="navigate('upgrade')" style="white-space: nowrap;">Upgrade</button>
+        `}
       </div>
     </div>
 
@@ -9580,10 +9730,10 @@ async function renderCoachChat(el, intake) {
         <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. You start over from scratch. Only use this if you want to completely re-do your setup.</div>
       </div>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="plan-mgmt-card" onclick="openImportModal()">
+        <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
           <div class="plan-mgmt-card-head">
             <span class="plan-mgmt-card-icon">📥</span>
-            <span class="plan-mgmt-card-title">Import existing plan</span>
+            <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
           </div>
           <div class="plan-mgmt-card-body">
             <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
@@ -13311,15 +13461,24 @@ async function renderRacePlanner() {
     </div>
 
     <div style="margin-top: 18px;">
-      <button class="btn" style="width: 100%;" onclick="openRacePlanForm()">+ New race plan</button>
       ${(() => {
-        // Quota indicator — count how many plans were created this month
+        // Free users: 1 race plan total. After that, must upgrade.
+        // Pro users: 10/month soft cap.
+        const totalCount = (existingPlans || []).length;
+        const userIsPro = isUserPro();
+        if (!userIsPro && totalCount >= 1) {
+          // Free user has used their 1 race plan — block creation
+          return `<div style="opacity: 0.5; pointer-events: none;"><button class="btn" style="width: 100%;" disabled>+ New race plan</button></div>
+            ${renderUpgradeInline('You\'ve used your free race plan. Upgrade to Pro for unlimited race plans.')}`;
+        }
+        // Otherwise show the create button + appropriate quota indicator
         const monthStart = new Date();
         monthStart.setDate(1);
         monthStart.setHours(0, 0, 0, 0);
         const thisMonth = (existingPlans || []).filter(p => new Date(p.created_at) >= monthStart).length;
         const limit = 10;
-        return `<div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">${thisMonth}/${limit} race plans this month</div>`;
+        return `<button class="btn" style="width: 100%;" onclick="openRacePlanForm()">+ New race plan</button>
+          <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">${userIsPro ? `${thisMonth}/${limit} race plans this month` : `Free: 1 race plan total · ${totalCount}/1 used`}</div>`;
       })()}
     </div>
 
@@ -15751,6 +15910,106 @@ const HELP_CATEGORIES = [
     ],
   },
 ];
+
+// ═══════════════════════════════════════════════════════════
+// UPGRADE PAGE — pricing, plans, comparison
+// Phase 4 will add the Stripe checkout button. For now, this page exists so
+// every "Upgrade to Pro" CTA across the app has somewhere to land. Users on
+// this page can see what they get, why it's worth it, and join a waitlist.
+// ═══════════════════════════════════════════════════════════
+function renderUpgradePage() {
+  const el = document.getElementById('upgradeContent');
+  if (!el) return;
+  const status = getUserSubscriptionStatus();
+
+  // Already-Pro users see a different page — confirmation + manage subscription
+  if (status === 'pro') {
+    el.innerHTML = `
+      <div class="section-title">You're a Pro</div>
+      <p class="section-sub">Thanks for supporting Stryxs. Every feature is unlocked.</p>
+      <div class="empty" style="padding: 32px 20px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.05), rgba(0, 255, 163, 0.01)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 14px; margin-top: 16px;">
+        <div style="font-size: 44px; margin-bottom: 10px;">⭐</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px;">Pro is active</div>
+        <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; max-width: 360px; margin: 0 auto 16px;">
+          You have full access to Coach chat, deep workout analysis, race planner, trend insights, and adaptive plan adjustments.
+        </div>
+        ${state.profile?.proUntil ? `<div style="font-size: 12px; color: var(--text-mute); margin-bottom: 16px;">Renews on ${new Date(state.profile.proUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>` : ''}
+      </div>
+    `;
+    return;
+  }
+
+  // Free + trial users see the pricing pitch
+  const trialBanner = isInTrial() ? `
+    <div style="padding: 12px 16px; background: rgba(0, 255, 163, 0.06); border: 1px solid rgba(0, 255, 163, 0.2); border-radius: 12px; margin-bottom: 18px; font-size: 13px; color: var(--text-dim); line-height: 1.5;">
+      <span style="color: var(--accent); font-weight: 600;">⏱ Pro trial — ${getTrialDaysLeft()} day${getTrialDaysLeft() === 1 ? '' : 's'} left.</span>
+      Upgrade now to keep all features when your trial ends.
+    </div>` : '';
+
+  el.innerHTML = `
+    <div class="section-title">Upgrade to Stryxs Pro</div>
+    <p class="section-sub">Get the full AI coaching experience built for endurance athletes.</p>
+    ${trialBanner}
+
+    <!-- Plan comparison card -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px;">
+      <!-- FREE column -->
+      <div style="padding: 22px 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 6px;">Free</div>
+        <div style="font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -1px; margin-bottom: 4px;">$0</div>
+        <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 18px;">forever</div>
+        <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.7; color: var(--text-dim);">
+          <li>✓ Coach intake + 1 starter plan</li>
+          <li>✓ Strava sync (last 7 days)</li>
+          <li>✓ Basic workout analysis</li>
+          <li>✓ Last 5 workouts in history</li>
+          <li>✓ 1 race plan total</li>
+        </ul>
+      </div>
+
+      <!-- PRO column -->
+      <div style="padding: 22px 18px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.06), rgba(0, 255, 163, 0.01)); border: 2px solid var(--accent); border-radius: 14px; position: relative;">
+        <div style="position: absolute; top: -10px; left: 18px; padding: 3px 10px; background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border-radius: 6px;">Recommended</div>
+        <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 6px;">Pro</div>
+        <div style="font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -1px; margin-bottom: 4px;">$14.99<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/mo</span></div>
+        <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 18px;">or $129/year (save 28%)</div>
+        <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.7; color: var(--text-dim);">
+          <li><span style="color: var(--accent);">✓</span> Everything in Free, plus:</li>
+          <li><span style="color: var(--accent);">✓</span> Unlimited workout history</li>
+          <li><span style="color: var(--accent);">✓</span> Full Strava sync (auto-forever)</li>
+          <li><span style="color: var(--accent);">✓</span> Deep analysis (drift, zones, Coach's Read)</li>
+          <li><span style="color: var(--accent);">✓</span> Coach chat (unlimited)</li>
+          <li><span style="color: var(--accent);">✓</span> Trend insights (weekly)</li>
+          <li><span style="color: var(--accent);">✓</span> Unlimited race plans</li>
+          <li><span style="color: var(--accent);">✓</span> Plan adaptive adjustments</li>
+          <li><span style="color: var(--accent);">✓</span> Multi-week imported plans</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div style="margin-top: 24px; text-align: center;">
+      <button class="btn" onclick="initiateUpgrade()" style="font-size: 15px; padding: 12px 32px; min-width: 200px;">
+        Upgrade to Pro →
+      </button>
+      <div style="font-size: 11px; color: var(--text-mute); margin-top: 10px;">7-day money-back guarantee · cancel anytime</div>
+    </div>
+
+    <!-- Why Pro? -->
+    <div style="margin-top: 32px; padding: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
+      <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 10px;">Why upgrade?</div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.65;">
+        Stryxs Pro is the difference between an AI that just stores your workouts and one that actually <em style="color: var(--text);">coaches</em> you. Pro users get access to the same data depth a $200/month human coach would give you — cardiac drift trends, zone discipline, race pacing, adaptive plan adjustments — at a fraction of the cost. Built for athletes who take their training seriously.
+      </div>
+    </div>
+  `;
+}
+
+// Phase 4 will replace this with Stripe checkout. For now, opens an email or shows coming-soon.
+async function initiateUpgrade() {
+  toast('Stripe checkout coming soon — email coach@stryxs.com to get on the waitlist for early Pro access.', 6000);
+}
+
 
 function renderHelpCategories() {
   const container = document.getElementById('helpCategories');
