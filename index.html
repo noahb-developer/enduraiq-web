@@ -1,4 +1,4 @@
-=<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6352,11 +6352,12 @@ async function renderInsightsFromDb() {
   const list = document.getElementById('insightsList');
   if (!list) return;
 
+  // Pull active + applied. Applied insights stay visible for 24h (or until manually dismissed)
+  // so user can undo or see what changed.
   const { data: insights } = await sb.from('training_insights')
     .select('*')
     .eq('user_id', state.user.id)
-    .eq('status', 'active')
-    .order('severity', { ascending: false })
+    .in('status', ['active', 'applied'])
     .order('generated_at', { ascending: false });
 
   if (!insights || insights.length === 0) {
@@ -6370,11 +6371,32 @@ async function renderInsightsFromDb() {
     return;
   }
 
-  // Group: urgent first, then actionable, then info
-  const sevOrder = { urgent: 0, actionable: 1, info: 2 };
-  insights.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
+  const active = insights.filter(p => p.status === 'active');
+  const applied = insights.filter(p => p.status === 'applied');
 
-  list.innerHTML = insights.map(p => renderInsightCard(p)).join('');
+  // Sort active: urgent → actionable → info
+  const sevOrder = { urgent: 0, actionable: 1, info: 2 };
+  active.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
+  // Sort applied: most recent first
+  applied.sort((a, b) => new Date(b.applied_at || b.generated_at).getTime() - new Date(a.applied_at || a.generated_at).getTime());
+
+  let html = '';
+  if (active.length > 0) {
+    html += active.map(p => renderInsightCard(p)).join('');
+  }
+  if (applied.length > 0) {
+    html += `
+      <div style="margin-top: 18px; margin-bottom: 10px; font-size: 12px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+        <span>Recently applied (${applied.length})</span>
+        <div style="flex: 1; height: 1px; background: var(--border);"></div>
+      </div>
+      ${applied.map(p => renderInsightCard(p)).join('')}
+    `;
+  }
+  if (active.length === 0 && applied.length === 0) {
+    html = `<div class="panel" style="text-align: center;"><div style="font-size: 13px; color: var(--text-dim);">All clear — no active patterns right now.</div></div>`;
+  }
+  list.innerHTML = html;
 }
 
 function renderInsightCard(p) {
@@ -6384,21 +6406,32 @@ function renderInsightCard(p) {
     info: { bg: 'rgba(80, 130, 255, 0.04)', border: 'rgba(80, 130, 255, 0.25)', icon: '💡', label: 'INFO', labelColor: '#82a4ff' },
   };
   const s = sevStyle[p.severity] || sevStyle.info;
+  const isApplied = p.status === 'applied';
+  // Apply button shows on actionable/urgent insights that have a recommendation, NOT yet applied,
+  // and NOT informational (info-only patterns are observations, not actions)
+  const canApply = !isApplied && (p.severity === 'urgent' || p.severity === 'actionable') && p.recommendation;
+  // Undo available within 24h of apply
+  const canUndo = isApplied && p.applied_at && (Date.now() - new Date(p.applied_at).getTime() < 24 * 60 * 60 * 1000);
+
   return `
-    <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 10px;">
+    <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 10px; ${isApplied ? 'opacity: 0.85;' : ''}">
       <div style="display: flex; gap: 10px; align-items: flex-start;">
         <div style="font-size: 18px; flex-shrink: 0;">${s.icon}</div>
         <div style="flex: 1; min-width: 0;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
             <span style="font-size: 10px; color: ${s.labelColor}; text-transform: uppercase; letter-spacing: 1px; font-weight: 800;">${s.label}</span>
             ${p.category ? `<span style="font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">· ${p.category}</span>` : ''}
+            ${isApplied ? `<span style="font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; background: rgba(0, 229, 160, 0.1); border-radius: 999px; font-weight: 700;">✓ Applied</span>` : ''}
           </div>
           <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 6px;">${escapeHtml(p.title)}</div>
           <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 8px;">${escapeHtml(p.finding)}</div>
           ${p.data_points?.trend_summary ? `<div style="font-size: 11px; color: var(--text-mute); font-family: 'JetBrains Mono', monospace; padding: 6px 10px; background: rgba(0,0,0,0.2); border-radius: 6px; display: inline-block; margin-bottom: 8px;">${escapeHtml(p.data_points.trend_summary)}</div>` : ''}
           ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
-          <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissTrendInsight('${p.id}')">Dismiss</button>
+          ${isApplied && p.data_points?.change_summary ? `<div style="margin-top: 10px; font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(0, 229, 160, 0.04); border: 1px dashed rgba(0, 229, 160, 0.2); border-radius: 8px;"><strong style="color: var(--accent);">What Coach changed:</strong> ${escapeHtml(p.data_points.change_summary)}</div>` : ''}
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+            ${canApply ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>` : ''}
+            ${canUndo ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="undoAppliedInsight('${p.id}', this)">↶ Undo</button>` : ''}
+            ${!isApplied ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: var(--text-mute);" onclick="dismissTrendInsight('${p.id}')">Dismiss</button>` : ''}
           </div>
         </div>
       </div>
@@ -6509,6 +6542,206 @@ async function dismissTrendInsight(insightId) {
     await renderInsightsMiniCard();
   } catch (err) {
     toast('Could not dismiss: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// APPLY INSIGHT TO PLAN
+// User taps "⚡ Apply to plan" → backend modifies upcoming planned workouts.
+// BEFORE state stored in insight's data_points so user can undo within 24h.
+// ═══════════════════════════════════════════════════════════
+async function applyInsightToPlan(insightId, btnEl) {
+  if (!state.user) return;
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = 'Applying…';
+  }
+
+  try {
+    // Load the insight + intake + upcoming planned workouts
+    const { data: insight } = await sb.from('training_insights').select('*').eq('id', insightId).single();
+    if (!insight) throw new Error('Insight not found');
+
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+
+    // Pull the next 7 days of planned workouts (don't modify past ones)
+    const today = new Date().toISOString().split('T')[0];
+    const weekFromNow = new Date();
+    weekFromNow.setDate(weekFromNow.getDate() + 7);
+    const weekFromNowStr = weekFromNow.toISOString().split('T')[0];
+
+    const { data: planned } = await sb.from('planned_workouts')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', today)
+      .lte('scheduled_date', weekFromNowStr)
+      .order('scheduled_date', { ascending: true });
+
+    if (!planned || planned.length === 0) {
+      toast('No upcoming planned workouts to modify');
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = '⚡ Apply to plan';
+      }
+      return;
+    }
+
+    // Call backend to compute the modifications
+    const result = await callCoach('apply_insight', {
+      insight,
+      intake,
+      plannedWorkouts: planned,
+    }, { timeoutMs: 60000 });
+
+    if (!result?.modified_workouts || result.modified_workouts.length === 0) {
+      toast('Coach didn\'t need to modify anything for this insight.');
+      // Mark as applied anyway so it's clear user took action
+      await sb.from('training_insights')
+        .update({
+          status: 'applied',
+          applied_at: new Date().toISOString(),
+          data_points: { ...(insight.data_points || {}), change_summary: result?.change_summary || 'No changes were needed.', previous_workouts: [] },
+        })
+        .eq('id', insightId);
+      await renderInsightsFromDb();
+      await renderInsightsMiniCard();
+      return;
+    }
+
+    // ═══ STORE BEFORE STATE for undo ═══
+    // Find the original rows that match the indices Coach modified, save them
+    // so undo can restore. We save the FULL pre-mod row.
+    const previousWorkouts = result.modified_workouts.map(mod => {
+      const orig = planned[mod.index];
+      if (!orig) return null;
+      return {
+        id: orig.id,
+        duration_minutes: orig.duration_minutes,
+        distance_km: orig.distance_km,
+        workout_notes: orig.workout_notes,
+      };
+    }).filter(Boolean);
+
+    // Apply the changes
+    let modifiedCount = 0;
+    for (const mod of result.modified_workouts) {
+      const orig = planned[mod.index];
+      if (!orig) continue;
+      const updates = {};
+      if (typeof mod.duration_minutes === 'number') updates.duration_minutes = mod.duration_minutes;
+      if (typeof mod.distance_km === 'number') updates.distance_km = mod.distance_km;
+      if (typeof mod.workout_notes === 'string') updates.workout_notes = mod.workout_notes;
+      if (Object.keys(updates).length === 0) continue;
+      const { error } = await sb.from('planned_workouts').update(updates).eq('id', orig.id);
+      if (error) {
+        console.error('[Stryxs] Update planned workout failed:', error);
+      } else {
+        modifiedCount++;
+      }
+    }
+
+    // Mark insight as applied + store BEFORE state
+    await sb.from('training_insights')
+      .update({
+        status: 'applied',
+        applied_at: new Date().toISOString(),
+        data_points: {
+          ...(insight.data_points || {}),
+          change_summary: result.change_summary,
+          previous_workouts: previousWorkouts,
+        },
+      })
+      .eq('id', insightId);
+
+    // Post a Coach chat message confirming the change
+    try {
+      const message = `✓ **Plan updated based on insight: "${insight.title}"**\n\n${result.change_summary}\n\n_${modifiedCount} workout${modifiedCount === 1 ? '' : 's'} adjusted in the upcoming week. You can undo within 24 hours from the Trends tab._`;
+      await sb.from('coach_messages').insert({
+        user_id: state.user.id,
+        role: 'coach',
+        content: message,
+        context_type: 'insight_applied',
+      });
+      if (typeof setCoachUnread === 'function') setCoachUnread(true);
+    } catch (e) {
+      console.error('[Stryxs] Coach apply message failed:', e);
+    }
+
+    toast(`✓ ${modifiedCount} workout${modifiedCount === 1 ? '' : 's'} adjusted`);
+    await renderInsightsFromDb();
+    await renderInsightsMiniCard();
+  } catch (err) {
+    console.error('[Stryxs] applyInsightToPlan failed:', err);
+    toast('Could not apply: ' + (err.message || 'unknown error'));
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = '⚡ Apply to plan';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// UNDO APPLIED INSIGHT — restore the BEFORE state
+// Available within 24h of apply.
+// ═══════════════════════════════════════════════════════════
+async function undoAppliedInsight(insightId, btnEl) {
+  if (!state.user) return;
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = 'Undoing…';
+  }
+
+  try {
+    const { data: insight } = await sb.from('training_insights').select('*').eq('id', insightId).single();
+    if (!insight) throw new Error('Insight not found');
+
+    const previousWorkouts = insight.data_points?.previous_workouts || [];
+    if (!Array.isArray(previousWorkouts) || previousWorkouts.length === 0) {
+      // Nothing to restore — just mark active again
+      await sb.from('training_insights').update({ status: 'active', applied_at: null }).eq('id', insightId);
+      toast('Restored');
+      await renderInsightsFromDb();
+      return;
+    }
+
+    // Restore each workout to its previous state
+    let restored = 0;
+    for (const prev of previousWorkouts) {
+      if (!prev?.id) continue;
+      const { error } = await sb.from('planned_workouts').update({
+        duration_minutes: prev.duration_minutes,
+        distance_km: prev.distance_km,
+        workout_notes: prev.workout_notes,
+      }).eq('id', prev.id);
+      if (!error) restored++;
+    }
+
+    // Move insight back to active
+    await sb.from('training_insights').update({
+      status: 'active',
+      applied_at: null,
+    }).eq('id', insightId);
+
+    // Coach chat message
+    try {
+      await sb.from('coach_messages').insert({
+        user_id: state.user.id,
+        role: 'coach',
+        content: `↶ **Undid plan adjustment for: "${insight.title}"**\n\n${restored} workout${restored === 1 ? '' : 's'} restored to original. The insight is back in your active list — you can apply again anytime.`,
+        context_type: 'insight_undone',
+      });
+    } catch (_) {}
+
+    toast(`↶ ${restored} workout${restored === 1 ? '' : 's'} restored`);
+    await renderInsightsFromDb();
+    await renderInsightsMiniCard();
+  } catch (err) {
+    console.error('[Stryxs] undoAppliedInsight failed:', err);
+    toast('Could not undo: ' + (err.message || 'unknown'));
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = '↶ Undo';
+    }
   }
 }
 
@@ -9388,8 +9621,15 @@ async function renderProjections(forceRefresh = false) {
       };
     });
 
+    // Pull active insights — race projections can lean toward better/worse end of range based on patterns
+    const { data: activeInsights } = await sb.from('training_insights')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('status', 'active')
+      .limit(8);
+
     // Call Coach for projections
-    const proj = await callCoach('race_projections', { intake, recentWorkouts });
+    const proj = await callCoach('race_projections', { intake, recentWorkouts, activeInsights: activeInsights || [] });
     if (myToken !== _projectionsRenderToken) { _projectionsInflight = false; return; }
 
     // Cache the result
@@ -11709,7 +11949,14 @@ async function submitRacePlanForm() {
       notes,
     };
 
-    const planData = await callCoach('generate_race_plan', { raceInfo, intake, recentWorkouts, cachedProjection }, { timeoutMs: 120000 });
+    // Pull active insights — race plan can reference Coach's detected patterns in key warnings
+    const { data: activeInsights } = await sb.from('training_insights')
+      .select('*')
+      .eq('user_id', state.user.id)
+      .eq('status', 'active')
+      .limit(8);
+
+    const planData = await callCoach('generate_race_plan', { raceInfo, intake, recentWorkouts, cachedProjection, activeInsights: activeInsights || [] }, { timeoutMs: 120000 });
 
     if (!planData) throw new Error('Empty response from Coach');
 
