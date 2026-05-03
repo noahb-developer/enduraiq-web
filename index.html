@@ -1379,6 +1379,95 @@ select option {
   }
 }
 
+/* New plan-mgmt cards — vertical layout with explicit Keeps/Replaces/Wipes lines */
+.plan-mgmt-card {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-mgmt-card:hover {
+  border-color: var(--border-light);
+  background: var(--bg-2);
+}
+.plan-mgmt-card-danger {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.04);
+}
+.plan-mgmt-card-danger:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.07);
+}
+.plan-mgmt-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.plan-mgmt-card-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.plan-mgmt-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.plan-mgmt-card-danger .plan-mgmt-card-title { color: #f87171; }
+.plan-mgmt-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 28px; /* aligns with title text after icon */
+}
+.plan-mgmt-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  flex-wrap: wrap;
+}
+.plan-mgmt-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.tag-keeps {
+  background: rgba(0, 229, 160, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(0, 229, 160, 0.25);
+}
+.tag-replaces {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.tag-wipes {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+@media (max-width: 560px) {
+  .plan-mgmt-card { padding: 12px 14px; gap: 8px; }
+  .plan-mgmt-card-body { padding-left: 0; }
+  .plan-mgmt-line { font-size: 11px; }
+}
+
 /* ════════ UPLOAD ════════ */
 /* New collapsible toggle buttons at top of Analyze page */
 .analyze-toggles {
@@ -9067,29 +9156,47 @@ async function renderCoachChat(el, intake) {
         <button onclick="togglePlanMgmtHelp()" id="planMgmtHelpBtn" style="position: absolute; top: 0; right: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="What do these do?">?</button>
       </div>
       <div id="planMgmtHelp" style="display: none; padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong> — paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar.</div>
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong> — keeps everything you've told Coach about yourself (intake answers, profile) but throws away the current plan and builds a fresh one.</div>
-        <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. You start over from scratch.</div>
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong> — paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong> — keeps everything you've told Coach about yourself (intake answers, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
+        <div><strong style="color: var(--text);">🗑 Reset everything</strong> — wipes intake, plan, and chat history. You start over from scratch. Only use this if you want to completely re-do your setup.</div>
       </div>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="btn ghost plan-mgmt-btn" onclick="openImportModal()">
-          <span class="plan-mgmt-icon">📥</span>
-          <span class="plan-mgmt-main">Import existing plan</span>
-          <span class="plan-mgmt-meta">Already have a plan elsewhere?</span>
+        <button class="plan-mgmt-card" onclick="openImportModal()">
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">📥</span>
+            <span class="plan-mgmt-card-title">Import existing plan</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+          </div>
         </button>
-        <button class="btn ghost plan-mgmt-btn" onclick="openResetModal('regenerate')">
-          <span class="plan-mgmt-icon">🔄</span>
-          <span class="plan-mgmt-main">Generate new plan</span>
-          <span class="plan-mgmt-meta">Keep profile, new plan</span>
+        <button class="plan-mgmt-card" onclick="openResetModal('regenerate')">
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">🔄</span>
+            <span class="plan-mgmt-card-title">Generate new plan</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+          </div>
         </button>
-        <button class="btn ghost plan-mgmt-btn plan-mgmt-danger" onclick="openResetModal('full')">
-          <span class="plan-mgmt-icon">🗑</span>
-          <span class="plan-mgmt-main">Reset everything</span>
-          <span class="plan-mgmt-meta">Clear profile + plan</span>
+        <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">🗑</span>
+            <span class="plan-mgmt-card-title">Reset everything</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
+          </div>
         </button>
       </div>
     </div>
   `;
+
+  // Plan Management help auto-open (only on first visit per user)
+  initPlanMgmtHelpAutoOpen();
 
   // Scroll chat —
   //   • First time the user opens Coach this session: scroll so the START of the LAST message
@@ -9780,6 +9887,29 @@ function togglePlanMgmtHelp() {
   if (btn) {
     btn.style.background = isOpen ? 'var(--bg-3)' : 'var(--accent)';
     btn.style.color = isOpen ? 'var(--text-dim)' : 'var(--bg)';
+  }
+  // Persist that user has now seen this — won't auto-open again
+  try {
+    if (state.user?.id) {
+      localStorage.setItem('stryxs_plan_mgmt_help_seen_' + state.user.id, '1');
+    }
+  } catch (_) {}
+}
+
+// Auto-open the plan-mgmt help panel on first visit (per-user). Once user has interacted
+// with it (either opening or closing via the ? button), we mark seen and won't auto-open.
+function initPlanMgmtHelpAutoOpen() {
+  const help = document.getElementById('planMgmtHelp');
+  const btn = document.getElementById('planMgmtHelpBtn');
+  if (!help || !btn || !state.user?.id) return;
+  let seen = false;
+  try {
+    seen = localStorage.getItem('stryxs_plan_mgmt_help_seen_' + state.user.id) === '1';
+  } catch (_) {}
+  if (!seen) {
+    help.style.display = 'block';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = 'var(--bg)';
   }
 }
 
