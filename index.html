@@ -5493,7 +5493,7 @@ async function renderAutoSyncPanel() {
                 Connected
               </span>
             </div>
-            <div style="font-size: 12px; color: var(--text-dim);">${escapeHtml(fullName)} · auto-syncing</div>
+            <div style="font-size: 12px; color: var(--text-dim);">${escapeHtml(fullName)} · ${isUserPro() ? 'auto-syncing' : 'auto-syncing (last 7 days · Pro = unlimited)'}</div>
           </div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -5516,7 +5516,7 @@ async function renderAutoSyncPanel() {
         </div>
         <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
         <div style="text-align: center;">
-          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Other connections (Garmin, Apple, COROS) →</a>
+          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Or upload CSV files manually →</a>
         </div>
       `;
     }
@@ -7466,7 +7466,7 @@ function renderTrends() {
           <div class="empty-title">No workouts yet</div>
           <div class="empty-desc" style="margin-bottom: 18px;">Trends show patterns across your training — drift, intensity distribution, volume changes. Connect Strava or upload a workout to start.</div>
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
             <button class="btn ghost" onclick="navigate('upload')">Upload a workout</button>
           </div>
         </div>`;
@@ -7826,8 +7826,12 @@ function renderInsightCard(p) {
           ${p.recommendation ? `<div style="font-size: 13px; color: var(--text); line-height: 1.55; padding: 10px 12px; background: rgba(0, 229, 160, 0.06); border-left: 3px solid var(--accent); border-radius: 6px;"><strong style="color: var(--accent);">→ Recommendation:</strong> ${escapeHtml(p.recommendation)}</div>` : ''}
           ${isApplied && p.data_points?.change_summary ? `<div style="margin-top: 10px; font-size: 12px; color: var(--text-dim); padding: 10px 12px; background: rgba(0, 229, 160, 0.04); border: 1px dashed rgba(0, 229, 160, 0.2); border-radius: 8px;"><strong style="color: var(--accent);">What Coach changed:</strong> ${escapeHtml(p.data_points.change_summary)}</div>` : ''}
           <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
-            <button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="explainInsightInChat('${p.id}', this)" title="Get a deeper explanation in Coach chat">💬 Why?</button>
-            ${canApply ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>` : ''}
+            ${isUserPro() 
+              ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="explainInsightInChat('${p.id}', this)" title="Get a deeper explanation in Coach chat">💬 Why?</button>`
+              : ''}
+            ${canApply ? (isUserPro()
+              ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="applyInsightToPlan('${p.id}', this)">⚡ Apply to plan</button>`
+              : `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="navigate('upgrade')" title="Apply to plan is a Pro feature">🔒 Apply to plan</button>`) : ''}
             ${canUndo ? `<button class="btn ghost" style="font-size: 11px; padding: 4px 10px;" onclick="undoAppliedInsight('${p.id}', this)">↶ Undo</button>` : ''}
             ${!isApplied ? `<button class="btn ghost rp-dismiss-btn" data-insight-id="${p.id}" style="font-size: 11px; padding: 4px 10px; color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="initiateDismissTrendInsight('${p.id}', this)">Dismiss</button>` : ''}
           </div>
@@ -7978,6 +7982,12 @@ async function dismissTrendInsight(insightId) {
 // ═══════════════════════════════════════════════════════════
 async function applyInsightToPlan(insightId, btnEl) {
   if (!state.user) return;
+  // Defense in depth — UI shouldn't show this button to free users, but check anyway
+  if (!isUserPro()) {
+    toast('Apply to plan is a Pro feature. Upgrade to unlock.', 5000);
+    navigate('upgrade');
+    return;
+  }
   if (btnEl) {
     btnEl.disabled = true;
     btnEl.textContent = 'Applying…';
@@ -8143,6 +8153,12 @@ async function applyInsightToPlan(insightId, btnEl) {
 // ═══════════════════════════════════════════════════════════
 async function explainInsightInChat(insightId, btnEl) {
   if (!state.user) return;
+  // Defense in depth — Coach chat is Pro-only
+  if (!isUserPro()) {
+    toast('Coach chat is a Pro feature. Upgrade to ask Coach about your insights.', 5000);
+    navigate('upgrade');
+    return;
+  }
   if (btnEl) {
     btnEl.disabled = true;
     btnEl.textContent = 'Asking Coach…';
@@ -10221,6 +10237,12 @@ function handleChatInputKeydown(event) {
 }
 
 async function sendChatMsg() {
+  // Defense in depth — Coach chat is Pro-only. UI hides input but block here too.
+  if (!isUserPro()) {
+    toast('Coach chat is a Pro feature. Upgrade to chat with Coach.', 5000);
+    navigate('upgrade');
+    return;
+  }
   const input = document.getElementById('chatInput');
   const msgs = document.getElementById('chatMessages');
   if (!input || !msgs) return;
@@ -15113,7 +15135,9 @@ async function syncStravaNow(btn) {
   btn.textContent = '⏳ Syncing...';
 
   try {
-    const result = await callStrava('sync_recent', { days: 30 });
+    // Free users sync only the last 7 days. Pro users get full 30 days.
+    const syncDays = isUserPro() ? 30 : 7;
+    const result = await callStrava('sync_recent', { days: syncDays });
     if (result.imported > 0) {
       toast(`Synced ${result.imported} new workout${result.imported === 1 ? '' : 's'}`);
       // Refresh state.workouts so dashboard reflects new data
@@ -15184,10 +15208,11 @@ async function handleStravaCallback() {
     toast('Connecting to Strava...', 3000);
     const result = await callStrava('exchange_code', { code });
     if (result.success) {
-      // Auto-trigger backfill of last 30 days, then show a single clear final toast
+      // Auto-trigger backfill — free users get 7 days, Pro users get 30
       let importedCount = 0;
       try {
-        const sync = await callStrava('sync_recent', { days: 30 });
+        const syncDays = isUserPro() ? 30 : 7;
+        const sync = await callStrava('sync_recent', { days: syncDays });
         importedCount = sync?.imported || 0;
         if (importedCount > 0) {
           await loadWorkouts();
