@@ -4418,6 +4418,16 @@ function toast(msg, durationMs = 2800) {
 // ═══════════════════════════════════════════════════════════
 async function loadProfile() {
   if (!state.user) return;
+
+  // First: tell the database to auto-expire any trial that ended while user was away.
+  // This is idempotent — fine to call every login. If the user is in a valid trial,
+  // nothing happens. If their trial ended, they get switched to 'free'.
+  try {
+    await sb.rpc('expire_old_trials_for_user', { uid: state.user.id });
+  } catch (err) {
+    console.warn('[Stryxs] Trial expiry check failed (non-blocking):', err);
+  }
+
   const { data } = await sb.from('profiles').select('*').eq('id', state.user.id).single();
   if (data) {
     state.profile = {
@@ -4427,10 +4437,69 @@ async function loadProfile() {
       avatarUrl: data.avatar_url || null,
       bio: data.bio || '',
       displayName: data.display_name || data.name || null,
+      // ─── Subscription state ───
+      subscriptionTier: data.subscription_tier || 'free',
+      trialEndsAt: data.trial_ends_at || null,
+      proUntil: data.pro_until || null,
+      stripeCustomerId: data.stripe_customer_id || null,
+      stripeSubscriptionId: data.stripe_subscription_id || null,
     };
     if (data.name) state.user.name = data.name;
     if (data.display_name) state.user.name = data.display_name;
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBSCRIPTION HELPERS — single source of truth for "is this user Pro?"
+// Use these everywhere instead of checking subscription_tier directly,
+// because a trial user has tier='pro_trial' but only counts as Pro until
+// trial_ends_at. Centralizing avoids forgetting that check.
+// ═══════════════════════════════════════════════════════════
+
+// Returns true if user has access to Pro features RIGHT NOW.
+// Covers: paid Pro (with valid pro_until), active trial (trial_ends_at in future).
+function isUserPro() {
+  const p = state.profile;
+  if (!p) return false;
+  const now = new Date();
+  // Paid Pro — valid if no expiry set, or expiry is in the future
+  if (p.subscriptionTier === 'pro') {
+    if (!p.proUntil) return true; // no expiry = perpetual (manual grant or future ?)
+    return new Date(p.proUntil) > now;
+  }
+  // Trial — valid if trial_ends_at is in the future
+  if (p.subscriptionTier === 'pro_trial') {
+    if (!p.trialEndsAt) return false;
+    return new Date(p.trialEndsAt) > now;
+  }
+  return false;
+}
+
+// Returns true ONLY if user is in an active trial (not paid Pro).
+// Used to show "X days left in trial" banners.
+function isInTrial() {
+  const p = state.profile;
+  if (!p) return false;
+  if (p.subscriptionTier !== 'pro_trial') return false;
+  if (!p.trialEndsAt) return false;
+  return new Date(p.trialEndsAt) > new Date();
+}
+
+// Returns the integer number of days left in the trial (0 if expired or not in trial).
+function getTrialDaysLeft() {
+  if (!isInTrial()) return 0;
+  const ms = new Date(state.profile.trialEndsAt) - new Date();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+// Returns one of: 'pro' (paying), 'trial' (active trial), 'free' (everything else).
+// Useful for analytics, banners, and conditional copy.
+function getUserSubscriptionStatus() {
+  const p = state.profile;
+  if (!p) return 'free';
+  if (p.subscriptionTier === 'pro' && (!p.proUntil || new Date(p.proUntil) > new Date())) return 'pro';
+  if (p.subscriptionTier === 'pro_trial' && p.trialEndsAt && new Date(p.trialEndsAt) > new Date()) return 'trial';
+  return 'free';
 }
 
 async function saveProfileData() {
@@ -4552,7 +4621,7 @@ async function doLogin() {
 async function doLogout() {
   await sb.auth.signOut();
   state.user = null; state.workouts = [];
-  state.profile = { runLthr: null, bikeLthr: null };
+  state.profile = { runLthr: null, bikeLthr: null, subscriptionTier: 'free', trialEndsAt: null, proUntil: null };
   // Reset session flags so the next sign-in gets fresh first-load behavior
   window._stryxsCoachLoadedThisSession = false;
   showLanding(); navigate('landing');
