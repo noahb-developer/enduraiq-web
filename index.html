@@ -8104,9 +8104,37 @@ async function regenerateInsights() {
 
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
+    // Round 5 Item 22: pull dismissal history (last 30 days) so the analyzer
+    // can de-prioritize pattern types the user keeps dismissing. If a user has
+    // dismissed "drift_signal" 3 times in the last month, the model should only
+    // flag drift_signal again when the signal is unusually strong.
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: dismissed } = await sb.from('training_insights')
+      .select('pattern_type')
+      .eq('user_id', state.user.id)
+      .eq('status', 'dismissed')
+      .gte('dismissed_at', thirtyDaysAgo.toISOString());
+
+    // Group dismissals by pattern_type, count
+    const dismissalCounts = {};
+    (dismissed || []).forEach(row => {
+      const t = row.pattern_type || 'unknown';
+      dismissalCounts[t] = (dismissalCounts[t] || 0) + 1;
+    });
+    // Format for backend: array of { pattern_type, count } only for types with ≥2 dismissals
+    const userDismissalHistory = Object.entries(dismissalCounts)
+      .filter(([_, count]) => count >= 2)
+      .map(([pattern_type, count]) => ({ pattern_type, count }));
+
+    if (userDismissalHistory.length > 0) {
+      console.log('[Stryxs] Passing dismissal history to analyzer:', userDismissalHistory);
+    }
+
     const result = await callCoach('analyze_patterns', {
       intake,
       allWorkouts: rawWorkouts || [],
+      userDismissalHistory,
     }, { timeoutMs: 110000 });
 
     // Mark old TREND insights as 'stale' — but leave anomaly insights alone.
@@ -8231,6 +8259,40 @@ function initiateDismissTrendInsight(insightId, btnEl) {
 
 async function dismissTrendInsight(insightId) {
   try {
+    // Round 5 Item 21: if user dismisses an APPLIED insight within 24h of
+    // application, revert the workout changes too. Beyond 24h, dismissing
+    // just hides without revert (user has already lived with the changes).
+    const { data: insight } = await sb.from('training_insights')
+      .select('*')
+      .eq('id', insightId)
+      .maybeSingle();
+
+    if (insight?.status === 'applied' && insight?.applied_at) {
+      const ageMs = Date.now() - new Date(insight.applied_at).getTime();
+      const within24h = ageMs < 24 * 60 * 60 * 1000;
+      if (within24h) {
+        const restored = await revertAppliedInsightWorkouts(insight);
+        if (restored > 0) {
+          // Tell the user we reverted along with the dismissal
+          try {
+            await sb.from('coach_messages').insert({
+              user_id: state.user.id,
+              role: 'coach',
+              content: `↶ **Reverted "${insight.title}" on dismiss**\n\nYou dismissed this insight within 24h of applying it, so I rolled back the ${restored} workout${restored === 1 ? '' : 's'} I had adjusted. They're back to their original prescription.`,
+              context_type: 'insight_undone',
+            });
+          } catch (_) {}
+          toast(`Dismissed and reverted ${restored} workout${restored === 1 ? '' : 's'}`);
+        } else {
+          toast('Dismissed');
+        }
+      } else {
+        toast('Dismissed');
+      }
+    } else {
+      toast('Dismissed');
+    }
+
     await sb.from('training_insights')
       .update({ status: 'dismissed', dismissed_at: new Date().toISOString() })
       .eq('id', insightId);
@@ -8332,8 +8394,17 @@ async function applyInsightToPlan(insightId, btnEl) {
 
     // ═══ ACTUAL APPLICATION PATH ═══
     // Backend returned real modifications. Apply them, store BEFORE state for undo.
+    // Round 5: backend now attaches workout_id to each modification (preferred),
+    // falling back to index matching for backwards compatibility.
+    const findOriginal = (mod) => {
+      if (mod.workout_id) {
+        return planned.find(p => p.id === mod.workout_id);
+      }
+      return planned[mod.index];
+    };
+
     const previousWorkouts = result.modified_workouts.map(mod => {
-      const orig = planned[mod.index];
+      const orig = findOriginal(mod);
       if (!orig) return null;
       return {
         id: orig.id,
@@ -8346,7 +8417,7 @@ async function applyInsightToPlan(insightId, btnEl) {
     // Apply the changes
     let modifiedCount = 0;
     for (const mod of result.modified_workouts) {
-      const orig = planned[mod.index];
+      const orig = findOriginal(mod);
       if (!orig) continue;
       const updates = {};
       if (typeof mod.duration_minutes === 'number') updates.duration_minutes = mod.duration_minutes;
@@ -8491,6 +8562,27 @@ async function explainInsightInChat(insightId, btnEl) {
 // UNDO APPLIED INSIGHT — restore the BEFORE state
 // Available within 24h of apply.
 // ═══════════════════════════════════════════════════════════
+// Round 5: shared helper used by both Undo and Dismiss-within-24h paths.
+// Restores planned workouts to their pre-applied state from data_points.previous_workouts.
+// Returns the number of workouts actually restored (caller decides what to do next).
+async function revertAppliedInsightWorkouts(insight) {
+  if (!insight) return 0;
+  const previousWorkouts = insight.data_points?.previous_workouts || [];
+  if (!Array.isArray(previousWorkouts) || previousWorkouts.length === 0) return 0;
+
+  let restored = 0;
+  for (const prev of previousWorkouts) {
+    if (!prev?.id) continue;
+    const { error } = await sb.from('planned_workouts').update({
+      duration_minutes: prev.duration_minutes,
+      distance_km: prev.distance_km,
+      workout_notes: prev.workout_notes,
+    }).eq('id', prev.id);
+    if (!error) restored++;
+  }
+  return restored;
+}
+
 async function undoAppliedInsight(insightId, btnEl) {
   if (!state.user) return;
   if (btnEl) {
@@ -8502,25 +8594,14 @@ async function undoAppliedInsight(insightId, btnEl) {
     const { data: insight } = await sb.from('training_insights').select('*').eq('id', insightId).single();
     if (!insight) throw new Error('Insight not found');
 
-    const previousWorkouts = insight.data_points?.previous_workouts || [];
-    if (!Array.isArray(previousWorkouts) || previousWorkouts.length === 0) {
+    const restored = await revertAppliedInsightWorkouts(insight);
+
+    if (restored === 0 && (!insight.data_points?.previous_workouts || insight.data_points.previous_workouts.length === 0)) {
       // Nothing to restore — just mark active again
       await sb.from('training_insights').update({ status: 'active', applied_at: null }).eq('id', insightId);
       toast('Restored');
       await renderInsightsFromDb();
       return;
-    }
-
-    // Restore each workout to its previous state
-    let restored = 0;
-    for (const prev of previousWorkouts) {
-      if (!prev?.id) continue;
-      const { error } = await sb.from('planned_workouts').update({
-        duration_minutes: prev.duration_minutes,
-        distance_km: prev.distance_km,
-        workout_notes: prev.workout_notes,
-      }).eq('id', prev.id);
-      if (!error) restored++;
     }
 
     // Move insight back to active
