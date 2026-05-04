@@ -4697,6 +4697,11 @@ async function doLogin() {
   toast(`Welcome back, ${state.user.name}`);
   showApp();
   navigate('dashboard');
+  // If user was redirected here from Stripe Checkout (session expired during checkout),
+  // fire the welcome toast / poll-for-Pro flow now that they're authenticated.
+  try {
+    await handleStripeReturn();
+  } catch(e) { console.error('[Stryxs] Stripe return after login failed:', e); }
   // Catch any anomalies on workouts that arrived via Strava webhook while user was away.
   // Idempotent + rate-limited inside the function — safe to call.
   setTimeout(() => {
@@ -16256,9 +16261,24 @@ async function openBillingPortal() {
 // Called on app load. Detects the ?stripe_result=success|cancel query param
 // (Stripe redirects users back here after checkout) and shows appropriate UI.
 // Webhook updates DB asynchronously, so we poll briefly to confirm Pro is live.
+//
+// Note: Stripe's redirect can land the user on the login page if their session
+// expired during the checkout flow. We persist the stripe_result to localStorage
+// in the boot path BEFORE login redirect, then this handler checks both URL
+// params AND localStorage so the welcome toast fires after re-auth.
 async function handleStripeReturn() {
   const params = new URLSearchParams(window.location.search);
-  const result = params.get('stripe_result');
+  let result = params.get('stripe_result');
+
+  // Fallback: if URL doesn't have it, check localStorage (case: user got bounced
+  // through login between checkout success and reaching the app)
+  if (!result) {
+    try {
+      result = localStorage.getItem('stryxs_pending_stripe_result');
+      if (result) localStorage.removeItem('stryxs_pending_stripe_result');
+    } catch (_) { /* localStorage blocked, ignore */ }
+  }
+
   if (!result) return false;
 
   // Always clean the URL so refreshes don't re-trigger
@@ -16562,7 +16582,21 @@ function animateShowcase() {
       }
     } catch(e) { console.error('Pending Strava code resume failed:', e); }
   }
-  else { showLanding(); navigate('landing'); }
+  else {
+    // Not logged in. If there's a Stripe redirect param (user got bounced to login
+    // because their session expired during checkout), stash it so the welcome toast
+    // fires after they re-authenticate.
+    try {
+      const stripeParam = new URLSearchParams(window.location.search).get('stripe_result');
+      if (stripeParam) {
+        localStorage.setItem('stryxs_pending_stripe_result', stripeParam);
+        // Clean the URL so it doesn't double-fire
+        history.replaceState({}, '', window.location.pathname);
+      }
+    } catch (_) { /* localStorage blocked */ }
+    showLanding();
+    navigate('landing');
+  }
   document.body.classList.remove('app-loading');
 })();
 </script>
