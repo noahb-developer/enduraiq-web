@@ -7871,7 +7871,48 @@ function renderTrends() {
 // Manual refresh capped at once per week per user (prevents API cost spam).
 // ═══════════════════════════════════════════════════════════
 
-const INSIGHTS_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Round 4 audit: shortened from 7 days to 48 hours so active users see fresher
+// pattern analysis. Cost is bounded (one Sonnet call per user per 2 days max).
+const INSIGHTS_REFRESH_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48 hours
+const ACTIVE_INSIGHTS_CAP = 4;
+const URGENT_ALERT_COOLDOWN_MS = 48 * 60 * 60 * 1000; // 48 hours
+const POSITIVE_INSIGHT_TYPES = ['fitness_marker', 'pace_at_hr_improvement', 'plan_adherence_positive'];
+
+// Round 4: enforce active-insight cap. After every batch insert, if total active
+// insights exceed the cap, mark the OLDEST active ones as stale. This keeps the
+// trends page and dashboard mini-card from feeling overwhelming.
+async function cleanupActiveInsights(userId) {
+  if (!userId) return;
+  try {
+    const { data: active } = await sb.from('training_insights')
+      .select('id, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+    if (!active || active.length <= ACTIVE_INSIGHTS_CAP) return;
+    const idsToStale = active.slice(ACTIVE_INSIGHTS_CAP).map(r => r.id);
+    if (idsToStale.length > 0) {
+      await sb.from('training_insights')
+        .update({ status: 'stale' })
+        .in('id', idsToStale);
+      console.log(`[Stryxs] Capped active insights — staled ${idsToStale.length} oldest (max ${ACTIVE_INSIGHTS_CAP})`);
+    }
+  } catch (err) {
+    console.error('[Stryxs] cleanupActiveInsights failed:', err);
+  }
+}
+
+// Round 4: filter pattern objects at SAVE time. We accept all urgent + actionable,
+// but only accept 'info' severity when it's a positive celebration type
+// (fitness_marker, pace_at_hr_improvement, plan_adherence_positive). Generic
+// 'info' patterns from the model become noise — they don't require action and
+// dilute the signal of the cards that DO matter.
+function shouldSaveInsight(insight) {
+  const sev = insight.severity || 'info';
+  if (sev === 'urgent' || sev === 'actionable') return true;
+  if (sev === 'info' && POSITIVE_INSIGHT_TYPES.includes(insight.pattern_type)) return true;
+  return false;
+}
 
 async function loadInsightsIntoTrends(forceRefresh = false) {
   const list = document.getElementById('insightsList');
@@ -8083,20 +8124,32 @@ async function regenerateInsights() {
       .eq('status', 'active')
       .in('pattern_type', TREND_PATTERN_TYPES);
 
-    // Insert new ones
+    // Insert new ones — but FILTER first (Round 4): drop generic 'info' patterns.
+    // 'info' is reserved for positive celebrations (fitness_marker etc.).
+    // Generic 'info' on problem-detection types is noise — model often produces
+    // "your training is consistent" patterns that aren't actionable.
     if (result?.patterns && Array.isArray(result.patterns) && result.patterns.length > 0) {
-      const rows = result.patterns.map(p => ({
-        user_id: state.user.id,
-        pattern_type: p.pattern_type || 'unknown',
-        severity: p.severity || 'info',
-        category: p.category || null,
-        title: p.title || 'Pattern detected',
-        finding: p.finding || '',
-        data_points: p.data_points || {},
-        recommendation: p.recommendation || null,
-        status: 'active',
-      }));
-      await sb.from('training_insights').insert(rows);
+      const filtered = result.patterns.filter(shouldSaveInsight);
+      const droppedCount = result.patterns.length - filtered.length;
+      if (droppedCount > 0) {
+        console.log(`[Stryxs] Filtered ${droppedCount} info-only pattern(s) from trend insights`);
+      }
+      if (filtered.length > 0) {
+        const rows = filtered.map(p => ({
+          user_id: state.user.id,
+          pattern_type: p.pattern_type || 'unknown',
+          severity: p.severity || 'info',
+          category: p.category || null,
+          title: p.title || 'Pattern detected',
+          finding: p.finding || '',
+          data_points: p.data_points || {},
+          recommendation: p.recommendation || null,
+          status: 'active',
+        }));
+        await sb.from('training_insights').insert(rows);
+        // Round 4: enforce active-insight cap
+        await cleanupActiveInsights(state.user.id);
+      }
     }
 
     // Update the "last generated" timestamp on intake
@@ -8586,11 +8639,29 @@ async function runAnomalyCheckIfNeeded() {
       return;
     }
 
+    // Anomalies are always urgent or actionable by design (the prompt rules out
+    // 'info' for anomalies). Still run through shouldSaveInsight for consistency
+    // and as defensive cover if the model returns an unexpected shape.
+    const filteredAnomalies = result.anomalies
+      .map(a => ({
+        anomaly_type: a.anomaly_type || 'anomaly',
+        severity: a.severity === 'urgent' ? 'urgent' : 'actionable',
+        title: a.title,
+        finding: a.finding,
+        recommendation: a.recommendation,
+      }))
+      .filter(a => shouldSaveInsight({ severity: a.severity, pattern_type: a.anomaly_type }));
+
+    if (filteredAnomalies.length === 0) {
+      console.log('[Stryxs] No qualifying anomalies after filter');
+      return;
+    }
+
     // Insert each anomaly as a training_insight row
-    const rows = result.anomalies.map(a => ({
+    const rows = filteredAnomalies.map(a => ({
       user_id: state.user.id,
-      pattern_type: a.anomaly_type || 'anomaly',
-      severity: a.severity === 'urgent' ? 'urgent' : 'actionable',
+      pattern_type: a.anomaly_type,
+      severity: a.severity,
       category: 'load',
       title: a.title || 'Anomaly detected',
       finding: a.finding || '',
@@ -8600,23 +8671,53 @@ async function runAnomalyCheckIfNeeded() {
     }));
     await sb.from('training_insights').insert(rows);
 
+    // Round 4: enforce active-insight cap
+    await cleanupActiveInsights(state.user.id);
+
     console.log(`[Stryxs] ${rows.length} anomaly insight(s) saved`);
 
-    // For URGENT anomalies only, post a Coach chat message to alert the user
-    const urgent = result.anomalies.filter(a => a.severity === 'urgent');
+    // For URGENT anomalies only, post a Coach chat message to alert the user.
+    // Round 4: cap urgent alerts to 1 per 48 hours so users don't get spammed
+    // during a bad week. The insight still saves and shows in Trends — we just
+    // skip the chat message on cooldown.
+    const urgent = filteredAnomalies.filter(a => a.severity === 'urgent');
     if (urgent.length > 0) {
-      const top = urgent[0];
-      const messageContent = `🚨 **${top.title}**\n\n${top.finding}${top.recommendation ? `\n\n**What to do:** ${top.recommendation}` : ''}\n\n_Tap the Trends tab to see this and any other patterns._`;
+      // Check when the last urgent alert was posted to coach_messages
+      let coolDownActive = false;
       try {
-        await sb.from('coach_messages').insert({
-          user_id: state.user.id,
-          role: 'coach',
-          content: messageContent,
-          context_type: 'anomaly_alert',
-        });
-        if (typeof setCoachUnread === 'function') setCoachUnread(true);
+        const { data: lastUrgent } = await sb.from('coach_messages')
+          .select('created_at')
+          .eq('user_id', state.user.id)
+          .eq('context_type', 'anomaly_alert')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastUrgent?.created_at) {
+          const ageMs = Date.now() - new Date(lastUrgent.created_at).getTime();
+          if (ageMs < URGENT_ALERT_COOLDOWN_MS) {
+            coolDownActive = true;
+            const hoursLeft = Math.ceil((URGENT_ALERT_COOLDOWN_MS - ageMs) / (60 * 60 * 1000));
+            console.log(`[Stryxs] Urgent alert cooldown active (~${hoursLeft}h remaining), skipping Coach chat message — insight still saved`);
+          }
+        }
       } catch (e) {
-        console.error('[Stryxs] Coach anomaly message insert failed:', e);
+        console.warn('[Stryxs] Cooldown check failed, posting anyway:', e);
+      }
+
+      if (!coolDownActive) {
+        const top = urgent[0];
+        const messageContent = `🚨 **${top.title}**\n\n${top.finding}${top.recommendation ? `\n\n**What to do:** ${top.recommendation}` : ''}\n\n_Tap the Trends tab to see this and any other patterns._`;
+        try {
+          await sb.from('coach_messages').insert({
+            user_id: state.user.id,
+            role: 'coach',
+            content: messageContent,
+            context_type: 'anomaly_alert',
+          });
+          if (typeof setCoachUnread === 'function') setCoachUnread(true);
+        } catch (e) {
+          console.error('[Stryxs] Coach anomaly message insert failed:', e);
+        }
       }
     }
 
@@ -8639,37 +8740,78 @@ async function renderInsightsMiniCard() {
   }
 
   try {
+    // Round 4: query active insights, sorted urgency-first.
+    // Show up to 2 insights with severity-driven visual hierarchy.
     const { data: insights } = await sb.from('training_insights')
       .select('*')
       .eq('user_id', state.user.id)
       .eq('status', 'active')
-      .order('severity', { ascending: false })
       .order('generated_at', { ascending: false })
-      .limit(2);
+      .limit(10);
 
     if (!insights || insights.length === 0) {
       el.innerHTML = '';
       return;
     }
 
-    // Sort: urgent → actionable → info
-    const sevOrder = { urgent: 0, actionable: 1, info: 2 };
-    insights.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
-
-    const top = insights[0];
-    const sevStyle = {
-      urgent: { bg: 'rgba(239, 68, 68, 0.06)', border: 'rgba(239, 68, 68, 0.3)', icon: '🚨', accentColor: '#ef4444' },
-      actionable: { bg: 'rgba(251, 191, 36, 0.04)', border: 'rgba(251, 191, 36, 0.3)', icon: '⚡', accentColor: '#fbbf24' },
-      info: { bg: 'rgba(80, 130, 255, 0.04)', border: 'rgba(80, 130, 255, 0.25)', icon: '💡', accentColor: '#82a4ff' },
+    // Resolve display tier per insight:
+    //   urgent    → red banner, must-see
+    //   actionable→ amber card, "consider doing X"
+    //   positive  → green card, celebration (info severity but on a positive type)
+    //   info      → not displayed (filtered at save time, but defensive cover here too)
+    const POSITIVE_TYPES = ['fitness_marker', 'pace_at_hr_improvement', 'plan_adherence_positive'];
+    const tierOf = (i) => {
+      if (i.severity === 'urgent') return 'urgent';
+      if (i.severity === 'actionable') return 'actionable';
+      if (i.severity === 'info' && POSITIVE_TYPES.includes(i.pattern_type)) return 'positive';
+      return null; // do not display
     };
-    const s = sevStyle[top.severity] || sevStyle.info;
+    const visible = insights.filter(i => tierOf(i) !== null);
+    if (visible.length === 0) {
+      el.innerHTML = '';
+      return;
+    }
+
+    // Sort: urgent → actionable → positive
+    const tierOrder = { urgent: 0, actionable: 1, positive: 2 };
+    visible.sort((a, b) => (tierOrder[tierOf(a)] || 9) - (tierOrder[tierOf(b)] || 9));
+
+    const top = visible[0];
+    const tier = tierOf(top);
+
+    // Tier-specific styling. Urgent gets the loudest treatment; positive gets a
+    // distinctly celebratory green, not generic blue.
+    const tierStyle = {
+      urgent: {
+        bg: 'rgba(239, 68, 68, 0.08)',
+        border: 'rgba(239, 68, 68, 0.45)',
+        icon: '🚨',
+        accentColor: '#ef4444',
+        label: 'Needs attention',
+      },
+      actionable: {
+        bg: 'rgba(251, 191, 36, 0.05)',
+        border: 'rgba(251, 191, 36, 0.32)',
+        icon: '⚡',
+        accentColor: '#fbbf24',
+        label: 'Consider this',
+      },
+      positive: {
+        bg: 'rgba(0, 255, 163, 0.05)',
+        border: 'rgba(0, 255, 163, 0.32)',
+        icon: '⭐',
+        accentColor: '#00ffa3',
+        label: 'Good news',
+      },
+    };
+    const s = tierStyle[tier];
 
     el.innerHTML = `
       <div style="background: ${s.bg}; border: 1px solid ${s.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; cursor: pointer; transition: all 0.15s;" onclick="navigate('trends')">
         <div style="display: flex; gap: 12px; align-items: flex-start;">
           <div style="font-size: 22px; flex-shrink: 0;">${s.icon}</div>
           <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 10px; color: ${s.accentColor}; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; margin-bottom: 4px;">Coach noticed${insights.length > 1 ? ` · ${insights.length} insights` : ''}</div>
+            <div style="font-size: 10px; color: ${s.accentColor}; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; margin-bottom: 4px;">${s.label}${visible.length > 1 ? ` · ${visible.length} insights` : ''}</div>
             <div style="font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px;">${escapeHtml(top.title)}</div>
             <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">${escapeHtml((top.finding || '').slice(0, 140))}${(top.finding || '').length > 140 ? '…' : ''}</div>
             <div style="margin-top: 10px; font-size: 12px; color: var(--accent); font-weight: 600;">View all insights →</div>
