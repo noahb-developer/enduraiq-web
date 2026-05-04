@@ -14884,6 +14884,84 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Subscription Section — shows current tier + upgrade/manage CTA -->
+    <div class="settings-section" id="section-subscription">
+      <div class="settings-section-header" onclick="toggleSettingsSection('subscription')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">⭐</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Subscription</div>
+            <div class="settings-section-sub">${(() => {
+              const status = getUserSubscriptionStatus();
+              if (status === 'pro') return 'Pro · all features unlocked';
+              if (status === 'trial') return `Pro trial · ${getTrialDaysLeft()} day${getTrialDaysLeft() === 1 ? '' : 's'} left`;
+              return 'Free tier · upgrade to unlock everything';
+            })()}</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          ${(() => {
+            const status = getUserSubscriptionStatus();
+            if (status === 'pro') {
+              return `
+                <div style="padding: 16px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.05), rgba(0, 255, 163, 0.01)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 12px; margin-bottom: 14px;">
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 24px;">⭐</span>
+                    <div>
+                      <div style="font-size: 14px; font-weight: 700; color: var(--text);">Stryxs Pro</div>
+                      <div style="font-size: 12px; color: var(--text-dim);">All features unlocked</div>
+                    </div>
+                  </div>
+                  ${state.profile?.proUntil ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">Renews on ${new Date(state.profile.proUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>` : ''}
+                </div>
+                ${state.profile?.stripeCustomerId ? `
+                  <button class="btn ghost" id="manageBillingBtn" onclick="openBillingPortal()" style="width: 100%;">Manage subscription →</button>
+                  <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">Update card · view invoices · cancel</div>
+                ` : `
+                  <div style="font-size: 12px; color: var(--text-mute); text-align: center; padding: 8px;">Manual Pro grant — no billing portal available.</div>
+                `}
+              `;
+            }
+            if (status === 'trial') {
+              const days = getTrialDaysLeft();
+              const urgency = days <= 2;
+              return `
+                <div style="padding: 16px; background: ${urgency ? 'rgba(251, 191, 36, 0.06)' : 'rgba(0, 255, 163, 0.05)'}; border: 1px solid ${urgency ? 'rgba(251, 191, 36, 0.25)' : 'rgba(0, 255, 163, 0.2)'}; border-radius: 12px; margin-bottom: 14px;">
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                    <span style="font-size: 24px;">⏱</span>
+                    <div>
+                      <div style="font-size: 14px; font-weight: 700; color: var(--text);">Pro trial</div>
+                      <div style="font-size: 12px; color: ${urgency ? '#fbbf24' : 'var(--accent)'}; font-weight: 600;">${days} day${days === 1 ? '' : 's'} left</div>
+                    </div>
+                  </div>
+                  <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 6px;">All Pro features unlocked during your trial. Upgrade anytime to keep them.</div>
+                </div>
+                <button class="btn" onclick="navigate('upgrade')" style="width: 100%;">Upgrade to Pro →</button>
+                <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">Cancel anytime · secure checkout via Stripe</div>
+              `;
+            }
+            // Free tier
+            return `
+              <div style="padding: 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 24px;">📦</span>
+                  <div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--text);">Free tier</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Upgrade for unlimited Coach chat, deep analysis, race plans, and more.</div>
+                  </div>
+                </div>
+              </div>
+              <button class="btn" onclick="navigate('upgrade')" style="width: 100%;">Upgrade to Pro →</button>
+              <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">Cancel anytime · secure checkout via Stripe</div>
+            `;
+          })()}
+        </div>
+      </div>
+    </div>
+
     <!-- Connections Section (Strava, future Garmin/Apple Health) -->
     <div class="settings-section" id="section-connections">
       <div class="settings-section-header" onclick="toggleSettingsSection('connections')">
@@ -15974,10 +16052,20 @@ function renderUpgradePage() {
           You have full access to Coach chat, deep workout analysis, race planner, trend insights, and adaptive plan adjustments.
         </div>
         ${state.profile?.proUntil ? `<div style="font-size: 12px; color: var(--text-mute); margin-bottom: 16px;">Renews on ${new Date(state.profile.proUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>` : ''}
+        ${state.profile?.stripeCustomerId ? `
+          <button class="btn ghost" id="manageBillingBtn" onclick="openBillingPortal()" style="font-size: 13px; padding: 9px 18px; margin-top: 8px;">
+            Manage subscription →
+          </button>
+          <div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">Update card · view invoices · cancel</div>
+        ` : ''}
       </div>
     `;
     return;
   }
+
+  // Initialize billing period from window state (defaults monthly).
+  // After render, we call toggleBillingPeriod() to apply visual state.
+  if (!window._upgradeBillingPeriod) window._upgradeBillingPeriod = 'monthly';
 
   // Free + trial users see the pricing pitch
   const trialBanner = isInTrial() ? `
@@ -15986,13 +16074,26 @@ function renderUpgradePage() {
       Upgrade now to keep all features when your trial ends.
     </div>` : '';
 
+  // Pre-built monthly + yearly price labels for the Pro card
+  // (`data-billing-price` element swaps innerHTML based on toggle state)
+  const monthlyPriceHtml = `$14.99<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/mo</span>`;
+  const yearlyPriceHtml = `$129<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/yr</span>`;
+  const monthlySubHtml = `or $129/year (save 28%)`;
+  const yearlySubHtml = `<span style="color: var(--accent);">$10.75/mo billed annually · save 28%</span>`;
+
   el.innerHTML = `
     <div class="section-title">Upgrade to Stryxs Pro</div>
     <p class="section-sub">Get the full AI coaching experience built for endurance athletes.</p>
     ${trialBanner}
 
+    <!-- Billing period toggle -->
+    <div style="display: inline-flex; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; gap: 4px; margin-top: 4px;">
+      <button data-billing-toggle="monthly" onclick="toggleBillingPeriod('monthly')" style="padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.15s;">Monthly</button>
+      <button data-billing-toggle="yearly" onclick="toggleBillingPeriod('yearly')" style="padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.15s; position: relative;">Yearly <span style="font-size: 10px; padding: 2px 6px; background: rgba(0, 255, 163, 0.15); color: var(--accent); border-radius: 4px; margin-left: 4px;">SAVE 28%</span></button>
+    </div>
+
     <!-- Plan comparison card -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
       <!-- FREE column -->
       <div style="padding: 22px 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 6px;">Free</div>
@@ -16011,8 +16112,8 @@ function renderUpgradePage() {
       <div style="padding: 22px 18px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.06), rgba(0, 255, 163, 0.01)); border: 2px solid var(--accent); border-radius: 14px; position: relative;">
         <div style="position: absolute; top: -10px; left: 18px; padding: 3px 10px; background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border-radius: 6px;">Recommended</div>
         <div style="font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 6px;">Pro</div>
-        <div style="font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -1px; margin-bottom: 4px;">$14.99<span style="font-size: 14px; color: var(--text-mute); font-weight: 600;">/mo</span></div>
-        <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 18px;">or $129/year (save 28%)</div>
+        <div style="font-size: 28px; font-weight: 800; color: var(--text); letter-spacing: -1px; margin-bottom: 4px;" data-billing-price data-price-monthly='${monthlyPriceHtml}' data-price-yearly='${yearlyPriceHtml}'>${monthlyPriceHtml}</div>
+        <div style="font-size: 12px; color: var(--text-mute); margin-bottom: 18px;" data-billing-price data-price-monthly='${monthlySubHtml}' data-price-yearly='${yearlySubHtml}'>${monthlySubHtml}</div>
         <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.7; color: var(--text-dim);">
           <li><span style="color: var(--accent);">✓</span> Everything in Free, plus:</li>
           <li><span style="color: var(--accent);">✓</span> Unlimited workout history</li>
@@ -16029,10 +16130,10 @@ function renderUpgradePage() {
 
     <!-- CTA -->
     <div style="margin-top: 24px; text-align: center;">
-      <button class="btn" onclick="initiateUpgrade()" style="font-size: 15px; padding: 12px 32px; min-width: 200px;">
+      <button class="btn" id="mainUpgradeBtn" onclick="initiateUpgrade()" style="font-size: 15px; padding: 12px 32px; min-width: 200px;">
         Upgrade to Pro →
       </button>
-      <div style="font-size: 11px; color: var(--text-mute); margin-top: 10px;">7-day money-back guarantee · cancel anytime</div>
+      <div style="font-size: 11px; color: var(--text-mute); margin-top: 10px;">Cancel anytime · secure checkout via Stripe</div>
     </div>
 
     <!-- Why Pro? -->
@@ -16043,11 +16144,158 @@ function renderUpgradePage() {
       </div>
     </div>
   `;
+  // Apply current toggle state visually after render
+  toggleBillingPeriod(window._upgradeBillingPeriod || 'monthly');
 }
 
-// Phase 4 will replace this with Stripe checkout. For now, opens an email or shows coming-soon.
+// Phase 4 — Stripe checkout. Calls the stripe Edge Function which creates a
+// Checkout session and returns its URL. We redirect the browser to that URL.
+// Stripe handles the actual payment, then redirects user back to the app via
+// the success_url / cancel_url defined in the Edge Function.
+const STRIPE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/stripe`;
+
+async function callStripe(action, payload = {}) {
+  const res = await fetch(STRIPE_FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({
+      action,
+      user_id: state.user?.id,
+      ...payload,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `Stripe ${action} failed: ${res.status}`);
+  }
+  return data;
+}
+
+// User clicked "Upgrade to Pro." Determine billing period (monthly default,
+// yearly if toggle is on), call backend to create Checkout session, redirect.
 async function initiateUpgrade() {
-  toast('Stripe checkout coming soon — email coach@stryxs.com to get on the waitlist for early Pro access.', 6000);
+  if (!state.user) {
+    toast('Please sign in first', 4000);
+    return;
+  }
+  // Read current billing period from page state — default monthly
+  const billingPeriod = window._upgradeBillingPeriod || 'monthly';
+
+  // Find any visible upgrade button and show loading state
+  const btn = document.getElementById('mainUpgradeBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.innerHTML = '<span class="spinner" style="display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 10px;"></span>Redirecting to checkout...';
+  }
+
+  try {
+    const result = await callStripe('create_checkout_session', { billing_period: billingPeriod });
+    if (!result?.url) throw new Error('No checkout URL returned');
+    // Redirect to Stripe Checkout
+    window.location.href = result.url;
+  } catch (err) {
+    console.error('[Stryxs] Checkout failed:', err);
+    toast('Could not start checkout: ' + (err.message || 'unknown error'), 6000);
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = 'Upgrade to Pro →';
+    }
+  }
+}
+
+// Toggle between monthly and yearly pricing on the upgrade page.
+// Updates window state + re-renders the visible price/save badge.
+function toggleBillingPeriod(period) {
+  window._upgradeBillingPeriod = period;
+  // Update toggle UI
+  document.querySelectorAll('[data-billing-toggle]').forEach(el => {
+    if (el.dataset.billingToggle === period) {
+      el.style.background = 'var(--accent)';
+      el.style.color = 'var(--bg)';
+    } else {
+      el.style.background = 'transparent';
+      el.style.color = 'var(--text-dim)';
+    }
+  });
+  // Update price displays
+  document.querySelectorAll('[data-billing-price]').forEach(el => {
+    const monthly = el.dataset.priceMonthly;
+    const yearly = el.dataset.priceYearly;
+    el.innerHTML = period === 'yearly' ? yearly : monthly;
+  });
+}
+
+// User clicked "Manage subscription" in Settings → Stripe Customer Portal.
+// Lets them cancel, update card, view invoices.
+async function openBillingPortal() {
+  if (!state.user) return;
+  const btn = document.getElementById('manageBillingBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Opening...';
+  }
+  try {
+    const result = await callStripe('create_portal_session');
+    if (!result?.url) throw new Error('No portal URL returned');
+    window.location.href = result.url;
+  } catch (err) {
+    console.error('[Stryxs] Portal session failed:', err);
+    toast('Could not open billing portal: ' + (err.message || 'unknown error'), 6000);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Manage subscription →';
+    }
+  }
+}
+
+// Called on app load. Detects the ?stripe_result=success|cancel query param
+// (Stripe redirects users back here after checkout) and shows appropriate UI.
+// Webhook updates DB asynchronously, so we poll briefly to confirm Pro is live.
+async function handleStripeReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get('stripe_result');
+  if (!result) return false;
+
+  // Always clean the URL so refreshes don't re-trigger
+  history.replaceState({}, '', window.location.pathname);
+
+  if (result === 'cancel') {
+    toast('Checkout canceled — no charges made.', 5000);
+    navigate('upgrade');
+    return true;
+  }
+
+  if (result === 'success') {
+    // Show "processing" state — webhook may take 1-3 seconds to land
+    toast('✓ Payment received — activating your Pro access...', 5000);
+    // Poll profile up to 8 times (8 seconds) waiting for webhook to flip tier
+    let activated = false;
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        await loadProfile();
+        if (isUserPro() && state.profile?.subscriptionTier === 'pro') {
+          activated = true;
+          break;
+        }
+      } catch (e) { /* keep polling */ }
+    }
+    if (activated) {
+      toast('🎉 Welcome to Stryxs Pro! Everything is unlocked.', 6000);
+      navigate('dashboard');
+    } else {
+      // Webhook hasn't landed yet — likely will within seconds, but show a softer message
+      toast('Payment confirmed. Your Pro access will activate within a minute. Refresh the page if it doesn\'t.', 8000);
+      navigate('settings');
+    }
+    return true;
+  }
+  return false;
 }
 
 
@@ -16297,6 +16545,10 @@ function animateShowcase() {
   if (loggedIn) {
     showApp();
     navigate('dashboard');
+    // If user just returned from Stripe Checkout, handle the result
+    try {
+      await handleStripeReturn();
+    } catch(e) { console.error('[Stryxs] Stripe return handler failed:', e); }
     // If user just logged in and there's a pending Strava code, finish that flow
     try {
       const pendingCode = localStorage.getItem('stryxs_pending_strava_code');
