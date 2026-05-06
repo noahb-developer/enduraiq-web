@@ -11491,19 +11491,14 @@ async function savePlanToDb(plan, userId, startDate = null) {
 }
 
 // ─── Smart Plan Adjustments — Pattern Analysis (REMOVED in Round 1 audit) ───
-// This function previously called callCoach('analyze_patterns') expecting an
-// {needs_adjustment, summary, suggested_action} response shape. The backend
-// handler for that action was upgraded to return {patterns: [...]} but this
-// function was never updated, so it silently early-returned and discarded
-// every API call (~$0.05 per CSV upload, zero benefit).
+// The previous analyzeTrainingPatterns() function called callCoach('analyze_patterns')
+// expecting {needs_adjustment, summary, suggested_action} response shape, but the
+// backend was upgraded to return {patterns: [...]}. The mismatch caused the function
+// to silently early-return and discard every API call (~$0.05 per CSV upload).
 //
-// Trend insights now generate ONLY when the user opens the Trends page (which
-// uses the correct shape via renderInsightsPage). Anomaly detection still fires
-// after every workout via runAnomalyCheckIfNeeded().
-async function analyzeTrainingPatterns() {
-  // No-op. Trend insight generation is exclusively triggered by user opening Trends.
-  return;
-}
+// Trend insights now generate ONLY when the user opens the Trends page (via the
+// correct shape in renderInsightsPage). Anomaly detection still fires after every
+// workout via runAnomalyCheckIfNeeded().
 
 // Apply Coach's suggested adjustment to upcoming plan
 async function applyInsight(insightId) {
@@ -16346,8 +16341,10 @@ function initUpload() {
           }
         }
 
-        // Trigger pattern analysis in the background (don't await — let it run)
-        analyzeTrainingPatterns().catch(e => console.error('Pattern analysis failed:', e));
+        // (Round 1 audit removed the analyzeTrainingPatterns() call — the function
+        // was silently failing with the wrong response shape. Trend analysis now
+        // fires only when the user opens the Trends page, via runAnomalyCheckIfNeeded
+        // for real-time anomaly detection.)
       } catch (cerr) {
         console.error('Commentary setup failed:', cerr);
       }
