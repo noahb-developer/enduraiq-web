@@ -1,7 +1,21 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/terms", "destination": "/terms.html" }
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/share/:token",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/strava-callback",
+      "destination": "/index.html"
+    }
   ]
 }
