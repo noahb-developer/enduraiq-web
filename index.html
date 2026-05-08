@@ -9,6 +9,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stryxs">
 <meta name="description" content="AI coaching for endurance athletes. Upload your training data. Get professional coaching insights instantly.">
+<!-- Favicon + app icons. Files live at the repo root and Vercel serves them
+     statically. Each size targets a specific surface: favicon.ico for legacy
+     browser tabs, the SVG for modern desktop browsers, the touch icon for
+     iPhone home screen, and the chunky 512px PNG for Android home screen. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <title>Stryxs — AI Coaching for Endurance Athletes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3314,6 +3323,15 @@ select option {
   overflow: hidden;
 }
 
+/* ═════════════════════════════════════════════════════════════════
+   STEP-CARD GRAPHICS — animated on hover (desktop) AND on first
+   scroll-into-view (mobile). Trigger is `.lv2-anim-active` on the
+   parent .lv2-step. JS adds it on hover for desktop, and via
+   IntersectionObserver on mobile so users without a mouse still
+   see the animation play when the card enters the viewport.
+   ═════════════════════════════════════════════════════════════════ */
+
+/* Card iii — heart-rate trace draws in */
 .lv2-hr svg { width: 100%; height: 100%; }
 .lv2-hr path {
   fill: none;
@@ -3322,13 +3340,15 @@ select option {
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
 }
-.lv2-step:hover .lv2-hr path {
+.lv2-step:hover .lv2-hr path,
+.lv2-step.lv2-anim-active .lv2-hr path {
   animation: lv2-drawLine 2s forwards;
 }
 @keyframes lv2-drawLine {
   to { stroke-dashoffset: 0; }
 }
 
+/* Card ii — calendar cells light up in sequence */
 .lv2-cal {
   display: grid !important;
   grid-template-columns: repeat(7, 1fr);
@@ -3340,11 +3360,37 @@ select option {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 4px;
   height: 18px;
+  transition: transform 0.3s ease;
 }
 .lv2-cal-cell.lv2-workout { background: rgba(0, 255, 163, 0.3); }
 .lv2-cal-cell.lv2-workout.lv2-hard { background: var(--lv2-acc); }
 .lv2-cal-cell.lv2-rest { background: rgba(255, 255, 255, 0.03); }
 
+.lv2-step:hover .lv2-cal .lv2-cal-cell,
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell {
+  animation: lv2-cellPulse 1.4s ease forwards;
+}
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(1),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(1) { animation-delay: 0s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(2),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(2) { animation-delay: 0.08s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(3),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(3) { animation-delay: 0.16s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(4),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(4) { animation-delay: 0.24s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(5),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(5) { animation-delay: 0.32s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(6),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(6) { animation-delay: 0.40s; }
+.lv2-step:hover .lv2-cal .lv2-cal-cell:nth-child(7),
+.lv2-step.lv2-anim-active .lv2-cal .lv2-cal-cell:nth-child(7) { animation-delay: 0.48s; }
+@keyframes lv2-cellPulse {
+  0%   { transform: scaleY(1); filter: brightness(1); }
+  40%  { transform: scaleY(1.4); filter: brightness(1.6); }
+  100% { transform: scaleY(1); filter: brightness(1); }
+}
+
+/* Card i — chat bubbles type in, alternating */
 .lv2-chat {
   flex-direction: column !important;
   align-items: stretch !important;
@@ -3357,15 +3403,35 @@ select option {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   width: 70%;
+  transform-origin: left center;
 }
 .lv2-chat-line.lv2-user {
   background: rgba(0, 255, 163, 0.3);
   align-self: flex-end;
   width: 50%;
+  transform-origin: right center;
 }
 .lv2-chat-line.lv2-bot {
   background: rgba(255, 255, 255, 0.08);
   width: 80%;
+}
+
+.lv2-step:hover .lv2-chat .lv2-chat-line,
+.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line {
+  animation: lv2-chatType 1.6s ease forwards;
+}
+.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(1),
+.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(1) { animation-delay: 0s; }
+.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(2),
+.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(2) { animation-delay: 0.35s; }
+.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(3),
+.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(3) { animation-delay: 0.7s; }
+.lv2-step:hover .lv2-chat .lv2-chat-line:nth-child(4),
+.lv2-step.lv2-anim-active .lv2-chat .lv2-chat-line:nth-child(4) { animation-delay: 1.05s; }
+@keyframes lv2-chatType {
+  0%   { transform: scaleX(0.05); opacity: 0.3; }
+  60%  { transform: scaleX(1.05); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 1; }
 }
 
 @media (max-width: 800px) {
@@ -3888,7 +3954,7 @@ body.on-auth .container {
     <section id="lv2-how" class="lv2-section">
       <div class="lv2-section-tag">How it works</div>
       <h2 class="lv2-section-h">Three steps to a <em>smarter</em> training week</h2>
-      <p class="lv2-section-sub">From signup to coached workout in under three minutes. No coach, no spreadsheets, no guessing.</p>
+      <p class="lv2-section-sub">From signup to a coached week in minutes. No human coach, no spreadsheets, no guessing.</p>
 
       <div class="lv2-steps">
         <div class="lv2-step lv2-reveal">
@@ -3980,7 +4046,7 @@ body.on-auth .container {
           <div class="lv2-compare-emoji">&#x26a1;</div>
           <div class="lv2-compare-name">Stryxs</div>
           <div class="lv2-compare-tag">Coaches</div>
-          <div class="lv2-compare-desc">Reads your data, decides what's next, tells you why. From $15/mo.</div>
+          <div class="lv2-compare-desc">Reads your data, decides what's next, tells you why. From $12.50/mo.</div>
         </div>
       </div>
     </section>
@@ -3989,7 +4055,7 @@ body.on-auth .container {
     <section class="lv2-section">
       <div class="lv2-cta-strip">
         <h2>Stop guessing.<br>Start <em>training</em>.</h2>
-        <p>Free forever tier with unlimited analyses. Upgrade when you want long-term tracking and adaptive plans.</p>
+        <p>Free forever tier covers the essentials. Upgrade for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
         <button class="lv2-btn-primary" onclick="navigate('signup')">
           Create your free account
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -3998,7 +4064,7 @@ body.on-auth .container {
     </section>
 
     <footer class="lv2-footer">
-      Stryxs &middot; Built for athletes
+      Stryxs &middot; Built for athletes, by athletes
       <div style="margin-top: 14px; font-size: 10px; letter-spacing: 0.5px; text-transform: none; font-family: 'Inter', sans-serif !important;">
         <a href="/privacy" style="color: var(--lv2-text-mute); text-decoration: none; opacity: 0.7;">Privacy</a>
         <span style="margin: 0 8px; opacity: 0.4;">·</span>
@@ -4622,6 +4688,89 @@ function renderTrialBanner() {
     </div>`;
 }
 
+// One-time welcome card shown ONLY on the very first dashboard visit after signup.
+// Explains the trial: 7 days of full Pro access, no credit card, auto-converts to free
+// when the trial ends. Dismissible. Per-user localStorage flag means multiple accounts
+// on the same browser don't conflict.
+function renderTrialWelcomeCard() {
+  if (!state.user) return '';
+  const flagKey = `stryxs_show_trial_welcome_${state.user.id}`;
+  let shouldShow = false;
+  try { shouldShow = localStorage.getItem(flagKey) === '1'; } catch (_) {}
+  if (!shouldShow) return '';
+  // Only show if they're actually in trial — otherwise the message would be misleading
+  if (!isInTrial()) return '';
+  const days = getTrialDaysLeft();
+  return `
+    <div id="trialWelcomeCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.32); border-radius: 14px; margin-bottom: 16px; position: relative;">
+      <button onclick="dismissTrialWelcome()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+        <span style="font-size: 18px;">🎉</span>
+        <div style="font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Your 7-day Pro trial is live</div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 12px;">
+        For the next ${days} days you have full access to Stryxs Pro — unlimited plan generation, full-context AI coach chat, smart plan adjustments, and deep trend analysis. No credit card needed.
+      </div>
+      <div style="font-size: 12px; color: var(--text-mute); line-height: 1.55; margin-bottom: 14px;">
+        After day 7, your account automatically switches to the Free tier. Your data stays — you just get usage limits on plan generation and coach chat. Upgrade anytime to keep Pro features.
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn" onclick="navigate('coach')" style="font-size: 12px; padding: 7px 14px;">Start with Coach →</button>
+        <button class="btn ghost" onclick="dismissTrialWelcome()" style="font-size: 12px; padding: 7px 14px;">Got it</button>
+      </div>
+    </div>`;
+}
+
+function dismissTrialWelcome() {
+  if (!state.user) return;
+  try { localStorage.setItem(`stryxs_show_trial_welcome_${state.user.id}`, ''); } catch (_) {}
+  const el = document.getElementById('trialWelcomeCard');
+  if (el) el.remove();
+}
+
+// One-time "your trial just ended" notice. Detects the trial→free transition by
+// comparing trialEndsAt to now AND checking if they've already been notified.
+// Shows for any user whose trial ended in the last 14 days who hasn't seen it.
+// Once dismissed, never shows again for this user.
+function renderTrialEndedCard() {
+  if (!state.user || !state.profile) return '';
+  const p = state.profile;
+  // Only show to users whose trial ended (had a trialEndsAt, now in past)
+  if (!p.trialEndsAt) return '';
+  if (p.subscriptionTier !== 'free') return ''; // already paid Pro or still in trial
+  const ended = new Date(p.trialEndsAt);
+  const now = new Date();
+  if (ended >= now) return ''; // trial still in future
+  const daysSinceEnd = Math.floor((now - ended) / (1000 * 60 * 60 * 24));
+  if (daysSinceEnd > 14) return ''; // too long ago, don't surface anymore
+  const flagKey = `stryxs_trial_ended_seen_${state.user.id}`;
+  let alreadySeen = false;
+  try { alreadySeen = localStorage.getItem(flagKey) === '1'; } catch (_) {}
+  if (alreadySeen) return '';
+  return `
+    <div id="trialEndedCard" style="padding: 16px 18px; background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.28); border-radius: 14px; margin-bottom: 16px; position: relative;">
+      <button onclick="dismissTrialEnded()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+        <span style="font-size: 16px;">⏱</span>
+        <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Your Pro trial has ended</div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 12px;">
+        You're now on the Free tier. Your data, plans, and history are all preserved — you just have usage limits on plan generation and full-context coach chat. Upgrade anytime to unlock everything again.
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn" onclick="navigate('upgrade')" style="font-size: 12px; padding: 7px 14px;">See Pro plans →</button>
+        <button class="btn ghost" onclick="dismissTrialEnded()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+      </div>
+    </div>`;
+}
+
+function dismissTrialEnded() {
+  if (!state.user) return;
+  try { localStorage.setItem(`stryxs_trial_ended_seen_${state.user.id}`, '1'); } catch (_) {}
+  const el = document.getElementById('trialEndedCard');
+  if (el) el.remove();
+}
+
 async function saveProfileData() {
   if (!state.user) return;
   const { error } = await sb.from('profiles').update({
@@ -4705,6 +4854,9 @@ async function doSignup() {
   state.user = { id: data.user.id, email, name };
   await loadProfile();
   await loadWorkouts();
+  // Flag: brand-new user. Dashboard will show a one-time trial welcome card.
+  // Per-user key so multiple accounts on the same browser don't conflict.
+  try { localStorage.setItem(`stryxs_show_trial_welcome_${data.user.id}`, '1'); } catch (_) {}
   toast(`Welcome, ${name}!`);
   showApp();
   navigate('dashboard');
@@ -6745,9 +6897,14 @@ async function renderDashboard() {
   await renderDashGreeting();
 
   // ═══ STEP 1b: TRIAL BANNER (only fires if user is in active trial) ═══
+  // Renders three possible cards in priority order:
+  // 1. trial_welcome (one-time, brand new signup)
+  // 2. trial_banner (X days left countdown — recurring, every dashboard load)
+  // 3. trial_ended (one-time, dismissible, shown for 14 days after trial ends)
+  // The container holds whichever apply; if none apply, it stays empty.
   const trialBannerEl = document.getElementById('trialBannerContainer');
   if (trialBannerEl) {
-    trialBannerEl.innerHTML = renderTrialBanner();
+    trialBannerEl.innerHTML = renderTrialWelcomeCard() + renderTrialBanner() + renderTrialEndedCard();
   }
 
   // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
@@ -16885,6 +17042,24 @@ function initReveals() {
     });
   }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
   document.querySelectorAll('.lv2-reveal').forEach(el => lv2Obs.observe(el));
+
+  // Step-card scroll animation — fires on touch devices (no hover available)
+  // so users still see the chat/calendar/heart-rate animations play when each
+  // card scrolls into view. Desktop users continue to get hover-triggered anims;
+  // we only attach this observer when pointer is coarse (touchscreen) to avoid
+  // double-firing on hybrid devices like touchscreen laptops.
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    const stepObs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting && !e.target.dataset.animPlayed) {
+          e.target.dataset.animPlayed = '1';
+          // Slight delay so the reveal-in animation has visually settled first
+          setTimeout(() => e.target.classList.add('lv2-anim-active'), 220);
+        }
+      });
+    }, { threshold: 0.4, rootMargin: '0px 0px -5% 0px' });
+    document.querySelectorAll('.lv2-step').forEach(el => stepObs.observe(el));
+  }
 
   // Tilt effect on landing v2 cards (desktop only)
   if (window.matchMedia('(pointer: fine)').matches) {
