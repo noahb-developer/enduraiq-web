@@ -1,7 +1,6 @@
 {
-  "name": "Stryxs",
-  "short_name": "Stryxs",
-  "description": "AI Coaching for Endurance Athletes",
+  "name": "MyWebSite",
+  "short_name": "MySite",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -16,8 +15,7 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#0a0e1a",
+  "theme_color": "#ffffff",
   "background_color": "#0a0e1a",
-  "display": "standalone",
-  "start_url": "/"
+  "display": "standalone"
 }
