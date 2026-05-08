@@ -3284,7 +3284,8 @@ select option {
   overflow: hidden;
   transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s;
 }
-.lv2-step:hover { transform: translateY(-6px); border-color: rgba(0, 255, 163, 0.25); }
+.lv2-step:hover,
+.lv2-step.lv2-anim-active { transform: translateY(-6px); border-color: rgba(0, 255, 163, 0.25); }
 .lv2-step::before {
   content: '';
   position: absolute; inset: 0;
@@ -3293,7 +3294,8 @@ select option {
   transition: opacity 0.5s;
   pointer-events: none;
 }
-.lv2-step:hover::before { opacity: 1; }
+.lv2-step:hover::before,
+.lv2-step.lv2-anim-active::before { opacity: 1; }
 
 .lv2-step-num {
   font-family: 'Instrument Serif', serif !important;
@@ -4047,7 +4049,7 @@ body.on-auth .container {
           <div class="lv2-compare-emoji">&#x26a1;</div>
           <div class="lv2-compare-name">Stryxs</div>
           <div class="lv2-compare-tag">Coaches</div>
-          <div class="lv2-compare-desc">Reads your data, decides what's next, tells you why. From $12.50/mo.</div>
+          <div class="lv2-compare-desc">Reads your data, decides what's next, tells you why. From $14.99/mo.</div>
         </div>
       </div>
     </section>
@@ -4332,7 +4334,7 @@ body.on-auth .container {
   <!-- Footer: contact -->
   <div style="margin-top: 32px; padding: 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; text-align: center;">
     <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 4px;">Still stuck?</div>
-    <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Contact us at <a href="mailto:coach@stryxs.com" style="color: var(--accent);">coach@stryxs.com</a> — we usually reply within a day.</div>
+    <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">Contact us at <a href="mailto:support@stryxs.com" style="color: var(--accent);">support@stryxs.com</a> — we usually reply within a day.</div>
   </div>
 </div>
 
@@ -5637,7 +5639,7 @@ async function executeAccountDeletion() {
   } catch (err) {
     console.error('[Stryxs] Account deletion failed:', err);
     closeDeleteAccountModal();
-    toast('Could not delete account: ' + (err.message || 'unknown error') + '. No changes were made — try again or email coach@stryxs.com.', 8000);
+    toast('Could not delete account: ' + (err.message || 'unknown error') + '. No changes were made — try again or email support@stryxs.com.', 8000);
   }
 }
 
@@ -13790,7 +13792,7 @@ async function renderPublicShare(token) {
       const name = profile.display_name || profile.name || 'Athlete';
       headerHTML = `
         <div style="text-align: center; margin-bottom: 40px; padding: 36px 24px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; backdrop-filter: blur(8px);">
-          ${profile.avatar_url ? `<img src="${profile.avatar_url}" style="width: 84px; height: 84px; border-radius: 50%; object-fit: cover; margin: 0 auto 18px; border: 2px solid rgba(0, 255, 163, 0.3); box-shadow: 0 0 30px rgba(0, 255, 163, 0.15);">` : ''}
+          ${profile.avatar_url ? `<img src="${profile.avatar_url}" alt="${escapeHtml(name)}'s avatar" style="width: 84px; height: 84px; border-radius: 50%; object-fit: cover; margin: 0 auto 18px; border: 2px solid rgba(0, 255, 163, 0.3); box-shadow: 0 0 30px rgba(0, 255, 163, 0.15);">` : ''}
           <div style="font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 10px;">Training Plan</div>
           <h1 style="font-size: 36px; font-weight: 400; margin-bottom: 10px; font-family: 'Instrument Serif', serif; line-height: 1.1; letter-spacing: -0.5px;">${name}'s <em style="color: var(--accent); font-style: italic;">journey</em></h1>
           ${goalText ? `<div style="color: var(--text-dim); font-size: 16px; margin-top: 14px;">Building toward <strong style="color: var(--text); font-weight: 600;">${goalText}</strong>${raceDate ? `<br><span style="font-size: 13px; color: var(--text-mute);">${raceDate}</span>` : ''}</div>` : ''}
@@ -16630,7 +16632,7 @@ const HELP_CATEGORIES = [
     items: [
       { q: 'How do I change my goal event or race date?', a: 'Settings → Profile → tap the goal field. After updating, Coach will rebuild upcoming weeks to align with the new goal/date.' },
       { q: 'How do I update my LTHR or zones?', a: 'Settings → Zones section → enter values. Plan auto-rebuilds when you change zones for the relevant sport.' },
-      { q: 'Can I delete my account?', a: 'Yes — email coach@stryxs.com from the email tied to your account. We\'ll delete all your data within 7 days.' },
+      { q: 'Can I delete my account?', a: 'Yes — email support@stryxs.com from the email tied to your account. We\'ll delete all your data within 7 days.' },
       { q: 'How is my data stored?', a: 'Encrypted at rest in Supabase (Postgres). Only YOU can access it via your account. We never sell training data, never share it with advertisers.' },
       { q: 'Is there a mobile app?', a: 'Stryxs is a progressive web app — install it from your browser to get an app-like experience. On iPhone: Safari → Share → Add to Home Screen. On Android: Chrome → menu (⋮) → Install app.' },
     ],
@@ -16643,7 +16645,7 @@ const HELP_CATEGORIES = [
       { q: 'Coach chat says "timeout" or "unavailable"', a: 'Usually a transient API issue. Wait 30 seconds and re-send. If it persists, refresh the page. If still broken after a few minutes, email us — there may be a backend issue.' },
       { q: 'My workouts uploaded but the dashboard hasn\'t refreshed', a: 'Pull down to refresh on mobile, or reload the page on desktop. State.workouts is loaded once on login — recent additions may need a refresh until the auto-reload kicks in.' },
       { q: 'Insights say "log 5+ workouts" even though I have plenty', a: 'Most likely the workouts are being classified as "daily activity" (commutes, walks under 60 min) and filtered out of insight analysis. Tap "Generate insights" again to retry, or let it auto-regenerate weekly.' },
-      { q: 'I see weird formatting/text wrapping on my phone', a: 'Try refreshing the page. If a specific page looks broken, take a screenshot and email coach@stryxs.com — we ship UI fixes regularly.' },
+      { q: 'I see weird formatting/text wrapping on my phone', a: 'Try refreshing the page. If a specific page looks broken, take a screenshot and email support@stryxs.com — we ship UI fixes regularly.' },
     ],
   },
 ];
@@ -17044,23 +17046,37 @@ function initReveals() {
   }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
   document.querySelectorAll('.lv2-reveal').forEach(el => lv2Obs.observe(el));
 
-  // Step-card scroll animation — fires on touch devices (no hover available)
-  // so users still see the chat/calendar/heart-rate animations play when each
-  // card scrolls into view. Desktop users continue to get hover-triggered anims;
-  // we only attach this observer when pointer is coarse (touchscreen) to avoid
-  // double-firing on hybrid devices like touchscreen laptops.
-  if (window.matchMedia('(pointer: coarse)').matches) {
-    const stepObs = new IntersectionObserver(entries => {
-      entries.forEach(e => {
-        if (e.isIntersecting && !e.target.dataset.animPlayed) {
-          e.target.dataset.animPlayed = '1';
-          // Slight delay so the reveal-in animation has visually settled first
-          setTimeout(() => e.target.classList.add('lv2-anim-active'), 220);
-        }
-      });
-    }, { threshold: 0.4, rootMargin: '0px 0px -5% 0px' });
-    document.querySelectorAll('.lv2-step').forEach(el => stepObs.observe(el));
-  }
+  // Step-card scroll animation — replays each time a card enters the viewport
+  // and resets when it leaves, so scrolling back up rewinds the animation and
+  // scrolling down again replays it. Works on both touch and pointer devices.
+  // Desktop users ALSO get hover-triggered animations (CSS `:hover` rule still
+  // active), and we add a tap/click handler so any user can replay on demand.
+  const stepObs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        // Forced reflow so the animation actually replays — without this, adding
+        // the class to an element that already had it does nothing.
+        e.target.classList.remove('lv2-anim-active');
+        void e.target.offsetWidth;
+        // Slight delay so the reveal-in animation has visually settled first
+        setTimeout(() => {
+          if (e.isIntersecting !== false) e.target.classList.add('lv2-anim-active');
+        }, 180);
+      } else {
+        e.target.classList.remove('lv2-anim-active');
+      }
+    });
+  }, { threshold: 0.35, rootMargin: '0px 0px -5% 0px' });
+  document.querySelectorAll('.lv2-step').forEach(el => {
+    stepObs.observe(el);
+    // Tap/click also replays the animation — handy for users who want to see
+    // it again, and gives mobile users a clear way to interact with the cards.
+    el.addEventListener('click', () => {
+      el.classList.remove('lv2-anim-active');
+      void el.offsetWidth;
+      el.classList.add('lv2-anim-active');
+    });
+  });
 
   // Tilt effect on landing v2 cards (desktop only)
   if (window.matchMedia('(pointer: fine)').matches) {
