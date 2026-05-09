@@ -360,10 +360,19 @@ body.on-landing #landingNav { display: none !important; }
    present in the DOM. Disabling the panel's backdrop-filter via a body class
    (instead of inline styles on the panel) avoids the iOS Safari "stale render"
    bug that comes with toggling inline backdrop-filter on/off. The class is
-   removed when the tour leaves step 2. */
+   removed when the tour leaves step 2.
+
+   We ALSO force the panel background to fully opaque (vs the default 96%)
+   because the 4% transparency would otherwise let the dim overlay show
+   through, making the panel look "see-through" during the tour. */
 body.tour-step-menu-active .nav-menu-panel {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  background: rgb(18, 24, 42) !important;
+}
+/* Also bump menu items to full opacity in case anything dimmed them */
+body.tour-step-menu-active .nav-menu-item {
+  opacity: 1 !important;
 }
 
 .nav-menu-items {
@@ -1068,6 +1077,15 @@ h1.hero-h .grad {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 163, 0.1);
   animation: onbScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+/* Compact variant for steps where the tooltip needs to share the screen
+   with a tall target (e.g., the activation checklist on mobile). Smaller
+   padding, tighter text, narrower max-width — keeps the target visible. */
+.onb-spot-tooltip.compact {
+  padding: 12px 14px;
+  max-width: 280px;
+}
+.onb-spot-tooltip.compact .onb-spot-tooltip-title { font-size: 13px; margin-bottom: 4px; }
+.onb-spot-tooltip.compact .onb-spot-tooltip-desc { font-size: 12px; line-height: 1.45; margin-bottom: 10px; }
 .onb-spot-tooltip-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; padding-right: 26px; }
 .onb-spot-tooltip-desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px; }
 .onb-spot-tooltip-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
@@ -5635,10 +5653,41 @@ function spotlightCleanup() {
   document.querySelectorAll('.onb-spot-overlay, .onb-spot-cutout, .onb-spot-tooltip').forEach(el => el.remove());
 }
 
+// Prevent pinch-zoom and double-tap-zoom while the tour is active. iOS Safari
+// ignores `user-scalable=no` in the viewport meta tag (Apple removed that
+// for accessibility), so we have to block gestures with JS event handlers.
+// We attach these only during the tour, and remove them when it ends —
+// outside the tour, normal zoom behavior is preserved.
+function _blockGesture(e) { e.preventDefault(); }
+function _blockZoomKeys(e) {
+  // Block ctrl/cmd + scroll wheel (zooms on PC) and ctrl/cmd + plus/minus
+  if ((e.ctrlKey || e.metaKey) && (e.deltaY !== undefined || ['+', '-', '=', '0'].includes(e.key))) {
+    e.preventDefault();
+  }
+}
+function lockTourZoom() {
+  // gesturestart/change/end are iOS Safari pinch events
+  document.addEventListener('gesturestart', _blockGesture, { passive: false });
+  document.addEventListener('gesturechange', _blockGesture, { passive: false });
+  document.addEventListener('gestureend', _blockGesture, { passive: false });
+  // Wheel + ctrl is desktop pinch-zoom (trackpad, ctrl+scroll)
+  document.addEventListener('wheel', _blockZoomKeys, { passive: false });
+  // Keyboard ctrl/cmd + +/- for desktop browsers
+  document.addEventListener('keydown', _blockZoomKeys, { passive: false });
+}
+function unlockTourZoom() {
+  document.removeEventListener('gesturestart', _blockGesture);
+  document.removeEventListener('gesturechange', _blockGesture);
+  document.removeEventListener('gestureend', _blockGesture);
+  document.removeEventListener('wheel', _blockZoomKeys);
+  document.removeEventListener('keydown', _blockZoomKeys);
+}
+
 function endSpotlightTour() {
   spotlightCleanup();
   removeResumePill();
   unlockBodyScroll();
+  unlockTourZoom();
   // Clear any step-specific body classes (added by per-step beforeShow hooks)
   document.body.classList.remove('tour-step-menu-active');
   _spotlightState.active = false;
@@ -5662,6 +5711,10 @@ function minimizeTour() {
   if (!_spotlightState.active || _spotlightState.minimized) return;
   spotlightCleanup();
   unlockBodyScroll();
+  // While minimized the user is interacting with the page normally — restore
+  // zoom so they can pinch / ctrl-scroll if they need to. Re-locked when the
+  // tour resumes via the Continue pill (showSpotlightStep calls lockTourZoom).
+  unlockTourZoom();
   // Remove step-specific body classes during minimize so the page renders
   // normally while the user is exploring (they'll come back via Resume pill,
   // which calls showSpotlightStep again — re-running the step's beforeShow
@@ -5691,6 +5744,9 @@ function resumeTour() {
   if (!_spotlightState.active) return;
   removeResumePill();
   _spotlightState.minimized = false;
+  // Re-lock zoom (it was unlocked during minimize so the user could pinch
+  // around the page they were exploring)
+  lockTourZoom();
   // Re-render the current step from scratch — re-elevates ancestors, re-builds
   // overlay/cutout/tooltip, re-locks body. Picks up wherever the user navigated
   // to during the minimized period.
@@ -5947,7 +6003,7 @@ async function showSpotlightStep(idx) {
 
   // Build tooltip with minimize button in top-right corner
   const tip = document.createElement('div');
-  tip.className = 'onb-spot-tooltip';
+  tip.className = step.compactTooltip ? 'onb-spot-tooltip compact' : 'onb-spot-tooltip';
   tip.id = 'spotTooltip';
   const total = _spotlightState.steps.length;
   const isLast = idx === total - 1;
@@ -6021,6 +6077,11 @@ window.addEventListener('scroll', () => {
 function startSpotlightTour() {
   _spotlightState.active = true;
   _spotlightState.minimized = false;
+  // Block pinch-zoom and double-tap-zoom for the duration of the tour.
+  // Without this, accidental zoom on mobile shifts the page geometry and
+  // breaks the spotlight cutout positioning. unlockTourZoom is called on
+  // tour end and on minimize.
+  lockTourZoom();
   // Build the steps array. The trial step (last) is added conditionally because
   // some users may not actually be in a trial state (e.g., a paying user
   // replaying the tour from Settings) — we don't want to show a misleading step.
@@ -6098,13 +6159,17 @@ function startSpotlightTour() {
     {
       target: '#activationChecklistCard',
       title: 'Your getting-started list',
-      desc: 'This card walks you through the 6 things to do first — finish your profile, generate a plan, connect Strava, and more. Each step unlocks once the previous one is done.',
+      desc: 'Six things to do first. Each step unlocks once the previous is done.',
       nextLabel: 'Next →',
       // No overlay at all — let user see the full dashboard. The cutout draws
       // attention to the checklist card. User can scroll freely if needed.
       noOverlay: true,
       allowScroll: true,
       scrollBlock: 'start',
+      // Compact tooltip — short text + smaller padding/font so it doesn't
+      // cover the top of the activation card on mobile (user reported the
+      // standard-sized tooltip was hiding the card's header).
+      compactTooltip: true,
       beforeShow: () => {
         // Make sure we're on dashboard so the activation card is visible
         navigate('dashboard');
@@ -6122,10 +6187,11 @@ function startSpotlightTour() {
     steps.push({
       target: '#trialBannerCard',
       title: "You're on a 7-day Pro trial",
-      desc: 'Full Pro access — unlimited plans, full-context Coach chat, smart adjustments, deep trends. After day 7 you switch to Free tier (your data stays). Upgrade anytime to keep Pro features.',
+      desc: 'Full Pro access for a week. After day 7 you keep your data on Free tier — upgrade anytime.',
       nextLabel: 'Got it',
       noOverlay: true,
       allowScroll: true,
+      compactTooltip: true,
       beforeShow: () => {
         // Already on dashboard from previous step; just give layout a moment
       },
