@@ -3777,7 +3777,7 @@ body.on-auth .container {
 
 <nav class="nav" id="mainNav" style="display:none;">
   <div class="nav-inner">
-    <button class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
+    <button id="navHamburger" class="hamburger" onclick="toggleNavMenu()" aria-label="Open menu" style="position: relative;">
       <span></span><span></span><span></span>
       <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
     </button>
@@ -4774,81 +4774,122 @@ function dismissTrialEnded() {
   if (el) el.remove();
 }
 
-// One-time "What's where in Stryxs" orientation card. Shows on the dashboard
-// after a user completes intake — they've just been dropped from the chat-led
-// onboarding into the full app and need a quick orientation. Each row points
-// at a real tab so the user can tap to explore. Per-user localStorage flag
-// so it never shows again once dismissed (or once an action card is tapped).
-function renderWhatsWhereCard(intakeDone) {
+// ════════════════════════════════════════════════════════════════════
+// ACTIVATION CHECKLIST — persistent dashboard card showing the user
+// the 5 actions that unlock value in Stryxs. Auto-completes as the
+// user does each thing. Stays visible until all are done OR user
+// explicitly dismisses it. Replaces the older one-time "what's where"
+// orientation card with something more interactive that drives action.
+// ════════════════════════════════════════════════════════════════════
+async function getActivationStatus(intakeDone) {
+  // Each item returns { done, label, desc, action }
+  const status = {
+    intake: !!intakeDone,
+    workouts: (state.workouts?.length || 0) > 0,
+    plan: false,
+    coach: false,
+    trends: false,
+  };
+  // Has the user generated a plan? Check training_plans table for any active row
+  try {
+    const { data: planRow } = await sb.from('training_plans').select('id').eq('user_id', state.user.id).limit(1).maybeSingle();
+    status.plan = !!planRow;
+  } catch (_) {}
+  // Has the user opened Coach (sent at least one message)? Check coach_messages
+  try {
+    const { data: msgRow } = await sb.from('coach_messages').select('id').eq('user_id', state.user.id).eq('role', 'user').limit(1).maybeSingle();
+    status.coach = !!msgRow;
+  } catch (_) {}
+  // Has the user visited Trends? Track via localStorage flag — set when they navigate there
+  try {
+    status.trends = localStorage.getItem(`stryxs_visited_trends_${state.user.id}`) === '1';
+  } catch (_) {}
+  return status;
+}
+
+function renderActivationChecklistCard(status) {
   if (!state.user) return '';
-  // Only show after intake is done — otherwise user is still in chat onboarding
-  if (!intakeDone) return '';
-  const flagKey = `stryxs_whats_where_seen_${state.user.id}`;
-  let seen = false;
-  try { seen = localStorage.getItem(flagKey) === '1'; } catch (_) {}
-  if (seen) return '';
+  // Hide if everything is done
+  const total = 5;
+  const done = Object.values(status).filter(Boolean).length;
+  if (done === total) return '';
+  // Hide if user explicitly dismissed it
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(`stryxs_activation_dismissed_${state.user.id}`) === '1'; } catch(_) {}
+  if (dismissed) return '';
+
+  const items = [
+    {
+      key: 'intake',
+      done: status.intake,
+      label: 'Tell Coach about you',
+      desc: status.intake ? 'Profile complete — Coach knows your goal, level, and zones.' : 'Quick intake so Coach can build a plan for your goal.',
+      onclick: status.intake ? '' : `navigate('coach')`,
+    },
+    {
+      key: 'workouts',
+      done: status.workouts,
+      label: 'Add your first workout',
+      desc: status.workouts ? `You've got ${state.workouts?.length || 0} workout${(state.workouts?.length||0) === 1 ? '' : 's'} synced.` : 'Connect Strava (recommended) or upload a FIT/TCX/CSV file from any watch.',
+      onclick: status.workouts ? '' : `navigate('upload')`,
+    },
+    {
+      key: 'plan',
+      done: status.plan,
+      label: 'Generate your training plan',
+      desc: status.plan ? 'Plan is live in your calendar.' : 'Periodized week-by-week plan, built around your goal and current fitness.',
+      onclick: status.plan ? '' : `navigate('plan')`,
+    },
+    {
+      key: 'coach',
+      done: status.coach,
+      label: 'Chat with Coach',
+      desc: status.coach ? 'You\'ve started a conversation — keep asking.' : 'Ask anything: "how was my last run?", "what should I do today?", "I\'m tired".',
+      onclick: status.coach ? '' : `navigate('coach')`,
+    },
+    {
+      key: 'trends',
+      done: status.trends,
+      label: 'Check your trends',
+      desc: status.trends ? 'You\'ve seen your trend signals.' : 'Long-term patterns: cardiac drift, fitness change, zone discipline.',
+      onclick: status.trends ? '' : `navigate('trends')`,
+    },
+  ];
+
+  const pct = Math.round((done / total) * 100);
+
   return `
-    <div id="whatsWhereCard" style="padding: 18px 20px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
-      <button onclick="dismissWhatsWhere()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-        <span style="font-size: 16px;">🧭</span>
-        <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">A quick tour of Stryxs</div>
+    <div id="activationChecklistCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(80, 130, 255, 0.04), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(80, 130, 255, 0.22); border-radius: 14px; margin-bottom: 16px; position: relative;">
+      <button onclick="dismissActivationChecklist()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+        <span style="font-size: 16px;">🎯</span>
+        <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Get the most from Stryxs</div>
+        <span style="margin-left: auto; font-size: 11px; color: var(--text-mute); font-weight: 600;">${done}/${total}</span>
       </div>
-      <div style="font-size: 12px; color: var(--text-mute); line-height: 1.55; margin-bottom: 14px;">
-        Five tabs, five purposes. Tap any of them below to explore — or close this card and find your own way around.
+      <div style="height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
+        <div style="height: 100%; width: ${pct}%; background: linear-gradient(90deg, var(--accent), #5082ff); transition: width 0.4s ease;"></div>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px;">
-        <button onclick="dismissWhatsWhere(); navigate('coach')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-          <span style="font-size: 18px; flex-shrink: 0;">🧠</span>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Coach</div>
-            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Talk to your AI coach. Ask anything about your training.</div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        ${items.map(item => `
+          <div ${item.onclick ? `onclick="${item.onclick}"` : ''} style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: ${item.done ? 'rgba(0, 229, 160, 0.04)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${item.done ? 'rgba(0, 229, 160, 0.18)' : 'rgba(255,255,255,0.06)'}; border-radius: 10px; ${item.onclick ? 'cursor: pointer;' : ''} transition: background 0.15s;" ${item.onclick ? `onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'"` : ''}>
+            <div style="width: 22px; height: 22px; border-radius: 50%; background: ${item.done ? 'var(--accent)' : 'rgba(255,255,255,0.06)'}; border: 1px solid ${item.done ? 'var(--accent)' : 'rgba(255,255,255,0.12)'}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <span style="font-size: 11px; font-weight: 800; color: ${item.done ? 'var(--bg)' : 'var(--text-mute)'};">${item.done ? '✓' : ''}</span>
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 13px; font-weight: 600; color: ${item.done ? 'var(--text-dim)' : 'var(--text)'}; ${item.done ? 'text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.18);' : ''}">${item.label}</div>
+              <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-top: 2px;">${item.desc}</div>
+            </div>
+            ${item.onclick ? '<span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>' : ''}
           </div>
-          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
-        </button>
-        <button onclick="dismissWhatsWhere(); navigate('upload')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-          <span style="font-size: 18px; flex-shrink: 0;">📥</span>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Upload</div>
-            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Import workouts from any watch (Strava, FIT, CSV).</div>
-          </div>
-          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
-        </button>
-        <button onclick="dismissWhatsWhere(); navigate('plan')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-          <span style="font-size: 18px; flex-shrink: 0;">📅</span>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Plan</div>
-            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Your week-by-week training plan, built around your goal.</div>
-          </div>
-          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
-        </button>
-        <button onclick="dismissWhatsWhere(); navigate('history')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-          <span style="font-size: 18px; flex-shrink: 0;">📜</span>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text);">History</div>
-            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Every workout you've logged, with full analysis.</div>
-          </div>
-          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
-        </button>
-        <button onclick="dismissWhatsWhere(); navigate('trends')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-          <span style="font-size: 18px; flex-shrink: 0;">📈</span>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Trends</div>
-            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Long-term patterns: drift, fitness, zone discipline.</div>
-          </div>
-          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
-        </button>
-      </div>
-      <div style="display: flex; justify-content: flex-end;">
-        <button class="btn ghost" onclick="dismissWhatsWhere()" style="font-size: 12px; padding: 6px 12px;">Close — I'll explore on my own</button>
+        `).join('')}
       </div>
     </div>`;
 }
 
-function dismissWhatsWhere() {
+function dismissActivationChecklist() {
   if (!state.user) return;
-  try { localStorage.setItem(`stryxs_whats_where_seen_${state.user.id}`, '1'); } catch (_) {}
-  const el = document.getElementById('whatsWhereCard');
+  try { localStorage.setItem(`stryxs_activation_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  const el = document.getElementById('activationChecklistCard');
   if (el) el.remove();
 }
 
@@ -5073,8 +5114,11 @@ function showApp() {
 
   // Check for unread Coach messages on every app show
   checkCoachUnreadOnLoad();
-  // Check if user needs onboarding (only fires for first-time users)
-  setTimeout(() => checkAndShowOnboarding().catch(err => console.error('Onboarding check failed:', err)), 800);
+  // NOTE: legacy checkAndShowOnboarding() removed — replaced by the activation
+  // checklist card on the dashboard + the spotlight tour offer fired from
+  // renderDashboard() when intake is complete. The old function is preserved
+  // for backwards compatibility (showOnboardingAgain still calls it) but no
+  // longer fires automatically on every app show.
 }
 
 function showLanding() {
@@ -5205,6 +5249,317 @@ function showOnboardingAgain() {
   try { localStorage.removeItem(getOnboardingKey()); } catch(e) {}
   // Force-show even if all steps are complete — user explicitly asked to see it again
   checkAndShowOnboarding(true);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SPOTLIGHT TOUR ENGINE
+// Walks the user through key UI elements with a dimmed overlay,
+// a glowing cutout around the target element, and an anchored
+// tooltip explaining what the element does. Steps can require
+// the user to tap the highlighted element to advance, or just
+// click "Next" in the tooltip. Cross-page navigation is supported
+// (steps can change which page is shown before highlighting).
+// ═══════════════════════════════════════════════════════════
+const SPOTLIGHT_TOUR_KEY = 'stryxs_spotlight_tour_seen';
+let _spotlightState = { stepIndex: 0, steps: [], active: false };
+
+function spotlightCleanup() {
+  document.querySelectorAll('.onb-spot-overlay, .onb-spot-cutout, .onb-spot-tooltip').forEach(el => el.remove());
+  // Restore body scroll if we locked it
+  document.body.style.overflow = '';
+  _spotlightState.active = false;
+}
+
+function endSpotlightTour() {
+  spotlightCleanup();
+  if (state.user) {
+    try { localStorage.setItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`, '1'); } catch(e) {}
+  }
+  // After tour ends, drop user back on dashboard so they see the activation checklist
+  navigate('dashboard');
+}
+
+// Position a tooltip near the highlighted element with smart placement —
+// prefers space below, then above, then beside. Keeps tooltip on screen.
+function positionTooltip(tooltipEl, targetRect) {
+  const margin = 16;
+  const tooltipW = tooltipEl.offsetWidth;
+  const tooltipH = tooltipEl.offsetHeight;
+  const winW = window.innerWidth;
+  const winH = window.innerHeight;
+
+  // Try below the target first
+  let top = targetRect.bottom + 14;
+  let left = targetRect.left + (targetRect.width / 2) - (tooltipW / 2);
+
+  // If overflowing bottom, try above
+  if (top + tooltipH + margin > winH) {
+    top = targetRect.top - tooltipH - 14;
+  }
+  // If still overflowing top, center vertically as fallback
+  if (top < margin) {
+    top = Math.max(margin, (winH - tooltipH) / 2);
+  }
+  // Clamp horizontally
+  if (left < margin) left = margin;
+  if (left + tooltipW + margin > winW) left = winW - tooltipW - margin;
+
+  tooltipEl.style.top = top + 'px';
+  tooltipEl.style.left = left + 'px';
+}
+
+// Render one step of the tour. The step config controls: which element to highlight,
+// what to say in the tooltip, and how the user advances (auto-on-click, or Next button).
+async function showSpotlightStep(idx) {
+  if (!_spotlightState.active) return;
+  const step = _spotlightState.steps[idx];
+  if (!step) { endSpotlightTour(); return; }
+  _spotlightState.stepIndex = idx;
+
+  spotlightCleanup();
+  _spotlightState.active = true; // re-set since cleanup turned it off
+
+  // If step has a beforeShow hook (e.g., navigate to a page), run it and wait
+  if (step.beforeShow) {
+    await step.beforeShow();
+    // Allow next paint cycle so the new page is rendered
+    await new Promise(r => setTimeout(r, step.beforeShowDelay || 350));
+  }
+
+  // Find the target element. If not present, skip ahead (graceful degradation).
+  const target = step.target ? document.querySelector(step.target) : null;
+  if (step.target && !target) {
+    console.warn('[Stryxs] Tour step target not found, skipping:', step.target);
+    return showSpotlightStep(idx + 1);
+  }
+
+  // Lock body scroll while tour is showing — prevents accidental scrolling away
+  document.body.style.overflow = 'hidden';
+
+  // Build the dimmed overlay (covers everything)
+  const overlay = document.createElement('div');
+  overlay.className = 'onb-spot-overlay';
+  overlay.id = 'spotOverlay';
+  // Clicking the overlay does NOT dismiss — user must use the explicit X / Skip button
+  document.body.appendChild(overlay);
+
+  // Build the highlight cutout (positioned around the target)
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    const pad = step.padding || 6;
+    const cutout = document.createElement('div');
+    cutout.className = 'onb-spot-cutout';
+    cutout.style.top = (rect.top - pad) + 'px';
+    cutout.style.left = (rect.left - pad) + 'px';
+    cutout.style.width = (rect.width + pad * 2) + 'px';
+    cutout.style.height = (rect.height + pad * 2) + 'px';
+    document.body.appendChild(cutout);
+
+    // Make the target element clickable through the overlay so the user can interact
+    // with it as instructed. We do this by elevating it above the overlay z-index.
+    const originalZ = target.style.zIndex;
+    const originalPos = target.style.position;
+    if (getComputedStyle(target).position === 'static') {
+      target.style.position = 'relative';
+    }
+    target.style.zIndex = '9992';
+    target.dataset._tourOriginalZ = originalZ;
+    target.dataset._tourOriginalPos = originalPos;
+
+    // If the step says "advance when this is clicked", attach a one-time listener
+    if (step.advanceOnClick) {
+      const handler = () => {
+        target.removeEventListener('click', handler);
+        // Wait a beat so the click's natural action completes (e.g. menu opens)
+        setTimeout(() => showSpotlightStep(idx + 1), step.advanceDelay || 320);
+      };
+      target.addEventListener('click', handler);
+    }
+  }
+
+  // Build the tooltip
+  const tip = document.createElement('div');
+  tip.className = 'onb-spot-tooltip';
+  tip.id = 'spotTooltip';
+  const total = _spotlightState.steps.length;
+  const nextLabel = step.nextLabel || (idx === total - 1 ? 'Got it' : 'Next →');
+  const showNextButton = !step.advanceOnClick;
+  tip.innerHTML = `
+    <div class="onb-spot-tooltip-title">${step.title}</div>
+    <div class="onb-spot-tooltip-desc">${step.desc}</div>
+    <div class="onb-spot-tooltip-actions">
+      <span class="onb-spot-tooltip-progress">${idx + 1} / ${total}</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn ghost" style="font-size: 12px; padding: 6px 12px;" onclick="endSpotlightTour()">Skip tour</button>
+        ${showNextButton ? `<button class="btn" style="font-size: 12px; padding: 6px 14px;" onclick="showSpotlightStep(${idx + 1})">${nextLabel}</button>` : ''}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(tip);
+
+  // Position tooltip near target (or center if no target)
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    positionTooltip(tip, rect);
+  } else {
+    tip.style.top = '50%';
+    tip.style.left = '50%';
+    tip.style.transform = 'translate(-50%, -50%)';
+  }
+}
+
+// Restore z-index on tour exit so we don't leave stranded styles
+function restoreTargetStyles() {
+  document.querySelectorAll('[data-_tour-original-z], [data-_tour-original-pos]').forEach(el => {
+    if (el.dataset._tourOriginalZ !== undefined) {
+      el.style.zIndex = el.dataset._tourOriginalZ;
+      delete el.dataset._tourOriginalZ;
+    }
+    if (el.dataset._tourOriginalPos !== undefined) {
+      el.style.position = el.dataset._tourOriginalPos;
+      delete el.dataset._tourOriginalPos;
+    }
+  });
+}
+
+// Wrap endSpotlightTour to also restore styles
+const _origEndSpotlight = endSpotlightTour;
+endSpotlightTour = function() {
+  restoreTargetStyles();
+  _origEndSpotlight();
+};
+
+// Reposition tooltip on window resize so it stays anchored to its target
+window.addEventListener('resize', () => {
+  if (!_spotlightState.active) return;
+  const tip = document.getElementById('spotTooltip');
+  const cutout = document.querySelector('.onb-spot-cutout');
+  const step = _spotlightState.steps[_spotlightState.stepIndex];
+  if (!step?.target) return;
+  const target = document.querySelector(step.target);
+  if (!target || !tip) return;
+  const rect = target.getBoundingClientRect();
+  if (cutout) {
+    const pad = step.padding || 6;
+    cutout.style.top = (rect.top - pad) + 'px';
+    cutout.style.left = (rect.left - pad) + 'px';
+    cutout.style.width = (rect.width + pad * 2) + 'px';
+    cutout.style.height = (rect.height + pad * 2) + 'px';
+  }
+  positionTooltip(tip, rect);
+});
+
+// Tour definition — the actual sequence of steps that walks a new user
+// through the most important parts of the app. Order matters: each step
+// builds on the previous so the user understands the navigation pattern
+// before being shown specific features.
+function startSpotlightTour() {
+  _spotlightState.active = true;
+  _spotlightState.steps = [
+    {
+      target: '#navHamburger',
+      title: 'All your tabs live here',
+      desc: 'Tap the menu icon to see every section: Coach, Plan, Analyze, History, Trends. Try tapping it now.',
+      advanceOnClick: true,
+      advanceDelay: 380,
+      padding: 8,
+    },
+    {
+      target: '.nav-menu-item[data-page="coach"]',
+      title: 'Coach — your AI training partner',
+      desc: 'Ask Coach anything: "what should I do today?", "why am I tired?", "build me a plan". Coach knows your full training history.',
+      nextLabel: 'Show me Coach →',
+      beforeShow: () => {
+        // Make sure the menu panel is open so the Coach button is visible.
+        // toggleNavMenu only opens if it's currently closed, so check first.
+        const panel = document.getElementById('navMenuPanel');
+        if (panel && !panel.classList.contains('open')) {
+          if (typeof toggleNavMenu === 'function') toggleNavMenu();
+        }
+      },
+      beforeShowDelay: 350,
+      padding: 4,
+    },
+    {
+      target: '#chatInput',
+      title: 'Type to start coaching',
+      desc: 'You can ask anything in plain English. Coach reads your training data, your goal, and your zones — then gives you real coaching, not generic tips.',
+      beforeShow: () => {
+        if (typeof closeNavMenu === 'function') closeNavMenu();
+        navigate('coach');
+      },
+      beforeShowDelay: 450,
+      padding: 6,
+    },
+    {
+      target: '#navHamburger',
+      title: 'One more thing — uploading workouts',
+      desc: 'Open the menu again. The Analyze tab lets you upload any workout file (FIT, TCX, CSV) or just connect Strava and let it sync automatically.',
+      nextLabel: 'Got it',
+      beforeShow: () => {
+        navigate('dashboard');
+      },
+      beforeShowDelay: 350,
+      padding: 8,
+    },
+  ];
+  showSpotlightStep(0);
+}
+
+// One-time check: if user just finished intake AND hasn't seen the tour,
+// offer to take it. Called from the dashboard render path.
+function maybeOfferSpotlightTour() {
+  if (!state.user) return false;
+  let alreadySeen = false;
+  try { alreadySeen = localStorage.getItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`) === '1'; } catch(e) {}
+  if (alreadySeen) return false;
+  // Show offer modal
+  showTourOfferModal();
+  return true;
+}
+
+function showTourOfferModal() {
+  // Small modal asking "Want a quick tour?" — yes triggers spotlight, no marks as seen
+  const existing = document.getElementById('tourOfferModal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'tourOfferModal';
+  overlay.className = 'onb-overlay';
+  overlay.innerHTML = `
+    <div class="onb-modal" style="max-width: 460px;">
+      <div class="onb-emoji">🧭</div>
+      <div class="onb-title">Quick tour?</div>
+      <div class="onb-sub">Stryxs has a lot — let me show you the 4 things that matter most. Takes 60 seconds.</div>
+      <div class="onb-actions" style="flex-direction: column; gap: 8px;">
+        <button class="btn" style="width: 100%;" onclick="acceptTourOffer()">Yes, show me around</button>
+        <button class="btn ghost" style="width: 100%;" onclick="declineTourOffer()">I'll explore on my own</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function acceptTourOffer() {
+  const modal = document.getElementById('tourOfferModal');
+  if (modal) modal.remove();
+  // Small delay before starting tour so the modal animation completes
+  setTimeout(() => startSpotlightTour(), 200);
+}
+
+function declineTourOffer() {
+  const modal = document.getElementById('tourOfferModal');
+  if (modal) modal.remove();
+  if (state.user) {
+    try { localStorage.setItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`, '1'); } catch(e) {}
+  }
+}
+
+// Settings page link to re-trigger the tour
+function showSpotlightTourAgain() {
+  if (!state.user) return;
+  try { localStorage.removeItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`); } catch(e) {}
+  navigate('dashboard');
+  setTimeout(() => startSpotlightTour(), 400);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5404,6 +5759,13 @@ function navigate(page) {
 
   // Clear Coach unread badge when entering Coach tab
   if (page === 'coach') setCoachUnread(false);
+
+  // Track first-time visits for the activation checklist (per-user flags)
+  if (state.user) {
+    try {
+      if (page === 'trends') localStorage.setItem(`stryxs_visited_trends_${state.user.id}`, '1');
+    } catch (_) {}
+  }
 
   if (page === 'dashboard') renderDashboard();
   if (page === 'coach') renderCoach();
@@ -6977,19 +7339,32 @@ async function renderDashboard() {
   // ═══ STEP 1: CONTEXTUAL GREETING + RACE COUNTDOWN ═══
   await renderDashGreeting();
 
-  // ═══ STEP 1b: TRIAL + ORIENTATION CARDS ═══
+  // ═══ STEP 1b: TRIAL + ACTIVATION CARDS ═══
   // Renders cards in priority order:
   // 1. trial_welcome (one-time, brand new signup, before intake)
   // 2. trial_banner (X days left countdown — recurring, every dashboard load)
   // 3. trial_ended (one-time, dismissible, shown for 14 days after trial ends)
-  // 4. whats_where (one-time, after intake is done — orientation card)
+  // 4. activation_checklist (persistent, shows until 5/5 complete or dismissed)
   // The container holds whichever apply; if none apply, it stays empty.
-  // Fetch intake status first so the orientation card knows whether to render.
+  // Fetch intake status first so the activation card knows whether to render
+  // and so we can offer the spotlight tour at the right moment.
   const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
   const intakeDone = !!(intake && intake.completed);
+  const activationStatus = await getActivationStatus(intakeDone);
   const trialBannerEl = document.getElementById('trialBannerContainer');
   if (trialBannerEl) {
-    trialBannerEl.innerHTML = renderTrialWelcomeCard() + renderTrialBanner() + renderTrialEndedCard() + renderWhatsWhereCard(intakeDone);
+    trialBannerEl.innerHTML = renderTrialWelcomeCard()
+      + renderTrialBanner()
+      + renderTrialEndedCard()
+      + renderActivationChecklistCard(activationStatus);
+  }
+
+  // ═══ TOUR OFFER ═══
+  // After intake is complete, ONCE, offer the user a 4-step spotlight tour
+  // of the most important UI elements. Only fires if they haven't seen it.
+  // We delay the offer slightly so the dashboard finishes rendering first.
+  if (intakeDone) {
+    setTimeout(() => maybeOfferSpotlightTour(), 600);
   }
 
   // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
@@ -15633,6 +16008,40 @@ async function renderSettings() {
         <input type="number" id="settingsBikeLthr" value="${state.profile.bikeLthr || ''}" placeholder="e.g. 165" />
       </div>
       <div id="zonePreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help — replay onboarding tour -->
+    <div class="settings-section" id="section-help-tour">
+      <div class="settings-section-header" onclick="toggleSettingsSection('help-tour')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🧭</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Help & tour</div>
+            <div class="settings-section-sub">Replay the onboarding tour anytime</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button onclick="showSpotlightTourAgain()" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Replay the welcome tour</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">A quick 4-step walkthrough of the main features</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">→</div>
+            </button>
+            <a href="javascript:void(0)" onclick="navigate('help')" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-decoration: none; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Help & FAQ</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Common questions, tips, and contact</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">→</div>
+            </a>
+          </div>
         </div>
       </div>
     </div>
