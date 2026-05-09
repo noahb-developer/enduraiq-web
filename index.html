@@ -4681,7 +4681,7 @@ function renderTrialBanner() {
   const border = urgency ? 'rgba(251, 191, 36, 0.25)' : 'rgba(0, 255, 163, 0.2)';
   const accent = urgency ? '#fbbf24' : 'var(--accent)';
   return `
-    <div style="padding: 12px 16px; background: ${bg}; border: 1px solid ${border}; border-radius: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+    <div id="trialBannerCard" style="padding: 12px 16px; background: ${bg}; border: 1px solid ${border}; border-radius: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; min-width: 200px;">
         <span style="color: ${accent}; font-weight: 600;">⏱ Pro trial — ${days} day${days === 1 ? '' : 's'} left</span>
         <span style="margin: 0 8px; color: var(--text-mute);">·</span>
@@ -4796,7 +4796,7 @@ async function getActivationStatus(intakeDone) {
     plan_viewed: false,
     workouts: (state.workouts?.length || 0) > 0,
     analysis_viewed: false,
-    trends: false,
+    trends_viewed: false,
   };
   try {
     const { data: planRow } = await sb.from('training_plans').select('id').eq('user_id', state.user.id).limit(1).maybeSingle();
@@ -4806,7 +4806,7 @@ async function getActivationStatus(intakeDone) {
   // on the relevant tab for the first time)
   try {
     status.plan_viewed = localStorage.getItem(`stryxs_visited_plan_${state.user.id}`) === '1';
-    status.trends = localStorage.getItem(`stryxs_visited_trends_${state.user.id}`) === '1';
+    status.trends_viewed = localStorage.getItem(`stryxs_visited_trends_${state.user.id}`) === '1';
     status.analysis_viewed = localStorage.getItem(`stryxs_visited_upload_${state.user.id}`) === '1';
   } catch (_) {}
   return status;
@@ -4819,51 +4819,75 @@ function renderActivationChecklistCard(status) {
   try { dismissed = localStorage.getItem(`stryxs_activation_dismissed_${state.user.id}`) === '1'; } catch(_) {}
   if (dismissed) return '';
 
-  // The 5 steps — ordered so each one builds on the previous in a natural flow.
-  // The "Connect Strava (or upload)" step is satisfied by either having any
-  // workouts OR explicitly visiting Upload (so non-Strava users don't get stuck).
+  // The 6 onboarding steps. Each one is GATED — a step is only "done" if its
+  // prerequisites are met AND the user did the action. A step is "locked" (not
+  // tappable, dim) if its prerequisite isn't done yet — this enforces a logical
+  // order so users don't bounce around tabs and "complete" them with no content.
+  // Gating logic per step:
+  //   - intake: no prereq, just needs intake.completed
+  //   - plan: requires intake done, and a training_plans row exists
+  //   - plan_viewed: requires plan exists AND user navigated to /plan
+  //   - workouts: requires plan exists, AND workouts.length > 0
+  //   - analysis_viewed: requires workouts exist AND user navigated to /upload
+  //   - trends_viewed: requires workouts exist AND user navigated to /trends
   const items = [
     {
       key: 'intake',
       done: status.intake,
+      locked: false, // always available
       label: 'Finish your training profile',
       desc: status.intake ? 'Coach knows your goal, level, and zones.' : 'Coach asks a few questions to build a plan around your goal.',
-      onclick: status.intake ? '' : `navigate('coach')`,
+      target: 'coach',
     },
     {
       key: 'plan',
       done: status.plan,
+      locked: !status.intake,
       label: 'Generate your first training plan',
-      desc: status.plan ? 'Plan is live — periodized week by week.' : 'Coach builds it for you, calibrated to your fitness and goal.',
-      onclick: status.plan ? '' : `navigate('coach')`,
+      desc: status.plan
+        ? 'Plan is live — periodized week by week.'
+        : (status.intake ? 'Coach builds it for you, calibrated to your fitness and goal.' : 'Finish your profile first.'),
+      target: 'coach',
     },
     {
       key: 'plan_viewed',
-      done: status.plan_viewed,
+      done: status.plan && status.plan_viewed,
+      locked: !status.plan,
       label: 'Open your plan calendar',
-      desc: status.plan_viewed ? 'You\'ve seen this week\'s training laid out.' : 'See your week-by-week plan with each workout, intensity, and goal.',
-      onclick: status.plan_viewed ? '' : `navigate('plan')`,
+      desc: (status.plan && status.plan_viewed)
+        ? 'You\'ve seen this week\'s training laid out.'
+        : (status.plan ? 'See your week-by-week plan with each workout, intensity, and goal.' : 'Generate your plan first.'),
+      target: 'plan',
     },
     {
       key: 'workouts',
       done: status.workouts,
+      locked: !status.plan, // need plan before adding workouts (otherwise no context for analysis)
       label: 'Connect Strava or upload a workout',
-      desc: status.workouts ? `${state.workouts?.length || 0} workout${(state.workouts?.length||0) === 1 ? '' : 's'} synced.` : 'Strava auto-syncs everything. Or upload a FIT/TCX/CSV from any watch.',
-      onclick: status.workouts ? '' : `navigate('upload')`,
+      desc: status.workouts
+        ? `${state.workouts?.length || 0} workout${(state.workouts?.length||0) === 1 ? '' : 's'} synced.`
+        : (status.plan ? 'Strava auto-syncs everything. Or upload a FIT/TCX/CSV from any watch.' : 'Generate your plan first.'),
+      target: 'upload',
     },
     {
       key: 'analysis',
       done: status.analysis_viewed && status.workouts,
+      locked: !status.workouts, // can't analyze nothing
       label: 'See your first workout analysis',
-      desc: (status.analysis_viewed && status.workouts) ? 'You\'ve seen your data analyzed.' : 'Pace, HR zones, drift, fatigue signals — explained, not just shown.',
-      onclick: (status.analysis_viewed && status.workouts) ? '' : `navigate('upload')`,
+      desc: (status.analysis_viewed && status.workouts)
+        ? 'You\'ve seen your data analyzed.'
+        : (status.workouts ? 'Pace, HR zones, drift, fatigue signals — explained, not just shown.' : 'Add a workout first.'),
+      target: 'upload',
     },
     {
       key: 'trends',
-      done: status.trends,
+      done: status.trends_viewed && status.workouts,
+      locked: !status.workouts, // no point checking trends with no data
       label: 'Check your training trends',
-      desc: status.trends ? 'You\'ve seen your long-term signals.' : 'Long-term patterns: drift, fitness change, zone discipline.',
-      onclick: status.trends ? '' : `navigate('trends')`,
+      desc: (status.trends_viewed && status.workouts)
+        ? 'You\'ve seen your long-term signals.'
+        : (status.workouts ? 'Long-term patterns: drift, fitness change, zone discipline.' : 'Add a workout first.'),
+      target: 'trends',
     },
   ];
 
@@ -4876,31 +4900,55 @@ function renderActivationChecklistCard(status) {
 
   return `
     <div id="activationChecklistCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(80, 130, 255, 0.04), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(80, 130, 255, 0.22); border-radius: 14px; margin-bottom: 16px; position: relative;">
-      <button onclick="dismissActivationChecklist()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <button onclick="confirmDismissActivationChecklist()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-right: 36px;">
         <span style="font-size: 16px;">🎯</span>
         <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Getting started</div>
         <span style="margin-left: auto; font-size: 11px; color: var(--text-mute); font-weight: 600;">${done}/${total}</span>
       </div>
-      <div style="font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-bottom: 12px; padding-right: 36px;">${done === 0 ? 'Tap each item below to set up Stryxs step by step.' : (done < total ? `${total - done} step${total - done === 1 ? '' : 's'} left.` : 'All set!')}</div>
+      <div style="font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-bottom: 12px; padding-right: 36px;">${done === 0 ? 'Tap each step in order to set up Stryxs.' : (done < total ? `${total - done} step${total - done === 1 ? '' : 's'} left.` : 'All set!')}</div>
       <div style="height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
         <div style="height: 100%; width: ${pct}%; background: linear-gradient(90deg, var(--accent), #5082ff); transition: width 0.4s ease;"></div>
       </div>
       <div style="display: flex; flex-direction: column; gap: 6px;">
-        ${items.map(item => `
-          <div ${item.onclick ? `onclick="${item.onclick}"` : ''} style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: ${item.done ? 'rgba(0, 229, 160, 0.04)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${item.done ? 'rgba(0, 229, 160, 0.18)' : 'rgba(255,255,255,0.06)'}; border-radius: 10px; ${item.onclick ? 'cursor: pointer;' : ''} transition: background 0.15s;" ${item.onclick ? `onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'"` : ''}>
-            <div style="width: 22px; height: 22px; border-radius: 50%; background: ${item.done ? 'var(--accent)' : 'rgba(255,255,255,0.06)'}; border: 1px solid ${item.done ? 'var(--accent)' : 'rgba(255,255,255,0.12)'}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <span style="font-size: 11px; font-weight: 800; color: ${item.done ? 'var(--bg)' : 'var(--text-mute)'};">${item.done ? '✓' : ''}</span>
-            </div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 13px; font-weight: 600; color: ${item.done ? 'var(--text-dim)' : 'var(--text)'}; ${item.done ? 'text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.18);' : ''}">${item.label}</div>
-              <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-top: 2px;">${item.desc}</div>
-            </div>
-            ${item.onclick ? '<span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>' : ''}
-          </div>
-        `).join('')}
+        ${items.map(item => {
+          const isClickable = !item.done && !item.locked;
+          const bg = item.done ? 'rgba(0, 229, 160, 0.04)' : (item.locked ? 'rgba(255,255,255,0.015)' : 'rgba(255,255,255,0.03)');
+          const border = item.done ? 'rgba(0, 229, 160, 0.18)' : (item.locked ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.06)');
+          const opacity = item.locked ? '0.5' : '1';
+          const cursor = isClickable ? 'pointer' : 'default';
+          const labelColor = item.done ? 'var(--text-dim)' : (item.locked ? 'var(--text-mute)' : 'var(--text)');
+          const labelStrike = item.done ? 'text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.18);' : '';
+          const checkBg = item.done ? 'var(--accent)' : (item.locked ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.06)');
+          const checkBorder = item.done ? 'var(--accent)' : (item.locked ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.12)');
+          const checkSymbol = item.done ? '✓' : (item.locked ? '🔒' : '');
+          const checkColor = item.done ? 'var(--bg)' : (item.locked ? 'var(--text-mute)' : 'var(--text-mute)');
+          const onclickAttr = isClickable ? `onclick="navigate('${item.target}')"` : '';
+          const hoverAttrs = isClickable ? `onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'"` : '';
+          const arrow = isClickable ? '<span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>' : '';
+          return `
+            <div ${onclickAttr} style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: ${bg}; border: 1px solid ${border}; border-radius: 10px; cursor: ${cursor}; opacity: ${opacity}; transition: background 0.15s;" ${hoverAttrs}>
+              <div style="width: 22px; height: 22px; border-radius: 50%; background: ${checkBg}; border: 1px solid ${checkBorder}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <span style="font-size: ${item.locked ? '10px' : '11px'}; font-weight: 800; color: ${checkColor};">${checkSymbol}</span>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 13px; font-weight: 600; color: ${labelColor}; ${labelStrike}">${item.label}</div>
+                <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-top: 2px;">${item.desc}</div>
+              </div>
+              ${arrow}
+            </div>`;
+        }).join('')}
       </div>
     </div>`;
+}
+
+// Dismiss with confirmation. The checklist is the user's primary onboarding
+// guide; if they remove it accidentally they may not know how to get started.
+// We use a simple confirm() dialog — the existing modal infrastructure is
+// overkill for a yes/no choice and confirm() works on every device.
+function confirmDismissActivationChecklist() {
+  const ok = confirm("Hide the Getting Started checklist?\n\nYou can bring it back from Settings → Help & tour if you change your mind.");
+  if (ok) dismissActivationChecklist();
 }
 
 function dismissActivationChecklist() {
@@ -4908,6 +4956,14 @@ function dismissActivationChecklist() {
   try { localStorage.setItem(`stryxs_activation_dismissed_${state.user.id}`, '1'); } catch (_) {}
   const el = document.getElementById('activationChecklistCard');
   if (el) el.remove();
+}
+
+// Restore the checklist from Settings (counterpart to dismiss).
+function restoreActivationChecklist() {
+  if (!state.user) return;
+  try { localStorage.removeItem(`stryxs_activation_dismissed_${state.user.id}`); } catch (_) {}
+  // Re-render dashboard so the card shows up again
+  navigate('dashboard');
 }
 
 async function saveProfileData() {
@@ -5327,6 +5383,19 @@ async function showSpotlightStep(idx) {
     return showSpotlightStep(idx + 1);
   }
 
+  // If the target is off-screen, scroll it into view BEFORE we lock the body.
+  // Otherwise users on small screens get a spotlight pointing at content they
+  // can't see and can't scroll to (because we're about to lock scrolling).
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    const inView = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (!inView) {
+      target.scrollIntoView({ behavior: 'instant', block: 'center' });
+      // Brief wait for scroll to settle
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   // Lock the body so nothing scrolls under the spotlight
   lockBodyScroll();
 
@@ -5423,22 +5492,24 @@ window.addEventListener('resize', () => {
 // checklist that drives them to actually use each one.
 function startSpotlightTour() {
   _spotlightState.active = true;
-  _spotlightState.steps = [
+  // Build the steps array. The trial step (last) is added conditionally because
+  // some users may not actually be in a trial state (e.g., a paying user
+  // replaying the tour from Settings) — we don't want to show a misleading step.
+  const steps = [
     {
       target: '#navHamburger',
       title: 'Find any tab from here',
-      desc: 'Tap the menu icon to see every section: Coach, Plan, Analyze, History, and Trends. Try tapping it now.',
+      desc: 'Tap the menu icon to see every section in Stryxs. Try tapping it now.',
       advanceOnClick: true,
       advanceDelay: 380,
       padding: 8,
     },
     {
       target: '#navMenuPanel',
-      title: 'Five sections, one menu',
-      desc: 'Coach builds your plan. Plan shows your week. Analyze reads your workouts. History and Trends show your progress over time. Tap anywhere outside to close it.',
+      title: 'Seven areas, one menu',
+      desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time.',
       nextLabel: 'Next →',
       beforeShow: () => {
-        // Make sure menu is open. toggleNavMenu only opens if currently closed.
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
           if (typeof toggleNavMenu === 'function') toggleNavMenu();
@@ -5450,10 +5521,10 @@ function startSpotlightTour() {
     {
       target: '#navAvatar',
       title: 'Your account lives here',
-      desc: 'Tap your avatar (top-right) anytime to reach Settings, Help, or log out. Strava connections and HR zones live in Settings.',
+      desc: 'Your avatar (top-right) opens Settings, Help, and logout. Strava connections, HR zones, and the option to replay this tour live there.',
       nextLabel: 'Next →',
       beforeShow: () => {
-        // Close the menu before highlighting avatar so they don't overlap visually
+        // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
       },
       beforeShowDelay: 300,
@@ -5462,8 +5533,8 @@ function startSpotlightTour() {
     {
       target: '#activationChecklistCard',
       title: 'Your getting-started list',
-      desc: 'This card walks you through the first 5 things to do — finishing your profile, generating a plan, connecting Strava, and more. Each item disappears as you finish it.',
-      nextLabel: 'Got it',
+      desc: 'This card walks you through the 6 things to do first — finish your profile, generate a plan, connect Strava, and more. Each step unlocks once the previous one is done.',
+      nextLabel: 'Next →',
       beforeShow: () => {
         // Make sure we're on dashboard so the activation card is visible
         navigate('dashboard');
@@ -5472,6 +5543,29 @@ function startSpotlightTour() {
       padding: 8,
     },
   ];
+
+  // Conditionally add the trial step ONLY if user is actually in a trial.
+  // Skipping this for paying users / expired-trial users keeps the message
+  // honest. The dashboard render is asynchronous, so the trial banner element
+  // may not exist yet when this step queues up — beforeShowDelay gives it time.
+  if (typeof isInTrial === 'function' && isInTrial()) {
+    steps.push({
+      target: '#trialBannerCard',
+      title: "You're on a 7-day Pro trial",
+      desc: 'Full Pro access — unlimited plans, full-context Coach chat, smart adjustments, deep trends. After day 7 you switch to Free tier (your data stays). Upgrade anytime to keep Pro features.',
+      nextLabel: 'Got it',
+      beforeShow: () => {
+        // Already on dashboard from previous step; just give layout a moment
+      },
+      beforeShowDelay: 200,
+      padding: 8,
+    });
+  } else {
+    // For non-trial users, the previous step becomes the last. Update its label.
+    steps[steps.length - 1].nextLabel = 'Got it';
+  }
+
+  _spotlightState.steps = steps;
   showSpotlightStep(0);
 }
 
@@ -16006,7 +16100,14 @@ async function renderSettings() {
             <button onclick="showSpotlightTourAgain()" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.15s;">
               <div>
                 <div style="font-size: 14px; font-weight: 600;">Replay the welcome tour</div>
-                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">A quick 4-step walkthrough of the main features</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">A quick walkthrough of the main areas</div>
+              </div>
+              <div style="color: var(--text-mute); font-size: 18px;">→</div>
+            </button>
+            <button onclick="restoreActivationChecklist()" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.15s;">
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Show getting-started checklist</div>
+                <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Bring back the onboarding card on your dashboard</div>
               </div>
               <div style="color: var(--text-mute); font-size: 18px;">→</div>
             </button>
