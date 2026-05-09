@@ -5565,27 +5565,26 @@ let _spotlightState = {
 // fails). We freeze the body in place, save scroll position, then restore
 // after the tour ends. Without this users can scroll the page out from under
 // the spotlight and break the tour visually.
+// Body scroll lock that preserves position: sticky elements. The naive
+// "position: fixed" trick (which is technically more thorough on iOS) breaks
+// our sticky <nav> — when body becomes fixed, the sticky nav loses its scroll
+// container and ends up off-screen, which made the hamburger lines appear to
+// "vanish". Using overflow: hidden on html+body keeps the layout intact.
+// On iOS Safari, body overflow:hidden alone doesn't always prevent touch
+// scroll, but the cutout and tooltip both reposition on scroll events so the
+// tour still tracks the target visually if the user does scroll.
 function lockBodyScroll() {
   if (_spotlightState.bodyLocked) return;
   _spotlightState.scrollY = window.scrollY;
-  document.body.style.position = 'fixed';
-  document.body.style.top = `-${_spotlightState.scrollY}px`;
-  document.body.style.left = '0';
-  document.body.style.right = '0';
-  document.body.style.width = '100%';
+  document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow = 'hidden';
   _spotlightState.bodyLocked = true;
 }
 
 function unlockBodyScroll() {
   if (!_spotlightState.bodyLocked) return;
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.left = '';
-  document.body.style.right = '';
-  document.body.style.width = '';
+  document.documentElement.style.overflow = '';
   document.body.style.overflow = '';
-  window.scrollTo(0, _spotlightState.scrollY);
   _spotlightState.bodyLocked = false;
 }
 
@@ -5963,13 +5962,13 @@ function _spotlightReposition() {
 // Reposition tooltip + cutout on resize so they track their target
 window.addEventListener('resize', _spotlightReposition);
 
-// And on scroll — but ONLY when the current step allows scrolling. Otherwise
-// scroll is locked and this would never fire. Throttled via requestAnimationFrame.
+// Reposition the cutout + tooltip on scroll for ALL steps. Even with our
+// overflow:hidden body lock, iOS Safari sometimes lets touch scroll through.
+// Repositioning on every scroll event keeps the spotlight anchored to the
+// target so the tour never visually breaks. Throttled via requestAnimationFrame.
 let _spotlightScrollRaf = null;
 window.addEventListener('scroll', () => {
   if (!_spotlightState.active || _spotlightState.minimized) return;
-  const step = _spotlightState.steps[_spotlightState.stepIndex];
-  if (!step?.allowScroll) return;
   if (_spotlightScrollRaf) return;
   _spotlightScrollRaf = requestAnimationFrame(() => {
     _spotlightScrollRaf = null;
