@@ -265,22 +265,21 @@ body.on-landing #landingNav { display: none !important; }
 
 .logo-mark {
   width: 32px; height: 32px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 20px rgba(0, 229, 160, 0.4);
-  animation: logoGlow 3s ease-in-out infinite;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 12px rgba(0, 229, 160, 0.45));
+  animation: logoGlow 3s ease-in-out infinite;
 }
-.logo-mark svg {
-  width: 18px;
-  height: 18px;
+.logo-mark svg,
+.logo-mark img {
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
 @keyframes logoGlow {
-  0%, 100% { box-shadow: 0 4px 20px rgba(0, 229, 160, 0.4); }
-  50% { box-shadow: 0 4px 30px rgba(0, 229, 160, 0.6); }
+  0%, 100% { filter: drop-shadow(0 2px 12px rgba(0, 229, 160, 0.45)); }
+  50% { filter: drop-shadow(0 2px 18px rgba(0, 229, 160, 0.7)); }
 }
 
 /* Hamburger button */
@@ -2948,7 +2947,7 @@ select option {
   font-family: 'Instrument Serif', serif !important;
   font-size: clamp(44px, 8vw, 110px);
   font-weight: 400;
-  line-height: 0.94;
+  line-height: 1.02;
   letter-spacing: -2.5px;
   max-width: 1100px;
   margin: 0 auto 28px;
@@ -2957,6 +2956,7 @@ select option {
 .lv2-h1 .lv2-line {
   display: block;
   overflow: hidden;
+  padding-bottom: 0.12em;
   font-family: 'Instrument Serif', serif !important;
 }
 .lv2-h1 .lv2-line span {
@@ -3782,7 +3782,7 @@ body.on-auth .container {
       <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
     </button>
     <div class="logo" onclick="navigate('dashboard')">
-      <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
+      <div class="logo-mark"><img src="/favicon.svg" alt="Stryxs"></div>
       <span>Stryxs</span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
@@ -3854,7 +3854,7 @@ body.on-auth .container {
 <nav class="nav" id="landingNav">
   <div class="nav-inner">
     <div class="logo" onclick="navigate('landing')">
-      <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 4L7 13H12L7 20L17 11H12L17 4Z" fill="#070b14" stroke="#070b14" stroke-width="0.5" stroke-linejoin="round"/></svg></div>
+      <div class="logo-mark"><img src="/favicon.svg" alt="Stryxs"></div>
       <span>Stryxs</span>
     </div>
     <div style="display:flex; gap:8px;">
@@ -4771,6 +4771,84 @@ function dismissTrialEnded() {
   if (!state.user) return;
   try { localStorage.setItem(`stryxs_trial_ended_seen_${state.user.id}`, '1'); } catch (_) {}
   const el = document.getElementById('trialEndedCard');
+  if (el) el.remove();
+}
+
+// One-time "What's where in Stryxs" orientation card. Shows on the dashboard
+// after a user completes intake — they've just been dropped from the chat-led
+// onboarding into the full app and need a quick orientation. Each row points
+// at a real tab so the user can tap to explore. Per-user localStorage flag
+// so it never shows again once dismissed (or once an action card is tapped).
+function renderWhatsWhereCard(intakeDone) {
+  if (!state.user) return '';
+  // Only show after intake is done — otherwise user is still in chat onboarding
+  if (!intakeDone) return '';
+  const flagKey = `stryxs_whats_where_seen_${state.user.id}`;
+  let seen = false;
+  try { seen = localStorage.getItem(flagKey) === '1'; } catch (_) {}
+  if (seen) return '';
+  return `
+    <div id="whatsWhereCard" style="padding: 18px 20px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
+      <button onclick="dismissWhatsWhere()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <span style="font-size: 16px;">🧭</span>
+        <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">A quick tour of Stryxs</div>
+      </div>
+      <div style="font-size: 12px; color: var(--text-mute); line-height: 1.55; margin-bottom: 14px;">
+        Five tabs, five purposes. Tap any of them below to explore — or close this card and find your own way around.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px;">
+        <button onclick="dismissWhatsWhere(); navigate('coach')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <span style="font-size: 18px; flex-shrink: 0;">🧠</span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Coach</div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Talk to your AI coach. Ask anything about your training.</div>
+          </div>
+          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
+        </button>
+        <button onclick="dismissWhatsWhere(); navigate('upload')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <span style="font-size: 18px; flex-shrink: 0;">📥</span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Upload</div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Import workouts from any watch (Strava, FIT, CSV).</div>
+          </div>
+          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
+        </button>
+        <button onclick="dismissWhatsWhere(); navigate('plan')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <span style="font-size: 18px; flex-shrink: 0;">📅</span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Plan</div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Your week-by-week training plan, built around your goal.</div>
+          </div>
+          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
+        </button>
+        <button onclick="dismissWhatsWhere(); navigate('history')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <span style="font-size: 18px; flex-shrink: 0;">📜</span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">History</div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Every workout you've logged, with full analysis.</div>
+          </div>
+          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
+        </button>
+        <button onclick="dismissWhatsWhere(); navigate('trends')" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <span style="font-size: 18px; flex-shrink: 0;">📈</span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Trends</div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Long-term patterns: drift, fitness, zone discipline.</div>
+          </div>
+          <span style="color: var(--text-mute); font-size: 13px; flex-shrink: 0;">→</span>
+        </button>
+      </div>
+      <div style="display: flex; justify-content: flex-end;">
+        <button class="btn ghost" onclick="dismissWhatsWhere()" style="font-size: 12px; padding: 6px 12px;">Close — I'll explore on my own</button>
+      </div>
+    </div>`;
+}
+
+function dismissWhatsWhere() {
+  if (!state.user) return;
+  try { localStorage.setItem(`stryxs_whats_where_seen_${state.user.id}`, '1'); } catch (_) {}
+  const el = document.getElementById('whatsWhereCard');
   if (el) el.remove();
 }
 
@@ -6899,19 +6977,22 @@ async function renderDashboard() {
   // ═══ STEP 1: CONTEXTUAL GREETING + RACE COUNTDOWN ═══
   await renderDashGreeting();
 
-  // ═══ STEP 1b: TRIAL BANNER (only fires if user is in active trial) ═══
-  // Renders three possible cards in priority order:
-  // 1. trial_welcome (one-time, brand new signup)
+  // ═══ STEP 1b: TRIAL + ORIENTATION CARDS ═══
+  // Renders cards in priority order:
+  // 1. trial_welcome (one-time, brand new signup, before intake)
   // 2. trial_banner (X days left countdown — recurring, every dashboard load)
   // 3. trial_ended (one-time, dismissible, shown for 14 days after trial ends)
+  // 4. whats_where (one-time, after intake is done — orientation card)
   // The container holds whichever apply; if none apply, it stays empty.
+  // Fetch intake status first so the orientation card knows whether to render.
+  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
+  const intakeDone = !!(intake && intake.completed);
   const trialBannerEl = document.getElementById('trialBannerContainer');
   if (trialBannerEl) {
-    trialBannerEl.innerHTML = renderTrialWelcomeCard() + renderTrialBanner() + renderTrialEndedCard();
+    trialBannerEl.innerHTML = renderTrialWelcomeCard() + renderTrialBanner() + renderTrialEndedCard() + renderWhatsWhereCard(intakeDone);
   }
 
   // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
-  const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).maybeSingle();
   const banner = document.getElementById('coachBanner');
   if (banner && (!intake || !intake.completed)) {
     banner.style.display = 'block';
@@ -10942,22 +11023,19 @@ async function sendChatMsg() {
     msgs.innerHTML += renderMsg('coach', reply);
 
     // ═══ SMART SCROLL ═══
-    // For long Coach messages (multi-paragraph plans, recaps, explanations), scroll to the
-    // TOP of the new message so the user reads top-to-bottom. For short responses,
-    // scroll to bottom as usual to keep the chat flow.
-    if (reply && reply.length > 500) {
-      // Long message — find the last message and scroll its top into view
+    // Always scroll so the TOP of the new Coach message aligns with the top of
+    // the visible chat area. This way the user reads from the start of the
+    // reply instead of being dropped at the bottom and having to scroll up.
+    // Falls back to bottom-scroll if the new message can't be measured.
+    {
       const allMsgs = msgs.querySelectorAll('.chat-msg');
       const lastMsg = allMsgs[allMsgs.length - 1];
       if (lastMsg) {
-        // Scroll so the top of the new message aligns with the top of the visible area
         const offsetTop = lastMsg.offsetTop;
         msgs.scrollTo({ top: Math.max(0, offsetTop - 16), behavior: 'smooth' });
       } else {
         msgs.scrollTop = msgs.scrollHeight;
       }
-    } else {
-      msgs.scrollTop = msgs.scrollHeight;
     }
 
     // Save coach msg
