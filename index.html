@@ -353,6 +353,19 @@ body.on-landing #landingNav { display: none !important; }
 }
 .nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
+/* Tour step 2 menu visibility fix.
+   When the tour highlights the menu panel, the panel's own backdrop-filter
+   combined with the tour overlay underneath causes browsers to fail at
+   compositing — the menu items render as blurred/empty even though they're
+   present in the DOM. Disabling the panel's backdrop-filter via a body class
+   (instead of inline styles on the panel) avoids the iOS Safari "stale render"
+   bug that comes with toggling inline backdrop-filter on/off. The class is
+   removed when the tour leaves step 2. */
+body.tour-step-menu-active .nav-menu-panel {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -5163,8 +5176,7 @@ function shouldShowInstallCard(intakeDone) {
   // Already installed — never show
   if (ctx.isStandalone) return false;
   // Only show on mobile-ish devices. Desktop users typically don't add web
-  // apps to a "home screen" — different mental model. We could add a desktop
-  // variant later; for now mobile-only matches user request.
+  // apps to a "home screen" — different mental model.
   if (!ctx.isMobile) return false;
   // Permanently dismissed (user clicked "Got it — done that") — never show again
   let dismissed = false;
@@ -5179,62 +5191,50 @@ function shouldShowInstallCard(intakeDone) {
     const snoozedUntil = parseInt(localStorage.getItem(`stryxs_pwa_snoozed_until_${state.user.id}`) || '0', 10);
     if (snoozedUntil && Date.now() < snoozedUntil) return false;
   } catch (_) {}
-  // Show if we have a deferred prompt (Chrome / Edge / Android) — that means
-  // the browser is ready to install. Or on iOS where there's no deferred event
-  // but Add to Home Screen is always available manually.
-  if (_deferredInstallPrompt) return true;
-  if (ctx.isIOS) return true;
-  return false;
+  // Show on ALL mobile devices that aren't already installed/dismissed/snoozed.
+  // The manual instructions work on any browser; the install button appears
+  // automatically when a deferred prompt is available.
+  return true;
 }
 
 function renderPwaInstallCard(intakeDone) {
   if (!shouldShowInstallCard(intakeDone)) return '';
-  const ctx = getPwaInstallContext();
-  // Different copy for native-prompt vs iOS-manual
-  if (_deferredInstallPrompt) {
-    // Chrome / Edge / Android — we can trigger the native prompt
-    return `
-      <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
-        <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
-          <span style="font-size: 18px;">📱</span>
-          <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Install Stryxs on your device</div>
-        </div>
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px;">
-          Add Stryxs to your home screen for one-tap access — feels just like a native app, works offline, and no browser bar.
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn" onclick="triggerPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Install Stryxs</button>
-          <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
-        </div>
-      </div>`;
-  }
-  if (ctx.isIOS) {
-    // iOS — show manual instructions. We use generic "browser" language since
-    // the user might be on Safari, Chrome, Firefox, etc. — the Add to Home
-    // Screen flow is similar across them all (Share button → Add to Home Screen).
-    return `
-      <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
-        <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
-          <span style="font-size: 18px;">📱</span>
-          <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
-        </div>
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
-          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps in your browser:
-        </div>
-        <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
-          <li>Tap the <strong style="color: var(--text);">Share</strong> button (the box with the up arrow)</li>
-          <li>Scroll down and tap <strong style="color: var(--text);">Add to Home Screen</strong></li>
-          <li>Tap <strong style="color: var(--text);">Add</strong> to confirm</li>
-        </ol>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it — done that</button>
-          <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
-        </div>
-      </div>`;
-  }
-  return '';
+  // ONE unified card for all mobile devices. We deliberately avoid mentioning
+  // any specific device or browser (no "iPhone", no "Safari", no "Chrome") —
+  // the user can be on any combination and the card needs to make sense.
+  // The "Add to home screen" flow varies slightly across browsers but the
+  // generic instructions ("share/menu button → Add to Home Screen") work
+  // everywhere because that's the standard mobile pattern.
+  //
+  // If we have a deferred install prompt available (Chrome/Edge/Android), we
+  // ALSO show a one-tap install button — the prompt-based flow is much faster
+  // when supported. But the manual instructions stay visible as a fallback,
+  // so users on browsers without the prompt API still know what to do.
+  const hasNativePrompt = !!_deferredInstallPrompt;
+  const installButton = hasNativePrompt
+    ? `<button class="btn" onclick="triggerPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Install Stryxs</button>`
+    : '';
+  return `
+    <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
+      <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
+        <span style="font-size: 18px;">📱</span>
+        <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
+      </div>
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
+        Stryxs runs great as an app — quick access from your home screen, no browser bar, works offline.
+      </div>
+      <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
+        <li>Open your browser's <strong style="color: var(--text);">Share</strong> or menu button (the icon usually has an arrow or three dots)</li>
+        <li>Tap <strong style="color: var(--text);">Add to Home Screen</strong> or <strong style="color: var(--text);">Install app</strong></li>
+        <li>Confirm — Stryxs will appear on your home screen as an icon</li>
+      </ol>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        ${installButton}
+        <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it — done that</button>
+        <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+      </div>
+    </div>`;
 }
 
 async function triggerPwaInstall() {
@@ -5639,6 +5639,8 @@ function endSpotlightTour() {
   spotlightCleanup();
   removeResumePill();
   unlockBodyScroll();
+  // Clear any step-specific body classes (added by per-step beforeShow hooks)
+  document.body.classList.remove('tour-step-menu-active');
   _spotlightState.active = false;
   _spotlightState.minimized = false;
   if (state.user) {
@@ -5660,6 +5662,11 @@ function minimizeTour() {
   if (!_spotlightState.active || _spotlightState.minimized) return;
   spotlightCleanup();
   unlockBodyScroll();
+  // Remove step-specific body classes during minimize so the page renders
+  // normally while the user is exploring (they'll come back via Resume pill,
+  // which calls showSpotlightStep again — re-running the step's beforeShow
+  // which re-adds any needed body class).
+  document.body.classList.remove('tour-step-menu-active');
   _spotlightState.minimized = true;
   showResumePill();
 }
@@ -5825,18 +5832,24 @@ async function showSpotlightStep(idx) {
   }
 
   // Scroll the target into view. Two cases:
-  //   - step.scrollBlock specified: ALWAYS scroll, even if target is partially
-  //     visible. This guarantees the target lands at a known position (e.g.,
-  //     the activation card always lands at viewport top so the user sees the
-  //     header first, not the bottom of the list).
-  //   - no scrollBlock: only scroll if target is fully off-screen.
+  //   - step.scrollBlock specified: ALWAYS scroll to a known offset position.
+  //     Use direct scrollTo (more predictable than scrollIntoView, which can
+  //     misbehave when content is still settling after a navigation).
+  //   - no scrollBlock: only scroll if target is fully off-screen, using
+  //     scrollIntoView with center as before.
   if (target) {
     const rect = target.getBoundingClientRect();
     const inView = rect.top >= 0 && rect.bottom <= window.innerHeight;
-    if (step.scrollBlock || !inView) {
+    if (step.scrollBlock === 'start') {
+      // Compute absolute Y of target's top, then scroll there minus a fixed
+      // offset (80px = sticky nav height + breathing room). This guarantees
+      // the target's TOP is visible and accessible, not the bottom.
+      const absoluteTop = rect.top + window.scrollY;
+      window.scrollTo({ top: Math.max(0, absoluteTop - 80), behavior: 'instant' });
+      await new Promise(r => setTimeout(r, 100));
+    } else if (!inView) {
       const block = step.scrollBlock || 'center';
       target.scrollIntoView({ behavior: 'instant', block });
-      // Brief wait for scroll to settle
       await new Promise(r => setTimeout(r, 100));
     }
   }
@@ -6048,6 +6061,13 @@ function startSpotlightTour() {
       // On PC: panel is in upper-left → tooltip goes below or right.
       // On mobile: panel is bottom sheet → tooltip auto-goes above panel.
       beforeShow: () => {
+        // Add body class that disables the menu panel's backdrop-filter
+        // for the duration of step 2. Without this, the panel renders as
+        // "blurred-empty" because the panel's backdrop-filter combined with
+        // the spotlight overlay below it confuses the browser's compositor.
+        // Removed when stepping to step 3 (in step 3's beforeShow) and on
+        // tour end / minimize.
+        document.body.classList.add('tour-step-menu-active');
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
           if (typeof toggleNavMenu === 'function') toggleNavMenu();
@@ -6065,6 +6085,10 @@ function startSpotlightTour() {
       // Step 3 uses elevation (default). Avatar is small, no panel-repaint
       // issue like step 2 — elevation is fine here.
       beforeShow: () => {
+        // Remove the step 2 body class so the menu panel's backdrop-filter
+        // returns to normal (won't be visible right now since we close the
+        // menu, but ensures it works correctly if user reopens it later)
+        document.body.classList.remove('tour-step-menu-active');
         // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
       },
