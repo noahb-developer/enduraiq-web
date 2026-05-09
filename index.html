@@ -4861,7 +4861,7 @@ function renderActivationChecklistCard(status) {
   return `
     <div id="activationChecklistCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(80, 130, 255, 0.04), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(80, 130, 255, 0.22); border-radius: 14px; margin-bottom: 16px; position: relative;">
       <button onclick="dismissActivationChecklist()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-right: 32px;">
         <span style="font-size: 16px;">🎯</span>
         <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Get the most from Stryxs</div>
         <span style="margin-left: auto; font-size: 11px; color: var(--text-mute); font-weight: 600;">${done}/${total}</span>
@@ -5467,7 +5467,7 @@ function startSpotlightTour() {
     {
       target: '.nav-menu-item[data-page="coach"]',
       title: 'Coach — your AI training partner',
-      desc: 'Ask Coach anything: "what should I do today?", "why am I tired?", "build me a plan". Coach knows your full training history.',
+      desc: 'Coach is the brain of Stryxs. It builds your plan, answers questions, and reads your training data. Most things start here.',
       nextLabel: 'Show me Coach →',
       beforeShow: () => {
         // Make sure the menu panel is open so the Coach button is visible.
@@ -7360,12 +7360,11 @@ async function renderDashboard() {
   }
 
   // ═══ TOUR OFFER ═══
-  // After intake is complete, ONCE, offer the user a 4-step spotlight tour
-  // of the most important UI elements. Only fires if they haven't seen it.
-  // We delay the offer slightly so the dashboard finishes rendering first.
-  if (intakeDone) {
-    setTimeout(() => maybeOfferSpotlightTour(), 600);
-  }
+  // ONE-TIME offer: on the very first dashboard visit, ask the user if they
+  // want a quick tour. Fires regardless of whether intake is done — the tour
+  // adapts to where they are. We delay slightly so the dashboard finishes
+  // rendering first (so the spotlight has real targets to highlight).
+  setTimeout(() => maybeOfferSpotlightTour(), 700);
 
   // ═══ STEP 2: COACH BANNER (intake not done) — existing logic ═══
   const banner = document.getElementById('coachBanner');
