@@ -1053,10 +1053,64 @@ h1.hero-h .grad {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 163, 0.1);
   animation: onbScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.onb-spot-tooltip-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.onb-spot-tooltip-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; padding-right: 26px; }
 .onb-spot-tooltip-desc { font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px; }
 .onb-spot-tooltip-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .onb-spot-tooltip-progress { font-size: 11px; color: var(--text-mute); }
+/* Minimize button on the tooltip — top-right, lets user collapse the tour
+   so they can interact with the page freely. Tour state is preserved.
+   Clicking the resume pill brings the tour back at the same step. */
+.onb-spot-tooltip-min {
+  position: absolute;
+  top: 8px; right: 10px;
+  background: transparent;
+  border: 0;
+  color: var(--text-mute);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.onb-spot-tooltip-min:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+/* Floating "Resume tour" pill that appears when the tour is minimized.
+   Sits bottom-right, outside any safe-area, with a subtle pulse to remind
+   the user they can return to the tour. */
+.onb-tour-resume-pill {
+  position: fixed;
+  bottom: max(20px, var(--safe-bottom, 0px));
+  right: max(20px, var(--safe-right, 0px));
+  z-index: 9995;
+  background: linear-gradient(135deg, rgba(0, 229, 160, 0.95), rgba(0, 200, 140, 0.95));
+  color: #0a0e1a;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 0;
+  box-shadow: 0 10px 30px rgba(0, 229, 160, 0.3), 0 0 0 1px rgba(0, 229, 160, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: onbScaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), pillPulse 3s ease-in-out infinite 1s;
+  transition: transform 0.15s;
+}
+.onb-tour-resume-pill:hover {
+  transform: translateY(-2px);
+}
+.onb-tour-resume-pill:active {
+  transform: translateY(0);
+}
+@keyframes pillPulse {
+  0%, 100% { box-shadow: 0 10px 30px rgba(0, 229, 160, 0.3), 0 0 0 1px rgba(0, 229, 160, 0.4); }
+  50% { box-shadow: 0 10px 40px rgba(0, 229, 160, 0.5), 0 0 0 1px rgba(0, 229, 160, 0.6); }
+}
 
 /* Coach unread badges */
 .nav-menu-badge {
@@ -3769,6 +3823,24 @@ body.on-auth .container {
 </head>
 
 <body class="app-loading">
+<script>
+  // ═══ CANONICAL HOSTNAME REDIRECT ═══
+  // If the user lands on the old Vercel preview URL (or any non-canonical
+  // host), bounce them to stryxs.com immediately. This typically happens
+  // when a Supabase email confirmation link points at the old project URL.
+  // We preserve the path + query so they land where they intended.
+  (function () {
+    const canonical = 'stryxs.com';
+    try {
+      const h = window.location.hostname;
+      // Allow localhost, the canonical host, and www. prefix variants
+      if (h === canonical || h === 'www.' + canonical || h === 'localhost' || h.startsWith('127.') || h.startsWith('192.168.')) return;
+      // Anything else (vercel preview URLs, old project URLs) gets redirected
+      const target = 'https://' + canonical + window.location.pathname + window.location.search + window.location.hash;
+      window.location.replace(target);
+    } catch (e) { /* fail open — user stays on whatever URL they're on */ }
+  })();
+</script>
 <div class="safe-area-top"></div>
 <div class="bg-orbs">
   <div class="bg-orb one"></div>
@@ -4966,6 +5038,138 @@ function restoreActivationChecklist() {
   navigate('dashboard');
 }
 
+// ════════════════════════════════════════════════════════════════════
+// PWA INSTALL PROMPT
+// Captures the browser's beforeinstallprompt event (Chrome/Edge/Android)
+// so we can show a custom "Install Stryxs" card on the dashboard. iOS
+// Safari doesn't fire this event, so we show manual instructions for
+// those users instead. The card shows after intake is complete (so a
+// new user isn't asked to install before they've experienced anything),
+// is dismissible, and won't show again once dismissed for that user.
+// ════════════════════════════════════════════════════════════════════
+let _deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent the default mini-infobar
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // The card on the dashboard will detect this on next render
+});
+
+window.addEventListener('appinstalled', () => {
+  _deferredInstallPrompt = null;
+  // Mark as installed so the card won't re-appear if they uninstall + reinstall
+  if (state.user) {
+    try { localStorage.setItem(`stryxs_pwa_installed_${state.user.id}`, '1'); } catch (_) {}
+  }
+});
+
+// Detect the user's environment for choosing which install copy to show.
+function getPwaInstallContext() {
+  const ua = navigator.userAgent;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+  return { isStandalone, isIOS, isSafari };
+}
+
+function shouldShowInstallCard(intakeDone) {
+  if (!state.user) return false;
+  const ctx = getPwaInstallContext();
+  // Already installed — never show
+  if (ctx.isStandalone) return false;
+  // Brand-new users (no intake yet) shouldn't see this — they need to experience
+  // the app first before being asked to install
+  if (!intakeDone) return false;
+  // Dismissed by this user — never show again
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(`stryxs_pwa_dismissed_${state.user.id}`) === '1'; } catch (_) {}
+  if (dismissed) return false;
+  // Already installed previously (caught the appinstalled event)
+  let installed = false;
+  try { installed = localStorage.getItem(`stryxs_pwa_installed_${state.user.id}`) === '1'; } catch (_) {}
+  if (installed) return false;
+  // Show if we have a deferred prompt OR we're on iOS (manual instructions)
+  if (_deferredInstallPrompt) return true;
+  if (ctx.isIOS && ctx.isSafari) return true;
+  return false;
+}
+
+function renderPwaInstallCard(intakeDone) {
+  if (!shouldShowInstallCard(intakeDone)) return '';
+  const ctx = getPwaInstallContext();
+  // Different copy for native-prompt vs iOS-manual
+  if (_deferredInstallPrompt) {
+    // Chrome / Edge / Android — we can trigger the native prompt
+    return `
+      <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
+        <button onclick="dismissPwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
+          <span style="font-size: 18px;">📱</span>
+          <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Install Stryxs on your device</div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px;">
+          Add Stryxs to your home screen for one-tap access — feels just like a native app, works offline, and no browser bar.
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="triggerPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Install Stryxs</button>
+          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+        </div>
+      </div>`;
+  }
+  if (ctx.isIOS && ctx.isSafari) {
+    // iOS Safari — show manual instructions
+    return `
+      <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
+        <button onclick="dismissPwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
+          <span style="font-size: 18px;">📱</span>
+          <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
+          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps:
+        </div>
+        <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
+          <li>Tap the <strong style="color: var(--text);">Share</strong> button (the box with the up arrow at the bottom of Safari)</li>
+          <li>Scroll down and tap <strong style="color: var(--text);">Add to Home Screen</strong></li>
+          <li>Tap <strong style="color: var(--text);">Add</strong> in the top-right</li>
+        </ol>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it — done that</button>
+          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+        </div>
+      </div>`;
+  }
+  return '';
+}
+
+async function triggerPwaInstall() {
+  if (!_deferredInstallPrompt) return;
+  _deferredInstallPrompt.prompt();
+  const { outcome } = await _deferredInstallPrompt.userChoice;
+  _deferredInstallPrompt = null;
+  if (outcome === 'accepted') {
+    // The appinstalled event will fire and persist the flag, but mark dismissed
+    // too so the card vanishes immediately
+    if (state.user) {
+      try { localStorage.setItem(`stryxs_pwa_installed_${state.user.id}`, '1'); } catch (_) {}
+    }
+    const el = document.getElementById('pwaInstallCard');
+    if (el) el.remove();
+    toast('Stryxs installed — find it on your home screen.');
+  }
+  // On 'dismissed' the user chose not to install — leave the card visible so
+  // they can try again later. Don't auto-dismiss.
+}
+
+function dismissPwaInstall() {
+  if (!state.user) return;
+  try { localStorage.setItem(`stryxs_pwa_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  const el = document.getElementById('pwaInstallCard');
+  if (el) el.remove();
+}
+
 async function saveProfileData() {
   if (!state.user) return;
   const { error } = await sb.from('profiles').update({
@@ -5225,10 +5429,13 @@ let _spotlightState = {
   stepIndex: 0,
   steps: [],
   active: false,
+  minimized: false,  // tour is paused with a resume pill visible
   scrollY: 0,        // saved scroll position for restoration
   bodyLocked: false, // tracks whether we have locked body scroll
-  pendingClickHandler: null, // for cleanup on early exit
+  pendingClickHandler: null, // advance-on-click handler for cleanup
   pendingClickTarget: null,
+  pendingMinimizeHandler: null, // minimize-on-target-click handler for cleanup
+  pendingMinimizeTarget: null,
 };
 
 // Strong scroll lock that works on iOS Safari (where overflow:hidden alone
@@ -5268,6 +5475,12 @@ function spotlightCleanup() {
     _spotlightState.pendingClickHandler = null;
     _spotlightState.pendingClickTarget = null;
   }
+  // Detach minimize-on-click handler too
+  if (_spotlightState.pendingMinimizeHandler && _spotlightState.pendingMinimizeTarget) {
+    _spotlightState.pendingMinimizeTarget.removeEventListener('click', _spotlightState.pendingMinimizeHandler, true);
+    _spotlightState.pendingMinimizeHandler = null;
+    _spotlightState.pendingMinimizeTarget = null;
+  }
   // Restore any elevated ancestor styles BEFORE removing overlay elements so
   // there's no z-index flash. Critical between steps when we re-elevate a
   // different chain on the next step.
@@ -5277,8 +5490,10 @@ function spotlightCleanup() {
 
 function endSpotlightTour() {
   spotlightCleanup();
+  removeResumePill();
   unlockBodyScroll();
   _spotlightState.active = false;
+  _spotlightState.minimized = false;
   if (state.user) {
     try { localStorage.setItem(`${SPOTLIGHT_TOUR_KEY}_${state.user.id}`, '1'); } catch(e) {}
   }
@@ -5287,6 +5502,45 @@ function endSpotlightTour() {
   // don't trigger an unnecessary re-render storm.
   const onDash = document.getElementById('page-dashboard')?.classList.contains('active');
   if (!onDash) navigate('dashboard');
+}
+
+// Minimize the tour: hide all overlay/cutout/tooltip, restore styles, unlock
+// scroll. Show a floating "Resume tour" pill that brings everything back at
+// the same step. Used (a) when user clicks the minimize button, (b) when user
+// clicks within a highlighted target on a step that wants to "yield" so the
+// user can interact with the page.
+function minimizeTour() {
+  if (!_spotlightState.active || _spotlightState.minimized) return;
+  spotlightCleanup();
+  unlockBodyScroll();
+  _spotlightState.minimized = true;
+  showResumePill();
+}
+
+function showResumePill() {
+  removeResumePill();
+  const pill = document.createElement('button');
+  pill.className = 'onb-tour-resume-pill';
+  pill.id = 'tourResumePill';
+  pill.setAttribute('aria-label', 'Resume tour');
+  pill.innerHTML = `<span style="font-size: 14px;">▶</span><span>Continue tour</span>`;
+  pill.onclick = resumeTour;
+  document.body.appendChild(pill);
+}
+
+function removeResumePill() {
+  const pill = document.getElementById('tourResumePill');
+  if (pill) pill.remove();
+}
+
+function resumeTour() {
+  if (!_spotlightState.active) return;
+  removeResumePill();
+  _spotlightState.minimized = false;
+  // Re-render the current step from scratch — re-elevates ancestors, re-builds
+  // overlay/cutout/tooltip, re-locks body. Picks up wherever the user navigated
+  // to during the minimized period.
+  showSpotlightStep(_spotlightState.stepIndex);
 }
 
 // Position a tooltip near the highlighted element with smart placement —
@@ -5390,14 +5644,22 @@ async function showSpotlightStep(idx) {
     const rect = target.getBoundingClientRect();
     const inView = rect.top >= 0 && rect.bottom <= window.innerHeight;
     if (!inView) {
-      target.scrollIntoView({ behavior: 'instant', block: 'center' });
+      // For tall targets (like the activation checklist on mobile) align to
+      // top so the whole element is visible top-down. For everything else,
+      // center is more visually pleasing.
+      const block = step.scrollBlock || 'center';
+      target.scrollIntoView({ behavior: 'instant', block });
       // Brief wait for scroll to settle
       await new Promise(r => setTimeout(r, 100));
     }
   }
 
-  // Lock the body so nothing scrolls under the spotlight
-  lockBodyScroll();
+  // Lock the body so nothing scrolls under the spotlight — UNLESS this step
+  // explicitly allows scrolling (for tall targets like the activation checklist
+  // where the whole content can't fit on screen).
+  if (!step.allowScroll) {
+    lockBodyScroll();
+  }
 
   // Build the dim+blur overlay covering everything below z 9990
   const overlay = document.createElement('div');
@@ -5434,9 +5696,30 @@ async function showSpotlightStep(idx) {
       _spotlightState.pendingClickHandler = handler;
       _spotlightState.pendingClickTarget = target;
     }
+
+    // If the step wants to "yield" when the user clicks anything inside the
+    // highlighted area (so they can interact with the page freely), attach
+    // a delegated click listener. Using capture phase so it fires BEFORE the
+    // target's normal click handlers — we minimize FIRST then let the click
+    // through naturally. Without capture, the target's onclick would run
+    // first (e.g. closing the menu), which races with our minimize.
+    if (step.minimizeOnTargetClick) {
+      const minHandler = () => {
+        // Detach immediately so we only minimize once
+        target.removeEventListener('click', minHandler, true);
+        _spotlightState.pendingMinimizeHandler = null;
+        _spotlightState.pendingMinimizeTarget = null;
+        // Defer the minimize so the original click event finishes propagating
+        // and any resulting navigation/menu-close runs naturally
+        setTimeout(() => minimizeTour(), 50);
+      };
+      target.addEventListener('click', minHandler, true);
+      _spotlightState.pendingMinimizeHandler = minHandler;
+      _spotlightState.pendingMinimizeTarget = target;
+    }
   }
 
-  // Build tooltip
+  // Build tooltip with minimize button in top-right corner
   const tip = document.createElement('div');
   tip.className = 'onb-spot-tooltip';
   tip.id = 'spotTooltip';
@@ -5445,6 +5728,7 @@ async function showSpotlightStep(idx) {
   const nextLabel = step.nextLabel || (isLast ? 'Got it' : 'Next →');
   const showNextButton = !step.advanceOnClick;
   tip.innerHTML = `
+    <button class="onb-spot-tooltip-min" aria-label="Minimize tour" onclick="minimizeTour()">_</button>
     <div class="onb-spot-tooltip-title">${step.title}</div>
     <div class="onb-spot-tooltip-desc">${step.desc}</div>
     <div class="onb-spot-tooltip-actions">
@@ -5466,9 +5750,10 @@ async function showSpotlightStep(idx) {
   }
 }
 
-// Reposition tooltip + cutout on resize so they track their target
-window.addEventListener('resize', () => {
-  if (!_spotlightState.active) return;
+// Reposition the cutout + tooltip to track their target. Used by the resize
+// listener and the scroll listener (when a step allows scrolling).
+function _spotlightReposition() {
+  if (!_spotlightState.active || _spotlightState.minimized) return;
   const step = _spotlightState.steps[_spotlightState.stepIndex];
   if (!step?.target) return;
   const target = document.querySelector(step.target);
@@ -5484,7 +5769,24 @@ window.addEventListener('resize', () => {
     cutout.style.height = (rect.height + pad * 2) + 'px';
   }
   if (tip) positionTooltip(tip, rect);
-});
+}
+
+// Reposition tooltip + cutout on resize so they track their target
+window.addEventListener('resize', _spotlightReposition);
+
+// And on scroll — but ONLY when the current step allows scrolling. Otherwise
+// scroll is locked and this would never fire. Throttled via requestAnimationFrame.
+let _spotlightScrollRaf = null;
+window.addEventListener('scroll', () => {
+  if (!_spotlightState.active || _spotlightState.minimized) return;
+  const step = _spotlightState.steps[_spotlightState.stepIndex];
+  if (!step?.allowScroll) return;
+  if (_spotlightScrollRaf) return;
+  _spotlightScrollRaf = requestAnimationFrame(() => {
+    _spotlightScrollRaf = null;
+    _spotlightReposition();
+  });
+}, { passive: true });
 
 // ─── Tour definition ────────────────────────────────────────
 // 4 steps that teach NAVIGATION ACCESS, not features. The user learns where
@@ -5492,6 +5794,7 @@ window.addEventListener('resize', () => {
 // checklist that drives them to actually use each one.
 function startSpotlightTour() {
   _spotlightState.active = true;
+  _spotlightState.minimized = false;
   // Build the steps array. The trial step (last) is added conditionally because
   // some users may not actually be in a trial state (e.g., a paying user
   // replaying the tour from Settings) — we don't want to show a misleading step.
@@ -5507,8 +5810,11 @@ function startSpotlightTour() {
     {
       target: '#navMenuPanel',
       title: 'Seven areas, one menu',
-      desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time.',
+      desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time. Tap any tab to peek — the tour will pause and you can resume when ready.',
       nextLabel: 'Next →',
+      // If the user clicks any menu item, auto-minimize so they can explore
+      // that page freely. They'll see a "Continue tour" pill bottom-right.
+      minimizeOnTargetClick: true,
       beforeShow: () => {
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
@@ -5521,8 +5827,9 @@ function startSpotlightTour() {
     {
       target: '#navAvatar',
       title: 'Your account lives here',
-      desc: 'Your avatar (top-right) opens Settings, Help, and logout. Strava connections, HR zones, and the option to replay this tour live there.',
+      desc: 'Your avatar (top-right) opens Settings, Help, and logout. Strava connections, HR zones, and the option to replay this tour live there. Tap to peek — the tour pauses while you look.',
       nextLabel: 'Next →',
+      minimizeOnTargetClick: true,
       beforeShow: () => {
         // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
@@ -5535,6 +5842,10 @@ function startSpotlightTour() {
       title: 'Your getting-started list',
       desc: 'This card walks you through the 6 things to do first — finish your profile, generate a plan, connect Strava, and more. Each step unlocks once the previous one is done.',
       nextLabel: 'Next →',
+      // The activation card can be tall (6 rows) — on mobile it overflows the
+      // viewport. Allow scrolling so users can see all 6 items.
+      allowScroll: true,
+      scrollBlock: 'start',
       beforeShow: () => {
         // Make sure we're on dashboard so the activation card is visible
         navigate('dashboard');
@@ -7416,6 +7727,8 @@ async function renderDashboard() {
   // 2. trial_banner (X days left countdown — recurring, every dashboard load)
   // 3. trial_ended (one-time, dismissible, shown for 14 days after trial ends)
   // 4. activation_checklist (persistent, shows until 5/5 complete or dismissed)
+  // 5. pwa_install (persistent until dismissed; only shows post-intake on
+  //    devices that aren't already running Stryxs as a PWA)
   // The container holds whichever apply; if none apply, it stays empty.
   // Fetch intake status first so the activation card knows whether to render
   // and so we can offer the spotlight tour at the right moment.
@@ -7427,7 +7740,8 @@ async function renderDashboard() {
     trialBannerEl.innerHTML = renderTrialWelcomeCard()
       + renderTrialBanner()
       + renderTrialEndedCard()
-      + renderActivationChecklistCard(activationStatus);
+      + renderActivationChecklistCard(activationStatus)
+      + renderPwaInstallCard(intakeDone);
   }
 
   // ═══ TOUR OFFER ═══
