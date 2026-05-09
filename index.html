@@ -1021,8 +1021,10 @@ h1.hero-h .grad {
 .onb-spot-overlay {
   position: fixed; inset: 0;
   background: rgba(7, 11, 20, 0.78);
-  backdrop-filter: blur(6px) saturate(80%);
-  -webkit-backdrop-filter: blur(6px) saturate(80%);
+  /* No backdrop-filter here — when targets near the overlay also use
+     backdrop-filter (the .nav and .nav-menu-panel both do), browsers fail
+     to composite nested backdrop-filter layers correctly and the targets
+     render as blurred-empty boxes. Solid dim works fine and avoids the bug. */
   z-index: 9990;
   pointer-events: auto;
   animation: onbFadeIn 0.25s ease;
@@ -5047,7 +5049,7 @@ function renderActivationChecklistCard(status) {
   const pct = Math.round((done / total) * 100);
 
   return `
-    <div id="activationChecklistCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(80, 130, 255, 0.04), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(80, 130, 255, 0.22); border-radius: 14px; margin-bottom: 16px; position: relative;">
+    <div id="activationChecklistCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(80, 130, 255, 0.04), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(80, 130, 255, 0.22); border-radius: 14px; margin-bottom: 16px; position: relative; scroll-margin-top: 80px;">
       <button onclick="confirmDismissActivationChecklist()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-right: 36px;">
         <span style="font-size: 16px;">🎯</span>
@@ -5164,7 +5166,7 @@ function shouldShowInstallCard(intakeDone) {
   // apps to a "home screen" — different mental model. We could add a desktop
   // variant later; for now mobile-only matches user request.
   if (!ctx.isMobile) return false;
-  // Dismissed by this user — never show again
+  // Permanently dismissed (user clicked "Got it — done that") — never show again
   let dismissed = false;
   try { dismissed = localStorage.getItem(`stryxs_pwa_dismissed_${state.user.id}`) === '1'; } catch (_) {}
   if (dismissed) return false;
@@ -5172,6 +5174,11 @@ function shouldShowInstallCard(intakeDone) {
   let installed = false;
   try { installed = localStorage.getItem(`stryxs_pwa_installed_${state.user.id}`) === '1'; } catch (_) {}
   if (installed) return false;
+  // Snoozed via "Maybe later" — suppressed for 7 days, then card returns
+  try {
+    const snoozedUntil = parseInt(localStorage.getItem(`stryxs_pwa_snoozed_until_${state.user.id}`) || '0', 10);
+    if (snoozedUntil && Date.now() < snoozedUntil) return false;
+  } catch (_) {}
   // Show if we have a deferred prompt (Chrome / Edge / Android) — that means
   // the browser is ready to install. Or on iOS where there's no deferred event
   // but Add to Home Screen is always available manually.
@@ -5188,7 +5195,7 @@ function renderPwaInstallCard(intakeDone) {
     // Chrome / Edge / Android — we can trigger the native prompt
     return `
       <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
-        <button onclick="dismissPwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+        <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
           <span style="font-size: 18px;">📱</span>
           <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Install Stryxs on your device</div>
@@ -5198,30 +5205,32 @@ function renderPwaInstallCard(intakeDone) {
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn" onclick="triggerPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Install Stryxs</button>
-          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+          <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
         </div>
       </div>`;
   }
   if (ctx.isIOS) {
-    // iOS — show manual instructions (works for Safari + WebKit-based browsers)
+    // iOS — show manual instructions. We use generic "browser" language since
+    // the user might be on Safari, Chrome, Firefox, etc. — the Add to Home
+    // Screen flow is similar across them all (Share button → Add to Home Screen).
     return `
       <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
-        <button onclick="dismissPwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+        <button onclick="snoozePwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding-right: 32px;">
           <span style="font-size: 18px;">📱</span>
           <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
         </div>
         <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
-          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps in Safari:
+          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps in your browser:
         </div>
         <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
-          <li>Tap the <strong style="color: var(--text);">Share</strong> button (the box with the up arrow at the bottom of Safari)</li>
+          <li>Tap the <strong style="color: var(--text);">Share</strong> button (the box with the up arrow)</li>
           <li>Scroll down and tap <strong style="color: var(--text);">Add to Home Screen</strong></li>
-          <li>Tap <strong style="color: var(--text);">Add</strong> in the top-right</li>
+          <li>Tap <strong style="color: var(--text);">Add</strong> to confirm</li>
         </ol>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it — done that</button>
-          <button class="btn ghost" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
+          <button class="btn" onclick="dismissPwaInstall()" style="font-size: 12px; padding: 7px 14px;">Got it — done that</button>
+          <button class="btn ghost" onclick="snoozePwaInstall()" style="font-size: 12px; padding: 7px 14px;">Maybe later</button>
         </div>
       </div>`;
   }
@@ -5243,13 +5252,29 @@ async function triggerPwaInstall() {
     if (el) el.remove();
     toast('Stryxs installed — find it on your home screen.');
   }
-  // On 'dismissed' the user chose not to install — leave the card visible so
-  // they can try again later. Don't auto-dismiss.
+  // On 'dismissed' the user chose not to install — snooze for 7 days so we
+  // don't pester them but don't permanently lose the chance either.
+  if (outcome === 'dismissed') snoozePwaInstall();
 }
 
+// Permanent dismiss — user said they already installed it. Card never returns.
 function dismissPwaInstall() {
   if (!state.user) return;
   try { localStorage.setItem(`stryxs_pwa_dismissed_${state.user.id}`, '1'); } catch (_) {}
+  const el = document.getElementById('pwaInstallCard');
+  if (el) el.remove();
+}
+
+// Soft dismiss — "Maybe later" or X button. Card hides for 7 days then returns
+// so the user gets reminded but isn't pestered every dashboard visit. Picked
+// 7 days because it's long enough to not be annoying but short enough that
+// users who change their mind don't have to dig through Settings.
+function snoozePwaInstall() {
+  if (!state.user) return;
+  try {
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    localStorage.setItem(`stryxs_pwa_snoozed_until_${state.user.id}`, String(Date.now() + sevenDaysMs));
+  } catch (_) {}
   const el = document.getElementById('pwaInstallCard');
   if (el) el.remove();
 }
@@ -5799,16 +5824,16 @@ async function showSpotlightStep(idx) {
     return showSpotlightStep(idx + 1);
   }
 
-  // If the target is off-screen, scroll it into view BEFORE we lock the body.
-  // Otherwise users on small screens get a spotlight pointing at content they
-  // can't see and can't scroll to (because we're about to lock scrolling).
+  // Scroll the target into view. Two cases:
+  //   - step.scrollBlock specified: ALWAYS scroll, even if target is partially
+  //     visible. This guarantees the target lands at a known position (e.g.,
+  //     the activation card always lands at viewport top so the user sees the
+  //     header first, not the bottom of the list).
+  //   - no scrollBlock: only scroll if target is fully off-screen.
   if (target) {
     const rect = target.getBoundingClientRect();
     const inView = rect.top >= 0 && rect.bottom <= window.innerHeight;
-    if (!inView) {
-      // For tall targets (like the activation checklist on mobile) align to
-      // top so the whole element is visible top-down. For everything else,
-      // center is more visually pleasing.
+    if (step.scrollBlock || !inView) {
       const block = step.scrollBlock || 'center';
       target.scrollIntoView({ behavior: 'instant', block });
       // Brief wait for scroll to settle
@@ -6019,8 +6044,9 @@ function startSpotlightTour() {
       // iOS Safari in a stale render state where the menu opens "empty" on
       // subsequent taps. lowZ avoids touching the panel's styles entirely.
       lowZ: true,
-      // Force tooltip to bottom of viewport so it doesn't overlap the panel
-      tooltipPosition: 'bottom',
+      // Let auto-placement pick the tooltip position based on target.
+      // On PC: panel is in upper-left → tooltip goes below or right.
+      // On mobile: panel is bottom sheet → tooltip auto-goes above panel.
       beforeShow: () => {
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
