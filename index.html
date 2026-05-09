@@ -5264,6 +5264,10 @@ const SPOTLIGHT_TOUR_KEY = 'stryxs_spotlight_tour_seen';
 let _spotlightState = { stepIndex: 0, steps: [], active: false };
 
 function spotlightCleanup() {
+  // Restore any elevated ancestor styles BEFORE removing overlay elements so
+  // there's no flash of the old z-index. Critical for between-step transitions
+  // where we re-elevate a different chain on the next step.
+  restoreTargetStyles();
   document.querySelectorAll('.onb-spot-overlay, .onb-spot-cutout, .onb-spot-tooltip').forEach(el => el.remove());
   // Restore body scroll if we locked it
   document.body.style.overflow = '';
@@ -5355,16 +5359,36 @@ async function showSpotlightStep(idx) {
     cutout.style.height = (rect.height + pad * 2) + 'px';
     document.body.appendChild(cutout);
 
-    // Make the target element clickable through the overlay so the user can interact
-    // with it as instructed. We do this by elevating it above the overlay z-index.
-    const originalZ = target.style.zIndex;
-    const originalPos = target.style.position;
-    if (getComputedStyle(target).position === 'static') {
-      target.style.position = 'relative';
+    // To make the target clickable, we elevate the FIRST ancestor that creates
+    // its own stacking context (e.g., the .nav sticky parent has z-index: 100
+    // and backdrop-filter, so it traps any z-index changes on its children).
+    // We walk up the tree and elevate everything until we reach <body>, so the
+    // entire chain is above the overlay's z-index (9990).
+    const elevatedAncestors = [];
+    let cur = target;
+    while (cur && cur !== document.body) {
+      const cs = getComputedStyle(cur);
+      // Stash original styles so we can restore them on tour exit
+      const origZ = cur.style.zIndex;
+      const origPos = cur.style.position;
+      const origFilter = cur.style.backdropFilter;
+      const origWebkitFilter = cur.style.webkitBackdropFilter;
+      // Apply elevation
+      if (cs.position === 'static') cur.style.position = 'relative';
+      cur.style.zIndex = '9992';
+      // Backdrop filter creates its own stacking context too — kill it temporarily
+      // (only on the nav itself, leave nested elements alone)
+      if (cs.backdropFilter && cs.backdropFilter !== 'none') {
+        cur.style.backdropFilter = 'none';
+        cur.style.webkitBackdropFilter = 'none';
+      }
+      cur.dataset._tourOriginalZ = origZ;
+      cur.dataset._tourOriginalPos = origPos;
+      cur.dataset._tourOriginalFilter = origFilter;
+      cur.dataset._tourOriginalWebkitFilter = origWebkitFilter;
+      elevatedAncestors.push(cur);
+      cur = cur.parentElement;
     }
-    target.style.zIndex = '9992';
-    target.dataset._tourOriginalZ = originalZ;
-    target.dataset._tourOriginalPos = originalPos;
 
     // If the step says "advance when this is clicked", attach a one-time listener
     if (step.advanceOnClick) {
@@ -5408,9 +5432,10 @@ async function showSpotlightStep(idx) {
   }
 }
 
-// Restore z-index on tour exit so we don't leave stranded styles
+// Restore z-index/position/backdrop-filter on tour exit so we don't leave
+// stranded styles (we elevated the full ancestor chain — restore all of it)
 function restoreTargetStyles() {
-  document.querySelectorAll('[data-_tour-original-z], [data-_tour-original-pos]').forEach(el => {
+  document.querySelectorAll('[data-_tour-original-z], [data-_tour-original-pos], [data-_tour-original-filter]').forEach(el => {
     if (el.dataset._tourOriginalZ !== undefined) {
       el.style.zIndex = el.dataset._tourOriginalZ;
       delete el.dataset._tourOriginalZ;
@@ -5418,6 +5443,14 @@ function restoreTargetStyles() {
     if (el.dataset._tourOriginalPos !== undefined) {
       el.style.position = el.dataset._tourOriginalPos;
       delete el.dataset._tourOriginalPos;
+    }
+    if (el.dataset._tourOriginalFilter !== undefined) {
+      el.style.backdropFilter = el.dataset._tourOriginalFilter;
+      delete el.dataset._tourOriginalFilter;
+    }
+    if (el.dataset._tourOriginalWebkitFilter !== undefined) {
+      el.style.webkitBackdropFilter = el.dataset._tourOriginalWebkitFilter;
+      delete el.dataset._tourOriginalWebkitFilter;
     }
   });
 }
