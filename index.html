@@ -1080,24 +1080,24 @@ h1.hero-h .grad {
 }
 /* Floating "Resume tour" pill that appears when the tour is minimized.
    Sits bottom-right, outside any safe-area, with a subtle pulse to remind
-   the user they can return to the tour. */
+   the user they can return to the tour. Larger on desktop, compact on mobile. */
 .onb-tour-resume-pill {
   position: fixed;
-  bottom: max(20px, var(--safe-bottom, 0px));
-  right: max(20px, var(--safe-right, 0px));
+  bottom: max(24px, var(--safe-bottom, 0px));
+  right: max(24px, var(--safe-right, 0px));
   z-index: 9995;
   background: linear-gradient(135deg, rgba(0, 229, 160, 0.95), rgba(0, 200, 140, 0.95));
   color: #0a0e1a;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 700;
-  padding: 11px 18px;
+  padding: 16px 26px;
   border-radius: 999px;
   border: 0;
-  box-shadow: 0 10px 30px rgba(0, 229, 160, 0.3), 0 0 0 1px rgba(0, 229, 160, 0.4);
+  box-shadow: 0 14px 40px rgba(0, 229, 160, 0.4), 0 0 0 1px rgba(0, 229, 160, 0.55);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   animation: onbScaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), pillPulse 3s ease-in-out infinite 1s;
   transition: transform 0.15s;
 }
@@ -1107,9 +1107,17 @@ h1.hero-h .grad {
 .onb-tour-resume-pill:active {
   transform: translateY(0);
 }
+@media (max-width: 720px) {
+  .onb-tour-resume-pill {
+    font-size: 13px;
+    padding: 11px 18px;
+    bottom: max(16px, var(--safe-bottom, 0px));
+    right: max(16px, var(--safe-right, 0px));
+  }
+}
 @keyframes pillPulse {
-  0%, 100% { box-shadow: 0 10px 30px rgba(0, 229, 160, 0.3), 0 0 0 1px rgba(0, 229, 160, 0.4); }
-  50% { box-shadow: 0 10px 40px rgba(0, 229, 160, 0.5), 0 0 0 1px rgba(0, 229, 160, 0.6); }
+  0%, 100% { box-shadow: 0 14px 40px rgba(0, 229, 160, 0.4), 0 0 0 1px rgba(0, 229, 160, 0.55); }
+  50% { box-shadow: 0 14px 52px rgba(0, 229, 160, 0.6), 0 0 0 1px rgba(0, 229, 160, 0.75); }
 }
 
 /* Coach unread badges */
@@ -3772,6 +3780,54 @@ select option {
   color: var(--lv2-text-mute);
 }
 
+/* Password input + visibility toggle. The eye button overlays the right side
+   of a password input and toggles type=password ↔ text. Also used as the
+   container for password-with-confirmation pairs. */
+.lv2-field-pw {
+  position: relative;
+}
+.lv2-field-pw input {
+  width: 100%;
+  padding-right: 46px; /* leave room for the eye button */
+}
+.lv2-field-pw-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  color: var(--lv2-text-mute);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.lv2-field-pw-toggle:hover {
+  color: var(--lv2-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lv2-field-pw-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+/* Inline error text under a field (e.g., "passwords don't match") */
+.lv2-field-error {
+  font-size: 12px;
+  color: #f87171;
+  margin-top: 6px;
+  font-weight: 500;
+  display: none;
+}
+.lv2-field-error.show {
+  display: block;
+}
+
 .lv2-full {
   width: 100%;
   justify-content: center;
@@ -4183,7 +4239,22 @@ body.on-auth .container {
       </div>
       <div class="lv2-field">
         <label>Password</label>
-        <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" />
+        <div class="lv2-field-pw">
+          <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" oninput="validateSignupPasswordMatch()" />
+          <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('signupPassword', this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="lv2-field">
+        <label>Confirm password</label>
+        <div class="lv2-field-pw">
+          <input type="password" id="signupPasswordConfirm" placeholder="Type it again" autocomplete="new-password" oninput="validateSignupPasswordMatch()" />
+          <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('signupPasswordConfirm', this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div id="signupPasswordError" class="lv2-field-error">Passwords don't match.</div>
       </div>
       <button class="lv2-btn-primary lv2-full" onclick="doSignup()">
         Create account
@@ -4222,7 +4293,12 @@ body.on-auth .container {
       </div>
       <div class="lv2-field">
         <label>Password</label>
-        <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
+        <div class="lv2-field-pw">
+          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
+          <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('loginPassword', this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
       <button class="lv2-btn-primary lv2-full" onclick="doLogin()">
         Log in
@@ -5070,8 +5146,13 @@ function getPwaInstallContext() {
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
   const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-  return { isStandalone, isIOS, isSafari };
+  // "Mobile-ish" — devices where home-screen install actually makes sense.
+  // We deliberately exclude desktop because the user asked for this card to
+  // appear "only when they're on a mobile or like something with home screen".
+  const isMobile = isIOS || isAndroid || /webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  return { isStandalone, isIOS, isAndroid, isSafari, isMobile };
 }
 
 function shouldShowInstallCard(intakeDone) {
@@ -5079,9 +5160,10 @@ function shouldShowInstallCard(intakeDone) {
   const ctx = getPwaInstallContext();
   // Already installed — never show
   if (ctx.isStandalone) return false;
-  // Brand-new users (no intake yet) shouldn't see this — they need to experience
-  // the app first before being asked to install
-  if (!intakeDone) return false;
+  // Only show on mobile-ish devices. Desktop users typically don't add web
+  // apps to a "home screen" — different mental model. We could add a desktop
+  // variant later; for now mobile-only matches user request.
+  if (!ctx.isMobile) return false;
   // Dismissed by this user — never show again
   let dismissed = false;
   try { dismissed = localStorage.getItem(`stryxs_pwa_dismissed_${state.user.id}`) === '1'; } catch (_) {}
@@ -5090,9 +5172,11 @@ function shouldShowInstallCard(intakeDone) {
   let installed = false;
   try { installed = localStorage.getItem(`stryxs_pwa_installed_${state.user.id}`) === '1'; } catch (_) {}
   if (installed) return false;
-  // Show if we have a deferred prompt OR we're on iOS (manual instructions)
+  // Show if we have a deferred prompt (Chrome / Edge / Android) — that means
+  // the browser is ready to install. Or on iOS where there's no deferred event
+  // but Add to Home Screen is always available manually.
   if (_deferredInstallPrompt) return true;
-  if (ctx.isIOS && ctx.isSafari) return true;
+  if (ctx.isIOS) return true;
   return false;
 }
 
@@ -5118,8 +5202,8 @@ function renderPwaInstallCard(intakeDone) {
         </div>
       </div>`;
   }
-  if (ctx.isIOS && ctx.isSafari) {
-    // iOS Safari — show manual instructions
+  if (ctx.isIOS) {
+    // iOS — show manual instructions (works for Safari + WebKit-based browsers)
     return `
       <div id="pwaInstallCard" style="padding: 16px 18px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.06), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.25); border-radius: 14px; margin-bottom: 16px; position: relative;">
         <button onclick="dismissPwaInstall()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
@@ -5128,7 +5212,7 @@ function renderPwaInstallCard(intakeDone) {
           <div style="font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Add Stryxs to your home screen</div>
         </div>
         <div style="font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">
-          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps:
+          Stryxs runs great as an app on your iPhone. No App Store needed — just three taps in Safari:
         </div>
         <ol style="font-size: 12px; color: var(--text-dim); line-height: 1.7; margin: 0 0 14px 18px; padding: 0;">
           <li>Tap the <strong style="color: var(--text);">Share</strong> button (the box with the up arrow at the bottom of Safari)</li>
@@ -5233,9 +5317,18 @@ async function doSignup() {
   const name = document.getElementById('signupName').value.trim();
   const email = document.getElementById('signupEmail').value.trim().toLowerCase();
   const password = document.getElementById('signupPassword').value;
+  const passwordConfirm = document.getElementById('signupPasswordConfirm')?.value || '';
   if (!name || !email || !password) return toast('Please fill all fields');
   if (password.length < 6) return toast('Password must be at least 6 characters');
   if (!email.includes('@')) return toast('Invalid email');
+  // Both fields must match before we send anything to Supabase. The inline
+  // error under the confirm field is the primary feedback; the toast is a
+  // safety net in case the user submits without seeing the error.
+  if (password !== passwordConfirm) {
+    const errEl = document.getElementById('signupPasswordError');
+    if (errEl) errEl.classList.add('show');
+    return toast("Passwords don't match");
+  }
 
   toast('Creating your account...');
   const { data, error } = await sb.auth.signUp({
@@ -5259,6 +5352,36 @@ async function doSignup() {
   toast(`Welcome, ${name}!`);
   showApp();
   navigate('dashboard');
+}
+
+// Toggle password input visibility. Swaps the input's type between password
+// and text, and swaps the eye icon between "open" and "slashed" SVGs.
+// Used by both signup and login forms.
+function togglePasswordVisibility(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  // Swap icon — open eye when password is visible, normal eye when hidden
+  const eyeOpen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOff = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+  btnEl.innerHTML = isHidden ? eyeOff : eyeOpen;
+  btnEl.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+}
+
+// Live validation of the password / confirmation match. Hides the error as
+// soon as the two fields match (typically while user is still typing).
+function validateSignupPasswordMatch() {
+  const pw = document.getElementById('signupPassword')?.value || '';
+  const confirm = document.getElementById('signupPasswordConfirm')?.value || '';
+  const errEl = document.getElementById('signupPasswordError');
+  if (!errEl) return;
+  // Only show error if user has typed something in confirm field and it differs
+  if (confirm && pw !== confirm) {
+    errEl.classList.add('show');
+  } else {
+    errEl.classList.remove('show');
+  }
 }
 
 async function doLogin() {
@@ -5523,7 +5646,7 @@ function showResumePill() {
   pill.className = 'onb-tour-resume-pill';
   pill.id = 'tourResumePill';
   pill.setAttribute('aria-label', 'Resume tour');
-  pill.innerHTML = `<span style="font-size: 14px;">▶</span><span>Continue tour</span>`;
+  pill.innerHTML = `<span style="font-size: 16px;">▶</span><span>Continue tour</span>`;
   pill.onclick = resumeTour;
   document.body.appendChild(pill);
 }
@@ -5544,27 +5667,51 @@ function resumeTour() {
 }
 
 // Position a tooltip near the highlighted element with smart placement —
-// prefers space below, then above, then center as fallback. Stays on screen.
-function positionTooltip(tooltipEl, targetRect) {
+// prefers space below, then above, then a viewport corner that doesn't
+// overlap the target. Never centers over the target (which would block it).
+function positionTooltip(tooltipEl, targetRect, forcedPosition) {
   const margin = 16;
   const tooltipW = tooltipEl.offsetWidth;
   const tooltipH = tooltipEl.offsetHeight;
   const winW = window.innerWidth;
   const winH = window.innerHeight;
 
-  // Try below the target first
-  let top = targetRect.bottom + 14;
-  let left = targetRect.left + (targetRect.width / 2) - (tooltipW / 2);
+  let top, left;
 
-  // If overflowing bottom, try above
-  if (top + tooltipH + margin > winH) {
-    top = targetRect.top - tooltipH - 14;
+  // Forced position: caller wants the tooltip pinned to a specific edge,
+  // regardless of how much room is available. Used when the target is large
+  // (like the open menu panel) and we don't want the tooltip to overlap it.
+  if (forcedPosition === 'bottom') {
+    top = winH - tooltipH - margin;
+    left = (winW - tooltipW) / 2;
+  } else if (forcedPosition === 'top') {
+    top = margin;
+    left = (winW - tooltipW) / 2;
+  } else {
+    // Smart auto-placement: prefer below the target, then above, then a
+    // viewport edge that doesn't overlap.
+    const roomBelow = winH - targetRect.bottom - margin;
+    const roomAbove = targetRect.top - margin;
+
+    if (roomBelow >= tooltipH + 14) {
+      top = targetRect.bottom + 14;
+      left = targetRect.left + (targetRect.width / 2) - (tooltipW / 2);
+    } else if (roomAbove >= tooltipH + 14) {
+      top = targetRect.top - tooltipH - 14;
+      left = targetRect.left + (targetRect.width / 2) - (tooltipW / 2);
+    } else {
+      // Otherwise pin to the viewport edge that has the most room — but NEVER
+      // overlap the target. Pick bottom if target's bottom is in upper half.
+      if (targetRect.bottom < winH / 2) {
+        top = winH - tooltipH - margin;
+      } else {
+        top = margin;
+      }
+      left = (winW - tooltipW) / 2;
+    }
   }
-  // If still overflowing top, fall back to vertical center
-  if (top < margin) {
-    top = Math.max(margin, (winH - tooltipH) / 2);
-  }
-  // Clamp horizontally
+
+  // Clamp horizontally to viewport
   if (left < margin) left = margin;
   if (left + tooltipW + margin > winW) left = winW - tooltipW - margin;
 
@@ -5576,11 +5723,15 @@ function positionTooltip(tooltipEl, targetRect) {
 // its own stacking context (z-index, backdrop-filter, transform, etc.) so the
 // target is visually above the overlay AND clickable. Without this, parents
 // like the sticky <nav> trap z-index changes on their children.
-// Also temporarily disables backdrop-filter on ancestors that have one,
-// because backdrop-filter creates a stacking context and ALSO causes the
-// blurred-out look the user reported.
+//
+// Important nuance: we disable backdrop-filter on STRICT ancestors only, NOT
+// on the target itself. iOS Safari has repaint bugs when backdrop-filter is
+// toggled on/off on a container that holds children with transparent
+// backgrounds — children become invisible until the next layout-changing
+// event. By leaving the target's own backdrop-filter alone, we avoid this.
 function elevateAncestors(target) {
   let cur = target;
+  let isTarget = true;
   while (cur && cur !== document.body) {
     const cs = getComputedStyle(cur);
     cur.dataset._tourOriginalZ = cur.style.zIndex || '';
@@ -5590,16 +5741,21 @@ function elevateAncestors(target) {
     cur.dataset._tourElevated = '1';
     if (cs.position === 'static') cur.style.position = 'relative';
     cur.style.zIndex = '9992';
-    if (cs.backdropFilter && cs.backdropFilter !== 'none') {
+    // Only nuke backdrop-filter on strict ancestors. The target keeps its own
+    // backdrop-filter because (a) it isn't trapping itself, and (b) toggling
+    // it causes iOS render bugs.
+    if (!isTarget && cs.backdropFilter && cs.backdropFilter !== 'none') {
       cur.style.backdropFilter = 'none';
       cur.style.webkitBackdropFilter = 'none';
     }
     cur = cur.parentElement;
+    isTarget = false;
   }
 }
 
 function restoreTargetStyles() {
-  document.querySelectorAll('[data-_tour-elevated]').forEach(el => {
+  const elevated = document.querySelectorAll('[data-_tour-elevated]');
+  elevated.forEach(el => {
     if (el.dataset._tourOriginalZ !== undefined) el.style.zIndex = el.dataset._tourOriginalZ;
     if (el.dataset._tourOriginalPos !== undefined) el.style.position = el.dataset._tourOriginalPos;
     if (el.dataset._tourOriginalFilter !== undefined) el.style.backdropFilter = el.dataset._tourOriginalFilter;
@@ -5609,6 +5765,13 @@ function restoreTargetStyles() {
     delete el.dataset._tourOriginalFilter;
     delete el.dataset._tourOriginalWebkitFilter;
     delete el.dataset._tourElevated;
+  });
+  // Force iOS Safari to repaint any element we touched. iOS has bugs where
+  // toggling backdrop-filter / z-index leaves stale rendering. Reading
+  // offsetHeight after toggling display forces a synchronous reflow + repaint.
+  elevated.forEach(el => {
+    /* eslint-disable no-unused-expressions */
+    el.offsetHeight; // trigger reflow
   });
 }
 
@@ -5661,16 +5824,42 @@ async function showSpotlightStep(idx) {
     lockBodyScroll();
   }
 
-  // Build the dim+blur overlay covering everything below z 9990
-  const overlay = document.createElement('div');
-  overlay.className = 'onb-spot-overlay';
-  overlay.id = 'spotOverlay';
-  document.body.appendChild(overlay);
+  // Build the dim+blur overlay. The overlay has three modes per step:
+  //   default:    z-index 9990, blocks all clicks below — used when target needs elevation
+  //   lowZ:       z-index 91, sits below the sticky nav (z-100) and menu panel (z-95)
+  //               so those elements naturally render on top without us having to
+  //               touch their styles. Avoids iOS Safari repaint bugs caused by
+  //               toggling z-index/backdrop-filter on the menu panel.
+  //   noOverlay:  no overlay at all — used for steps where the user is meant to
+  //               freely scroll/interact with the page (like the activation card).
+  //               The cutout still draws a green outline to guide attention.
+  if (!step.noOverlay) {
+    const overlay = document.createElement('div');
+    overlay.className = 'onb-spot-overlay';
+    overlay.id = 'spotOverlay';
+    if (step.lowZ) {
+      // Lowered overlay: sits below the existing nav/menu z-indices so they
+      // appear naturally on top without us elevating them. Their normal CSS
+      // backdrop-filter and stacking context stay intact, which avoids the
+      // iOS Safari "menu opens empty" rendering bug.
+      overlay.style.zIndex = '91';
+    }
+    if (step.allowScroll) {
+      overlay.style.pointerEvents = 'none';
+    }
+    document.body.appendChild(overlay);
+  }
 
-  // Build the cutout (transparent box with green border) above the elevated
-  // target. Positioned to wrap the target with optional padding.
+  // Build the cutout (transparent box with green border) above the target.
+  // Positioned to wrap the target with optional padding. Cutout always sits
+  // at z-9993 so it's visible regardless of overlay strategy.
   if (target) {
-    elevateAncestors(target);
+    // Only elevate the target's ancestor chain when the step doesn't have
+    // lowZ/noOverlay strategies. With lowZ, the target's existing z-index is
+    // already above the overlay. With noOverlay, there's no overlay to escape.
+    if (!step.lowZ && !step.noOverlay) {
+      elevateAncestors(target);
+    }
     const rect = target.getBoundingClientRect();
     const pad = step.padding || 6;
     const cutout = document.createElement('div');
@@ -5742,7 +5931,7 @@ async function showSpotlightStep(idx) {
   document.body.appendChild(tip);
 
   if (target) {
-    positionTooltip(tip, target.getBoundingClientRect());
+    positionTooltip(tip, target.getBoundingClientRect(), step.tooltipPosition);
   } else {
     tip.style.top = '50%';
     tip.style.left = '50%';
@@ -5768,7 +5957,7 @@ function _spotlightReposition() {
     cutout.style.width = (rect.width + pad * 2) + 'px';
     cutout.style.height = (rect.height + pad * 2) + 'px';
   }
-  if (tip) positionTooltip(tip, rect);
+  if (tip) positionTooltip(tip, rect, step.tooltipPosition);
 }
 
 // Reposition tooltip + cutout on resize so they track their target
@@ -5798,6 +5987,13 @@ function startSpotlightTour() {
   // Build the steps array. The trial step (last) is added conditionally because
   // some users may not actually be in a trial state (e.g., a paying user
   // replaying the tour from Settings) — we don't want to show a misleading step.
+  //
+  // Strategy: steps 1-3 highlight nav elements which already have high CSS
+  // z-indices. Instead of elevating them with inline styles (which causes iOS
+  // Safari repaint bugs on the menu panel), we set the dim overlay to z-91 so
+  // the nav (z-100) and menu panel (z-95) naturally render above. No inline
+  // style changes on those elements means no rendering bugs after restore.
+  // Step 4 has no overlay at all — the user is meant to scroll/read freely.
   const steps = [
     {
       target: '#navHamburger',
@@ -5806,15 +6002,18 @@ function startSpotlightTour() {
       advanceOnClick: true,
       advanceDelay: 380,
       padding: 8,
+      lowZ: true,
     },
     {
       target: '#navMenuPanel',
       title: 'Seven areas, one menu',
-      desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time. Tap any tab to peek — the tour will pause and you can resume when ready.',
+      desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time. Tap any tab to peek — the tour will pause.',
       nextLabel: 'Next →',
-      // If the user clicks any menu item, auto-minimize so they can explore
-      // that page freely. They'll see a "Continue tour" pill bottom-right.
       minimizeOnTargetClick: true,
+      lowZ: true,
+      // For step 2 the menu panel is large on mobile — force the tooltip to
+      // sit at the bottom of the viewport so it doesn't overlap the panel.
+      tooltipPosition: 'bottom',
       beforeShow: () => {
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
@@ -5830,6 +6029,7 @@ function startSpotlightTour() {
       desc: 'Your avatar (top-right) opens Settings, Help, and logout. Strava connections, HR zones, and the option to replay this tour live there. Tap to peek — the tour pauses while you look.',
       nextLabel: 'Next →',
       minimizeOnTargetClick: true,
+      lowZ: true,
       beforeShow: () => {
         // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
@@ -5842,8 +6042,9 @@ function startSpotlightTour() {
       title: 'Your getting-started list',
       desc: 'This card walks you through the 6 things to do first — finish your profile, generate a plan, connect Strava, and more. Each step unlocks once the previous one is done.',
       nextLabel: 'Next →',
-      // The activation card can be tall (6 rows) — on mobile it overflows the
-      // viewport. Allow scrolling so users can see all 6 items.
+      // No overlay at all — let user see the full dashboard. The cutout draws
+      // attention to the checklist card. User can scroll freely if needed.
+      noOverlay: true,
       allowScroll: true,
       scrollBlock: 'start',
       beforeShow: () => {
@@ -5865,6 +6066,8 @@ function startSpotlightTour() {
       title: "You're on a 7-day Pro trial",
       desc: 'Full Pro access — unlimited plans, full-context Coach chat, smart adjustments, deep trends. After day 7 you switch to Free tier (your data stays). Upgrade anytime to keep Pro features.',
       nextLabel: 'Got it',
+      noOverlay: true,
+      allowScroll: true,
       beforeShow: () => {
         // Already on dashboard from previous step; just give layout a moment
       },
