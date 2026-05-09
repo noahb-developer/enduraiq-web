@@ -6001,7 +6001,12 @@ function startSpotlightTour() {
       advanceOnClick: true,
       advanceDelay: 380,
       padding: 8,
-      lowZ: true,
+      // Step 1 uses elevation (default) — we lift the hamburger above the
+      // overlay by setting inline z-index. This was the strategy in v21 which
+      // worked reliably across PC and mobile. We tried lowZ in v22 (lower the
+      // overlay below the nav's CSS z-index) but it caused the hamburger
+      // lines to render invisibly on some setups, possibly due to nested
+      // backdrop-filter compositing issues. Elevation is more battle-tested.
     },
     {
       target: '#navMenuPanel',
@@ -6009,9 +6014,12 @@ function startSpotlightTour() {
       desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time. Tap any tab to peek — the tour will pause.',
       nextLabel: 'Next →',
       minimizeOnTargetClick: true,
+      // The menu panel is the ONE place where elevation causes problems —
+      // toggling z-index/backdrop-filter on the panel and restoring it leaves
+      // iOS Safari in a stale render state where the menu opens "empty" on
+      // subsequent taps. lowZ avoids touching the panel's styles entirely.
       lowZ: true,
-      // For step 2 the menu panel is large on mobile — force the tooltip to
-      // sit at the bottom of the viewport so it doesn't overlap the panel.
+      // Force tooltip to bottom of viewport so it doesn't overlap the panel
       tooltipPosition: 'bottom',
       beforeShow: () => {
         const panel = document.getElementById('navMenuPanel');
@@ -6028,7 +6036,8 @@ function startSpotlightTour() {
       desc: 'Your avatar (top-right) opens Settings, Help, and logout. Strava connections, HR zones, and the option to replay this tour live there. Tap to peek — the tour pauses while you look.',
       nextLabel: 'Next →',
       minimizeOnTargetClick: true,
-      lowZ: true,
+      // Step 3 uses elevation (default). Avatar is small, no panel-repaint
+      // issue like step 2 — elevation is fine here.
       beforeShow: () => {
         // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
