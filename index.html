@@ -4676,7 +4676,7 @@ const SUPABASE_KEY = 'sb_publishable_ZjFD_3xIjywpxrU9Vp-ImQ_WiNidr2L';
 // Paste the PUBLIC key here (the private one goes in Supabase env vars
 // as VAPID_PRIVATE_KEY for the send-reminders edge function).
 // Until set, the app simply won't ask for notification permission.
-const VAPID_PUBLIC_KEY = 'BN00taH8qcUtNaGwakhKEC51maJg5t76qC5ijtc4W8QxSo98-QYEThaSd7H3eiETHzF_XESWOLik0DTJbX47GaU';
+const VAPID_PUBLIC_KEY = '';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let state = {
@@ -17846,9 +17846,16 @@ async function renderNotifSettings() {
   const body = document.getElementById('notifSettingsBody');
   if (!body) return;
 
-  const state = getPushPermissionState();
+  // Three pieces of state in play here:
+  //   1) Browser permission for THIS device (Notification.permission)
+  //   2) Whether THIS device has an active push subscription
+  //   3) Server-side opt-in preference (profiles.notif_workout_reminder)
+  // The time picker is a server-level preference — should show whenever (3)
+  // is true, regardless of (1) or (2). The big toggle button reflects (1)
+  // and (2) on this specific device.
+  const permState = getPushPermissionState();
 
-  // Read current saved preference
+  // Pull preference from DB
   let savedReminderTime = '07:00';
   let savedReminderEnabled = false;
   try {
@@ -17864,49 +17871,94 @@ async function renderNotifSettings() {
     }
   } catch (_) {}
 
-  if (state === 'unsupported') {
+  // Is THIS device currently subscribed to push?
+  let thisDeviceSubscribed = false;
+  try {
+    if (_swRegistration) {
+      const sub = await _swRegistration.pushManager.getSubscription();
+      thisDeviceSubscribed = !!sub;
+    }
+  } catch (_) {}
+
+  // Render the support-status messages first if device can't do push at all
+  if (permState === 'unsupported') {
     body.innerHTML = `
       <div style="padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
         Push notifications aren't supported in this browser. Try Chrome, Edge, Firefox, or Safari (latest).
-      </div>`;
+      </div>
+      ${savedReminderEnabled ? renderTimePickerOnly(savedReminderTime) : ''}`;
     return;
   }
-  if (state === 'ios-not-installed') {
+  if (permState === 'ios-not-installed') {
     body.innerHTML = `
       <div style="padding: 14px 16px; background: rgba(255, 196, 0, 0.06); border: 1px solid rgba(255, 196, 0, 0.25); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
         <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Add Stryxs to your home screen first</div>
         On iPhone/iPad, push notifications require the app to be installed (tap the Share icon in Safari → Add to Home Screen). Once installed, open Stryxs from your home screen and come back here.
-      </div>`;
+      </div>
+      ${savedReminderEnabled ? renderTimePickerOnly(savedReminderTime) : ''}`;
     return;
   }
-  if (state === 'denied') {
+  if (permState === 'denied') {
     body.innerHTML = `
       <div style="padding: 14px 16px; background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
-        <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Notifications are blocked</div>
+        <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Notifications are blocked on this device</div>
         You denied notifications previously. To enable them, open your browser's site settings and allow notifications for stryxs.com, then come back here.
-      </div>`;
+      </div>
+      ${savedReminderEnabled ? renderTimePickerOnly(savedReminderTime) : ''}`;
     return;
   }
 
-  // Granted or default — render the toggle
-  const isOn = state === 'granted' && savedReminderEnabled;
+  // The button reflects whether THIS device is subscribed AND user is opted in.
+  // Server-level opt-in alone isn't enough — need a working subscription on
+  // this device for THIS device to actually buzz.
+  const isReceivingHere = permState === 'granted' && thisDeviceSubscribed && savedReminderEnabled;
+  const buttonLabel = isReceivingHere ? 'Turn off' : (savedReminderEnabled && !thisDeviceSubscribed ? 'Enable on this device' : 'Turn on');
+  const buttonAction = isReceivingHere ? 'disablePushNotifications().then(renderNotifSettings)' : 'askForNotificationPermission().then(renderNotifSettings)';
+
+  // Status line — distinguishes "you've never opted in" from "opted in but
+  // this device isn't subscribed" so the user understands what tapping
+  // the button will do.
+  let statusLine = '';
+  if (savedReminderEnabled && thisDeviceSubscribed) {
+    statusLine = '<div style="font-size: 11px; color: var(--accent); margin-top: 4px;">✓ On for this device</div>';
+  } else if (savedReminderEnabled && !thisDeviceSubscribed) {
+    statusLine = '<div style="font-size: 11px; color: var(--text-mute); margin-top: 4px;">Reminders are on, but this device isn\'t subscribed.</div>';
+  }
+
   body.innerHTML = `
     <div style="padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px;">
         <div style="flex: 1;">
           <div style="font-size: 14px; font-weight: 600; margin-bottom: 2px;">Workout reminders</div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">A gentle nudge each morning if there's training scheduled.</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">A gentle nudge before each training session.</div>
+          ${statusLine}
         </div>
-        <button id="notifMainToggle" onclick="${isOn ? 'disablePushNotifications().then(renderNotifSettings)' : 'askForNotificationPermission().then(renderNotifSettings)'}" class="btn ${isOn ? 'ghost' : ''}" style="font-size: 13px; padding: 8px 16px; flex-shrink: 0; ${isOn ? 'color: var(--text-dim);' : ''}">${isOn ? 'Turn off' : 'Turn on'}</button>
+        <button id="notifMainToggle" onclick="${buttonAction}" class="btn ${isReceivingHere ? 'ghost' : ''}" style="font-size: 13px; padding: 8px 16px; flex-shrink: 0; ${isReceivingHere ? 'color: var(--text-dim);' : ''}">${buttonLabel}</button>
       </div>
-      ${isOn ? `
+      ${savedReminderEnabled ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
           <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
             <span style="color: var(--text-dim);">Send reminder at</span>
             <input type="time" id="notifTimeInput" value="${savedReminderTime}" onchange="saveReminderTime(this.value)" style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 13px;" />
           </label>
+          <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to all your devices.</div>
         </div>
       ` : ''}
+    </div>
+  `;
+}
+
+// Standalone time-picker block shown when the user is opted in but the
+// current device can't actually receive pushes (e.g. notification blocked
+// in browser settings). They can still edit the time from this device.
+function renderTimePickerOnly(savedReminderTime) {
+  return `
+    <div style="margin-top: 10px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px;">
+      <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
+        <span style="color: var(--text-dim);">Reminder time</span>
+        <input type="time" id="notifTimeInput" value="${savedReminderTime}" onchange="saveReminderTime(this.value)" style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 13px;" />
+      </label>
+      <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to your other subscribed devices.</div>
     </div>
   `;
 }
