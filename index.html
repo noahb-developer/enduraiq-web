@@ -5318,6 +5318,13 @@ async function saveWorkout(workout) {
   if (data) workout._dbId = data.id;
   else if (error) console.error('Workout save error:', error);
 
+  // Track for funnel: distinguish first workout from subsequent
+  const wasFirst = !state.workouts || state.workouts.length === 0;
+  trackEvent(wasFirst ? 'first_workout_logged' : 'workout_logged', {
+    sport: workout.sport,
+    source: workout.source,
+  });
+
   // Real-time anomaly check (fires async — don't block UI on it)
   // Only runs if rate-limit + idempotency conditions allow.
   setTimeout(() => {
@@ -5370,6 +5377,7 @@ async function doSignup() {
   // Flag: brand-new user. Dashboard will show a one-time trial welcome card.
   // Per-user key so multiple accounts on the same browser don't conflict.
   try { localStorage.setItem(`stryxs_show_trial_welcome_${data.user.id}`, '1'); } catch (_) {}
+  trackEvent('signup_completed', { source: 'password' });
   toast(`Welcome, ${name}!`);
   showApp();
   navigate('dashboard');
@@ -11024,6 +11032,96 @@ function getClientTimezone() {
   }
 }
 
+// ═══ FIRST-PARTY ANALYTICS ════════════════════════════════════════
+// Lightweight event tracking that writes to public.user_events. Used for
+// funnels, attribution, and basic product analytics. Never logs PII or
+// message contents — only event names + structured props.
+//
+// Anonymous events (before signup) carry a sticky anon_session_id from
+// localStorage so we can stitch a user's pre-signup activity to their
+// account when they convert.
+function _getOrCreateAnonSessionId() {
+  try {
+    let id = localStorage.getItem('stryxs_anon_session_id');
+    if (!id) {
+      id = 'a_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      localStorage.setItem('stryxs_anon_session_id', id);
+    }
+    return id;
+  } catch (_) { return null; }
+}
+
+// Read UTM params from current URL once, store them so we can attribute
+// events that happen after navigation away from the landing URL.
+function _getUtmParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const utm = {
+      utm_source: params.get('utm_source') || null,
+      utm_medium: params.get('utm_medium') || null,
+      utm_campaign: params.get('utm_campaign') || null,
+    };
+    if (utm.utm_source || utm.utm_medium || utm.utm_campaign) {
+      // Persist for 30 days so later events get attributed
+      localStorage.setItem('stryxs_utm', JSON.stringify({ ...utm, ts: Date.now() }));
+      return utm;
+    }
+    // Use stored if recent
+    const stored = localStorage.getItem('stryxs_utm');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Date.now() - (parsed.ts || 0) < 30 * 24 * 60 * 60 * 1000) {
+        return { utm_source: parsed.utm_source, utm_medium: parsed.utm_medium, utm_campaign: parsed.utm_campaign };
+      }
+    }
+  } catch (_) {}
+  return { utm_source: null, utm_medium: null, utm_campaign: null };
+}
+
+async function trackEvent(eventName, properties = {}) {
+  if (!eventName) return;
+  try {
+    const utm = _getUtmParams();
+    const row = {
+      user_id: state.user?.id || null,
+      anon_session_id: state.user?.id ? null : _getOrCreateAnonSessionId(),
+      event_name: eventName,
+      properties: properties && Object.keys(properties).length ? properties : null,
+      utm_source: utm.utm_source,
+      utm_medium: utm.utm_medium,
+      utm_campaign: utm.utm_campaign,
+      user_agent: (navigator.userAgent || '').slice(0, 200),
+    };
+    // Fire and forget — never block the UI on analytics.
+    sb.from('user_events').insert(row).then(({ error }) => {
+      if (error) console.warn('[Stryxs] trackEvent failed:', error.message);
+    });
+  } catch (e) {
+    console.warn('[Stryxs] trackEvent exception:', e?.message);
+  }
+}
+
+// Global error handlers — catch anything that escapes try/catch so we
+// at least see it in user_events for debugging. Limited stack depth to
+// keep payloads small.
+window.addEventListener('error', (e) => {
+  try {
+    trackEvent('js_error', {
+      message: String(e?.message || '').slice(0, 200),
+      src: String(e?.filename || '').slice(0, 100),
+      line: e?.lineno,
+      col: e?.colno,
+    });
+  } catch (_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    trackEvent('promise_rejection', {
+      reason: String(e?.reason?.message || e?.reason || '').slice(0, 200),
+    });
+  } catch (_) {}
+});
+
 async function callCoach(action, payload, options = {}) {
   const { data: session } = await sb.auth.getSession();
   const token = session?.session?.access_token;
@@ -11046,18 +11144,36 @@ async function callCoach(action, payload, options = {}) {
     });
     clearTimeout(timeoutId);
 
+    // Read the JSON body once — many error paths still return JSON with
+    // structured fields we need (e.g. USAGE_LIMIT_EXCEEDED's limit_type).
+    let parsed = null;
+    try { parsed = await res.json(); } catch (_) {}
+
     if (!res.ok) {
-      const errText = await res.text();
-      console.error('[Stryxs] Coach HTTP error:', res.status, errText);
+      // Backend returns 429 with code USAGE_LIMIT_EXCEEDED when a user is
+      // over their monthly cost or call cap. Surface a structured error
+      // so the caller can render the friendly "you've used your monthly
+      // Pro allowance" modal instead of a generic toast.
+      if (res.status === 429 && parsed?.code === 'USAGE_LIMIT_EXCEEDED') {
+        const e = new Error(parsed.error || 'Monthly limit reached');
+        e.code = 'USAGE_LIMIT_EXCEEDED';
+        e.limit_type = parsed.limit_type;
+        e.usage = parsed.usage;
+        // Auto-show the modal — caller doesn't need to handle this case
+        // explicitly unless they want custom behavior.
+        try { showUsageLimitModal(parsed); } catch (_) {}
+        try { trackEvent('usage_limit_hit', { limit_type: parsed.limit_type, action }); } catch (_) {}
+        throw e;
+      }
+      console.error('[Stryxs] Coach HTTP error:', res.status, parsed?.error || '');
       throw new Error(`Coach unavailable (${res.status}). Try again in a moment.`);
     }
 
-    const data = await res.json();
-    if (!data.success) {
-      console.error('[Stryxs] Coach returned failure:', data);
-      throw new Error(data.error || 'Coach function failed');
+    if (!parsed?.success) {
+      console.error('[Stryxs] Coach returned failure:', parsed);
+      throw new Error(parsed?.error || 'Coach function failed');
     }
-    return data.result;
+    return parsed.result;
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
@@ -11065,6 +11181,50 @@ async function callCoach(action, payload, options = {}) {
     }
     throw err;
   }
+}
+
+// ═══ USAGE LIMIT MODAL ════════════════════════════════════════════
+// Renders a friendly explanation when the backend returns 429
+// USAGE_LIMIT_EXCEEDED. Different copy per limit type so the user
+// knows what reset they're waiting for.
+function showUsageLimitModal(payload) {
+  // Don't stack — if one is already up, leave it
+  if (document.getElementById('usageLimitModal')) return;
+
+  const lt = payload?.limit_type || 'monthly_cost';
+  let title, body, resetLine;
+  if (lt === 'daily_total') {
+    title = "You've used today's AI quota";
+    body = "You've sent a lot of requests to Coach today. The daily quota resets at midnight in your local time. Everything else in Stryxs still works — your plan, workouts, history, and analytics are all available.";
+    resetLine = "Resets at midnight.";
+  } else if (lt === 'monthly_cost') {
+    title = "You've reached this month's AI usage cap";
+    body = "Pro includes generous monthly AI use, and you've reached the cap for this month. Don't worry — your plan, workouts, and analytics are still fully available. The Coach AI features will reset on the 1st.";
+    resetLine = "Resets on the 1st of next month.";
+  } else if (lt && lt.startsWith('monthly_')) {
+    const action = lt.replace('monthly_', '').replace(/_/g, ' ');
+    title = `You've reached this month's ${action} cap`;
+    body = `You've used your monthly allowance for this Coach feature. Other Coach features and the rest of the app still work normally.`;
+    resetLine = "Resets on the 1st of next month.";
+  } else {
+    title = "Coach is temporarily unavailable";
+    body = "You've hit a usage limit. The rest of Stryxs is still working.";
+    resetLine = "Try again later.";
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'usageLimitModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 420px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);">
+      <div style="font-size: 20px; font-weight: 700; margin-bottom: 10px;">${title}</div>
+      <div style="font-size: 14px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px;">${body}</div>
+      <div style="font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 18px;">${resetLine}</div>
+      <button onclick="document.getElementById('usageLimitModal')?.remove()" style="width: 100%; padding: 12px; background: var(--accent); color: #001b14; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;">Got it</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
 async function completeIntake() {
@@ -11204,6 +11364,7 @@ async function completeIntake() {
     clearTimeout(masterTimeout);
     window.removeEventListener('beforeunload', beforeUnloadHandler);
     console.error('[Stryxs] athlete_intake upsert failed:', error);
+    trackEvent('intake_save_failed', { error_code: error.code });
 
     // Detect missing-column errors specifically — likely means migration wasn't run
     const errMsg = error.message || JSON.stringify(error);
@@ -11233,6 +11394,13 @@ async function completeIntake() {
     toast('Save failed: ' + errMsg.substring(0, 100));
     return;
   }
+
+  trackEvent('intake_completed', {
+    goal_event: payload.goal_event,
+    has_race_date: !!payload.race_date,
+    plan_path: payload.plan_path,
+    has_lthr: !!(payload.run_lthr || payload.bike_lthr),
+  });
 
   // Also update state.profile with LTHR — if 'retest' was chosen, clear them so
   // the assessment-week branch fires correctly. Otherwise sync the new values.
@@ -11423,6 +11591,7 @@ async function completeIntake() {
 
     if (masterTimeoutFired) return;
     clearTimeout(masterTimeout);
+    trackEvent('plan_generated', { goal_event: payload.goal_event });
     toast('Plan ready!');
     renderCoach();
   } catch (err) {
@@ -11430,6 +11599,7 @@ async function completeIntake() {
     if (masterTimeoutFired) return; // Master timeout already showed an error
     console.error('Plan generation failed:', err);
     console.error('Full error:', err.stack || err);
+    trackEvent('plan_generation_failed', { error: String(err.message || '').slice(0, 100) });
     if (el) {
       el.innerHTML = `
         <div class="coach-hero">
@@ -16293,6 +16463,20 @@ function openWorkoutPanel(dateStr) {
         </div>
 
         <button class="btn" style="width: 100%; margin-top: 16px;" onclick="askCoachAboutWorkout('${w.id}')">💬 Ask Coach about this workout</button>
+        ${w.completed ? '' : w.skipped ? `
+          <div style="margin-top: 12px; padding: 10px 12px; background: rgba(255, 196, 0, 0.08); border: 1px solid rgba(255, 196, 0, 0.25); border-radius: 10px; font-size: 12px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div>
+              <div style="font-weight: 600; color: var(--text);">Marked as skipped</div>
+              ${w.skip_reason ? `<div style="margin-top: 2px; font-size: 11px;">Reason: ${escapeHtml(w.skip_reason)}</div>` : ''}
+            </div>
+            <button onclick="undoSkipWorkout('${w.id}')" style="background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 5px 10px; border-radius: 8px; cursor: pointer; flex-shrink: 0;">Undo</button>
+          </div>
+        ` : `
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button onclick="openSkipWorkoutMenu('${w.id}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">⏭️ Skip / didn't do</button>
+            <button onclick="openSwapWorkoutMenu('${w.id}', '${dateStr}')" class="btn ghost" style="flex: 1; font-size: 12px; padding: 9px; border-color: var(--border);">📅 Move</button>
+          </div>
+        `}
       </div>
     `).join('')}
   `;
@@ -16304,6 +16488,212 @@ function openWorkoutPanel(dateStr) {
 function closeWorkoutPanel() {
   document.getElementById('workoutPanel').classList.remove('open');
   document.getElementById('workoutPanelBackdrop').classList.remove('open');
+}
+
+// ═══ SKIP / SWAP WORKOUT FLOW ════════════════════════════════════
+// Marks a planned_workout as skipped (with optional reason) or moves
+// it to a different date. Coach reads these via the chat context so
+// it knows what actually happened vs what was planned.
+
+function openSkipWorkoutMenu(workoutId) {
+  const reasons = [
+    { emoji: '🤒', label: 'Sick', value: 'sick' },
+    { emoji: '🤕', label: 'Injured / sore', value: 'injured' },
+    { emoji: '😴', label: 'Too tired / recovery', value: 'tired' },
+    { emoji: '📅', label: 'Schedule conflict', value: 'conflict' },
+    { emoji: '🌧️', label: 'Weather', value: 'weather' },
+    { emoji: '✏️', label: 'Other reason', value: 'other' },
+  ];
+  const modal = document.createElement('div');
+  modal.id = 'skipWorkoutModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-end;justify-content:center;padding:0;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 22px 18px calc(22px + var(--safe-bottom)); max-width: 520px; width: 100%; max-height: 80vh; overflow-y: auto;">
+      <div style="font-size: 17px; font-weight: 700; margin-bottom: 4px;">Why didn't you do this one?</div>
+      <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 16px;">Coach uses this to adapt your plan. No judgment.</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${reasons.map(r => `
+          <button onclick="skipWorkout('${workoutId}', '${r.value}')" style="display: flex; align-items: center; gap: 12px; padding: 14px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); cursor: pointer; font-size: 14px; text-align: left;">
+            <span style="font-size: 22px;">${r.emoji}</span>
+            <span style="flex: 1;">${r.label}</span>
+          </button>
+        `).join('')}
+      </div>
+      <button onclick="document.getElementById('skipWorkoutModal')?.remove()" style="width: 100%; margin-top: 14px; padding: 12px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+async function skipWorkout(workoutId, reason) {
+  document.getElementById('skipWorkoutModal')?.remove();
+  if (!state.user) return;
+  try {
+    const { error } = await sb.from('planned_workouts')
+      .update({
+        skipped: true,
+        skip_reason: reason,
+        skipped_at: new Date().toISOString(),
+      })
+      .eq('id', workoutId)
+      .eq('user_id', state.user.id);
+    if (error) throw error;
+    trackEvent('workout_skipped', { reason });
+    toast('Marked as skipped — Coach knows');
+    closeWorkoutPanel();
+    // If user said sick/injured, offer to escalate to a multi-day adjustment
+    if (reason === 'sick' || reason === 'injured') {
+      setTimeout(() => offerMultiDaySkip(reason), 300);
+    } else {
+      // Refresh the relevant page
+      if (typeof renderPlan === 'function') renderPlan();
+      if (typeof renderDashTodayCard === 'function') {
+        const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+        renderDashTodayCard(intake);
+      }
+    }
+  } catch (err) {
+    console.error('[Stryxs] skipWorkout failed:', err);
+    if (err.code === '42703' || err.code === 'PGRST204' || /skipped/.test(err.message || '')) {
+      toast('Database not updated yet — run latest migration', 6000);
+    } else {
+      toast('Could not save — try again');
+    }
+  }
+}
+
+async function undoSkipWorkout(workoutId) {
+  if (!state.user) return;
+  try {
+    const { error } = await sb.from('planned_workouts')
+      .update({ skipped: false, skip_reason: null, skipped_at: null })
+      .eq('id', workoutId)
+      .eq('user_id', state.user.id);
+    if (error) throw error;
+    trackEvent('workout_skip_undone');
+    toast('Skip undone');
+    closeWorkoutPanel();
+    if (typeof renderPlan === 'function') renderPlan();
+  } catch (err) {
+    console.error('[Stryxs] undoSkipWorkout failed:', err);
+    toast('Could not undo — try again');
+  }
+}
+
+// "I was sick / injured for several days" — quick batch action that asks
+// how many days affected and marks ALL planned workouts in that window
+// as skipped with the same reason.
+function offerMultiDaySkip(reason) {
+  const noun = reason === 'sick' ? 'sick' : 'injured';
+  const modal = document.createElement('div');
+  modal.id = 'multiDaySkipModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; max-width: 420px; width: 100%;">
+      <div style="font-size: 17px; font-weight: 700; margin-bottom: 6px;">Were you ${noun} other days too?</div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 16px;">Mark recent + upcoming days too so Coach can adapt your week. We'll only mark workouts you haven't already completed.</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button onclick="markRangeSkipped('${reason}', 3)" class="btn ghost" style="padding: 12px; font-size: 14px;">Past 3 days</button>
+        <button onclick="markRangeSkipped('${reason}', 7)" class="btn ghost" style="padding: 12px; font-size: 14px;">Past 7 days</button>
+        <button onclick="markRangeSkipped('${reason}', -3)" class="btn ghost" style="padding: 12px; font-size: 14px;">Next 3 days too</button>
+        <button onclick="markRangeSkipped('${reason}', -7)" class="btn ghost" style="padding: 12px; font-size: 14px;">Next 7 days too</button>
+      </div>
+      <button onclick="document.getElementById('multiDaySkipModal')?.remove()" style="width: 100%; margin-top: 14px; padding: 11px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 13px; cursor: pointer;">No, just this one</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// Mark a range of days as skipped. days > 0 = past N days, days < 0 = next |N| days
+async function markRangeSkipped(reason, days) {
+  document.getElementById('multiDaySkipModal')?.remove();
+  if (!state.user) return;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let startDate, endDate;
+  if (days > 0) {
+    // Past N days through today
+    startDate = new Date(today); startDate.setDate(today.getDate() - days);
+    endDate = new Date(today);
+  } else {
+    // Today through next |days| days
+    startDate = new Date(today);
+    endDate = new Date(today); endDate.setDate(today.getDate() + Math.abs(days));
+  }
+  const startStr = startDate.toISOString().split('T')[0];
+  const endStr = endDate.toISOString().split('T')[0];
+  try {
+    const { data, error } = await sb.from('planned_workouts')
+      .update({ skipped: true, skip_reason: reason, skipped_at: new Date().toISOString() })
+      .eq('user_id', state.user.id)
+      .eq('completed', false)
+      .eq('skipped', false)
+      .gte('scheduled_date', startStr)
+      .lte('scheduled_date', endStr)
+      .select('id');
+    if (error) throw error;
+    const count = data?.length || 0;
+    trackEvent('workout_range_skipped', { reason, days, count });
+    toast(`${count} workout${count === 1 ? '' : 's'} marked skipped`);
+    if (typeof renderPlan === 'function') renderPlan();
+    if (typeof renderDashTodayCard === 'function') {
+      const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+      renderDashTodayCard(intake);
+    }
+  } catch (err) {
+    console.error('[Stryxs] markRangeSkipped failed:', err);
+    toast('Could not save — try again');
+  }
+}
+
+// "Move workout to a different day" — opens a date picker.
+function openSwapWorkoutMenu(workoutId, currentDate) {
+  const modal = document.createElement('div');
+  modal.id = 'swapWorkoutModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  // Min = today, max = current date + 14 days (don't let users move stuff months out)
+  const today = new Date().toISOString().split('T')[0];
+  const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + 14);
+  const maxDateStr = maxDate.toISOString().split('T')[0];
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; max-width: 380px; width: 100%;">
+      <div style="font-size: 17px; font-weight: 700; margin-bottom: 6px;">Move workout</div>
+      <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 16px;">Currently scheduled for ${new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.</div>
+      <label style="font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 6px; font-weight: 600;">New date</label>
+      <input type="date" id="swapDateInput" min="${today}" max="${maxDateStr}" value="${currentDate}" style="width: 100%; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px; margin-bottom: 14px;" />
+      <div style="display: flex; gap: 8px;">
+        <button onclick="document.getElementById('swapWorkoutModal')?.remove()" style="flex: 1; padding: 12px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
+        <button onclick="swapWorkoutDate('${workoutId}')" class="btn" style="flex: 1; padding: 12px; font-size: 14px;">Move</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function swapWorkoutDate(workoutId) {
+  const input = document.getElementById('swapDateInput');
+  const newDate = input?.value;
+  if (!newDate) { toast('Pick a date'); return; }
+  document.getElementById('swapWorkoutModal')?.remove();
+  if (!state.user) return;
+  try {
+    const { error } = await sb.from('planned_workouts')
+      .update({ scheduled_date: newDate })
+      .eq('id', workoutId)
+      .eq('user_id', state.user.id);
+    if (error) throw error;
+    trackEvent('workout_moved', { new_date: newDate });
+    toast('Workout moved');
+    closeWorkoutPanel();
+    if (typeof renderPlan === 'function') renderPlan();
+    if (typeof renderDashTodayCard === 'function') {
+      const { data: intake } = await sb.from('athlete_intake').select('completed').eq('user_id', state.user.id).single();
+      renderDashTodayCard(intake);
+    }
+  } catch (err) {
+    console.error('[Stryxs] swapWorkoutDate failed:', err);
+    toast('Could not move — try again');
+  }
 }
 
 function askCoachAboutWorkout(workoutId) {
@@ -17869,6 +18259,7 @@ function renderUpgradePage() {
   const el = document.getElementById('upgradeContent');
   if (!el) return;
   const status = getUserSubscriptionStatus();
+  trackEvent('paywall_viewed', { current_status: status });
 
   // Already-Pro users see a different page — confirmation + manage subscription
   if (status === 'pro') {
@@ -18025,12 +18416,14 @@ async function initiateUpgrade() {
   }
 
   try {
+    trackEvent('checkout_initiated', { billing_period: billingPeriod });
     const result = await callStripe('create_checkout_session', { billing_period: billingPeriod });
     if (!result?.url) throw new Error('No checkout URL returned');
     // Redirect to Stripe Checkout
     window.location.href = result.url;
   } catch (err) {
     console.error('[Stryxs] Checkout failed:', err);
+    trackEvent('checkout_failed', { error: String(err.message || '').slice(0, 100) });
     toast('Could not start checkout: ' + (err.message || 'unknown error'), 6000);
     if (btn) {
       btn.disabled = false;
