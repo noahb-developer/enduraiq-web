@@ -17913,17 +17913,25 @@ async function renderNotifSettings() {
   let savedReminderTime = '07:00';
   let savedReminderEnabled = false;
   try {
-    if (window.state?.user) {
-      const { data } = await sb.from('profiles')
+    // state is the module-level `let state = {...}` declaration — accessible
+    // directly via lexical scope. (We previously used window.state.user, but
+    // `let` declarations don't live on the window object, so that was always
+    // undefined — meaning this read never fired and the button was stuck.)
+    if (state?.user) {
+      const { data, error } = await sb.from('profiles')
         .select('notif_workout_reminder, notif_workout_reminder_time')
-        .eq('id', window.state.user.id)
+        .eq('id', state.user.id)
         .maybeSingle();
-      if (data) {
+      if (error) {
+        console.error('[Stryxs] profile read failed:', error);
+      } else if (data) {
         savedReminderEnabled = !!data.notif_workout_reminder;
         savedReminderTime = data.notif_workout_reminder_time || '07:00';
       }
     }
-  } catch (_) {}
+  } catch (e) {
+    console.error('[Stryxs] profile read exception:', e);
+  }
 
   // Is THIS device currently subscribed to push?
   let thisDeviceSubscribed = false;
