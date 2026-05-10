@@ -11193,6 +11193,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return null;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    // Wait for the SW to actually become active. Without this, pushManager
+    // calls can fail on the very first visit because the SW is still in
+    // "installing" or "waiting" state. ServiceWorkerContainer.ready resolves
+    // once the registration has an active worker.
+    await navigator.serviceWorker.ready;
     _swRegistration = reg;
     return reg;
   } catch (e) {
@@ -11261,61 +11266,97 @@ async function askForNotificationPermission() {
 }
 
 // Subscribe with the push manager and save the subscription server-side.
+// Every failure path now surfaces a toast so the user can see what's wrong
+// without needing to open the browser console.
 async function subscribePushNotifications() {
   if (!VAPID_PUBLIC_KEY) {
-    console.warn('[Stryxs] VAPID_PUBLIC_KEY not configured — push subscribe skipped');
+    console.warn('[Stryxs] VAPID_PUBLIC_KEY not configured');
+    toast('Push key not configured — contact support', 5000);
+    return null;
+  }
+  if (!('serviceWorker' in navigator)) {
+    toast('This browser does not support push notifications', 5000);
     return null;
   }
   if (!_swRegistration) {
     _swRegistration = await registerServiceWorker();
   }
-  if (!_swRegistration) return null;
+  if (!_swRegistration) {
+    toast('Service worker failed to register — try reloading the page', 6000);
+    return null;
+  }
+  if (!state.user) {
+    toast('Sign in first to enable notifications', 4000);
+    return null;
+  }
 
+  let sub = null;
+  // 1) Get or create the browser-side subscription
   try {
-    // Re-use existing subscription if there is one
-    let sub = await _swRegistration.pushManager.getSubscription();
+    sub = await _swRegistration.pushManager.getSubscription();
     if (!sub) {
       sub = await _swRegistration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
-
-    // Pull the keys out of the subscription for storage
-    const json = sub.toJSON();
-    const endpoint = json.endpoint;
-    const p256dh = json.keys?.p256dh;
-    const auth = json.keys?.auth;
-    if (!endpoint || !p256dh || !auth) throw new Error('Subscription missing keys');
-
-    // Upsert into push_subscriptions (one row per user+endpoint)
-    if (state.user) {
-      const { error } = await sb.from('push_subscriptions').upsert({
-        user_id: state.user.id,
-        endpoint, p256dh, auth,
-        user_agent: (navigator.userAgent || '').slice(0, 200),
-        last_seen_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,endpoint' });
-      if (error) {
-        console.warn('[Stryxs] push_subscriptions upsert failed:', error.message);
-        trackEvent('notif_subscribe_failed', { error: error.message.slice(0, 100) });
-        return null;
-      }
-      // Also flip the user's reminder pref to true so the cron picks them up.
-      // Default reminder time is 7am their local timezone.
-      await sb.from('profiles').update({
-        notif_workout_reminder: true,
-        notif_timezone: getClientTimezone(),
-      }).eq('id', state.user.id);
-      trackEvent('notif_subscribed');
-      toast('You\'ll get a reminder before training each day');
-    }
-    return sub;
   } catch (e) {
-    console.warn('[Stryxs] subscribe failed:', e?.message);
-    trackEvent('notif_subscribe_failed', { error: String(e?.message || '').slice(0, 100) });
+    console.error('[Stryxs] pushManager.subscribe threw:', e);
+    trackEvent('notif_subscribe_failed', { error: String(e?.message || '').slice(0, 100), stage: 'pushManager' });
+    toast('Push subscribe failed: ' + (e?.message || 'unknown'), 6000);
     return null;
   }
+
+  // 2) Verify we have the keys
+  const json = sub.toJSON();
+  const endpoint = json.endpoint;
+  const p256dh = json.keys?.p256dh;
+  const auth = json.keys?.auth;
+  if (!endpoint || !p256dh || !auth) {
+    toast('Subscription missing keys — try again', 5000);
+    return null;
+  }
+
+  // 3) Save the subscription to Supabase
+  try {
+    const { error: subError } = await sb.from('push_subscriptions').upsert({
+      user_id: state.user.id,
+      endpoint, p256dh, auth,
+      user_agent: (navigator.userAgent || '').slice(0, 200),
+      last_seen_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,endpoint' });
+    if (subError) {
+      console.error('[Stryxs] push_subscriptions upsert failed:', subError);
+      trackEvent('notif_subscribe_failed', { error: subError.message.slice(0, 100), stage: 'sub_upsert' });
+      toast('Could not save subscription: ' + subError.message.substring(0, 60), 7000);
+      return null;
+    }
+  } catch (e) {
+    console.error('[Stryxs] push_subscriptions exception:', e);
+    toast('Database error saving subscription: ' + (e?.message || 'unknown').substring(0, 60), 7000);
+    return null;
+  }
+
+  // 4) Flip the user's reminder pref so the cron picks them up
+  try {
+    const { error: profileError } = await sb.from('profiles').update({
+      notif_workout_reminder: true,
+      notif_timezone: getClientTimezone(),
+    }).eq('id', state.user.id);
+    if (profileError) {
+      console.error('[Stryxs] profiles update failed:', profileError);
+      trackEvent('notif_subscribe_failed', { error: profileError.message.slice(0, 100), stage: 'profile_update' });
+      toast('Subscribed, but could not save preference: ' + profileError.message.substring(0, 50), 7000);
+      // Don't return null — subscription DID land, just the preference didn't
+    }
+  } catch (e) {
+    console.error('[Stryxs] profiles exception:', e);
+    toast('Saved subscription, but preference update threw: ' + (e?.message || 'unknown').substring(0, 50), 7000);
+  }
+
+  trackEvent('notif_subscribed');
+  toast('Reminders enabled');
+  return sub;
 }
 
 // Disable: unsubscribe + flip preference off
@@ -17913,7 +17954,7 @@ async function renderNotifSettings() {
   // this device for THIS device to actually buzz.
   const isReceivingHere = permState === 'granted' && thisDeviceSubscribed && savedReminderEnabled;
   const buttonLabel = isReceivingHere ? 'Turn off' : (savedReminderEnabled && !thisDeviceSubscribed ? 'Enable on this device' : 'Turn on');
-  const buttonAction = isReceivingHere ? 'disablePushNotifications().then(renderNotifSettings)' : 'askForNotificationPermission().then(renderNotifSettings)';
+  const buttonAction = isReceivingHere ? 'handleNotifToggle(this, false)' : 'handleNotifToggle(this, true)';
 
   // Status line — distinguishes "you've never opted in" from "opted in but
   // this device isn't subscribed" so the user understands what tapping
@@ -17944,8 +17985,167 @@ async function renderNotifSettings() {
           <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to all your devices.</div>
         </div>
       ` : ''}
+      <button onclick="runNotifDiagnostic()" style="margin-top: 10px; width: 100%; padding: 8px; background: transparent; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-mute); font-size: 11px; cursor: pointer;">Run diagnostic (if something seems broken)</button>
     </div>
   `;
+}
+
+// Toggle handler — shows loading state on button immediately, so even if the
+// underlying subscribe fails silently, the user sees something happened.
+async function handleNotifToggle(btn, turningOn) {
+  if (!btn) return;
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+  btn.textContent = turningOn ? 'Setting up…' : 'Turning off…';
+  try {
+    if (turningOn) {
+      await askForNotificationPermission();
+    } else {
+      await disablePushNotifications();
+    }
+  } catch (e) {
+    console.error('[Stryxs] toggle action threw:', e);
+    toast('Action failed: ' + (e?.message || 'unknown'), 6000);
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = originalLabel;
+    // Always re-render so the UI reflects current state (success or failure)
+    await renderNotifSettings();
+  }
+}
+
+// Diagnostic — checks every step of the push pipeline and shows the user
+// exactly what's working and what's broken. Helps when "Turn on" silently
+// fails and we don't have console access.
+async function runNotifDiagnostic() {
+  const checks = [];
+
+  // Check 1: Browser support
+  const swSupported = 'serviceWorker' in navigator;
+  const pushSupported = 'PushManager' in window;
+  const notifSupported = 'Notification' in window;
+  checks.push({
+    label: 'Browser supports push',
+    pass: swSupported && pushSupported && notifSupported,
+    detail: `serviceWorker: ${swSupported}, PushManager: ${pushSupported}, Notification: ${notifSupported}`,
+  });
+
+  // Check 2: iOS PWA install requirement
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isIOS) {
+    checks.push({
+      label: 'PWA installed (iOS)',
+      pass: !!isStandalone,
+      detail: isStandalone ? 'Running as installed PWA' : 'You\'re in Safari — must add to home screen to use push',
+    });
+  }
+
+  // Check 3: VAPID public key
+  checks.push({
+    label: 'VAPID public key configured',
+    pass: !!VAPID_PUBLIC_KEY,
+    detail: VAPID_PUBLIC_KEY ? `${VAPID_PUBLIC_KEY.substring(0, 20)}...` : 'EMPTY — push will not work',
+  });
+
+  // Check 4: Service worker registered
+  let swReg = null;
+  try {
+    swReg = await navigator.serviceWorker?.getRegistration();
+  } catch (_) {}
+  checks.push({
+    label: 'Service worker registered',
+    pass: !!swReg,
+    detail: swReg ? `scope: ${swReg.scope}, state: ${swReg.active?.state || 'unknown'}` : 'Not registered — check /sw.js exists',
+  });
+
+  // Check 5: Browser notification permission
+  const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'unknown';
+  checks.push({
+    label: 'Browser permission granted',
+    pass: perm === 'granted',
+    detail: `Notification.permission = ${perm}`,
+  });
+
+  // Check 6: Active push subscription
+  let sub = null;
+  try {
+    sub = await swReg?.pushManager.getSubscription();
+  } catch (_) {}
+  checks.push({
+    label: 'Active push subscription',
+    pass: !!sub,
+    detail: sub ? `endpoint: ${sub.endpoint.substring(0, 40)}...` : 'None — Turn on hasn\'t completed yet on this device',
+  });
+
+  // Check 7: User signed in
+  checks.push({
+    label: 'Signed in to Stryxs',
+    pass: !!state.user,
+    detail: state.user ? `user_id: ${state.user.id.substring(0, 8)}…` : 'Not signed in',
+  });
+
+  // Check 8: DB has profile preference set
+  let profilePref = null;
+  if (state.user) {
+    try {
+      const { data } = await sb.from('profiles')
+        .select('notif_workout_reminder, notif_workout_reminder_time, notif_timezone')
+        .eq('id', state.user.id)
+        .maybeSingle();
+      profilePref = data;
+    } catch (_) {}
+  }
+  checks.push({
+    label: 'Profile reminder preference saved',
+    pass: !!profilePref?.notif_workout_reminder,
+    detail: profilePref ? `reminder=${profilePref.notif_workout_reminder}, time=${profilePref.notif_workout_reminder_time}, tz=${profilePref.notif_timezone}` : 'No profile row returned',
+  });
+
+  // Check 9: DB has push subscription row
+  let dbSub = null;
+  if (state.user) {
+    try {
+      const { data } = await sb.from('push_subscriptions')
+        .select('endpoint, created_at')
+        .eq('user_id', state.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      dbSub = data;
+    } catch (_) {}
+  }
+  checks.push({
+    label: 'Subscription saved in database',
+    pass: !!dbSub,
+    detail: dbSub ? `created: ${dbSub.created_at}` : 'No row in push_subscriptions',
+  });
+
+  // Render modal with results
+  const modal = document.createElement('div');
+  modal.id = 'notifDiagnosticModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 20px; max-width: 460px; width: 100%; max-height: 85vh; overflow-y: auto;">
+      <div style="font-size: 18px; font-weight: 700; margin-bottom: 14px;">Notification diagnostic</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${checks.map(c => `
+          <div style="padding: 10px 12px; background: ${c.pass ? 'rgba(0, 229, 160, 0.06)' : 'rgba(239, 68, 68, 0.06)'}; border: 1px solid ${c.pass ? 'rgba(0, 229, 160, 0.25)' : 'rgba(239, 68, 68, 0.25)'}; border-radius: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: ${c.pass ? 'var(--accent)' : '#f87171'};">
+              <span>${c.pass ? '✓' : '✗'}</span>
+              <span>${c.label}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-mute); margin-top: 4px; word-break: break-all; line-height: 1.5;">${c.detail}</div>
+          </div>
+        `).join('')}
+      </div>
+      <button onclick="document.getElementById('notifDiagnosticModal')?.remove()" class="btn" style="width: 100%; margin-top: 14px;">Close</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
 // Standalone time-picker block shown when the user is opted in but the
