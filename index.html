@@ -4670,6 +4670,13 @@ body.on-auth .container {
 // ═══════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://jubbxlnrwzgixbqlhjdd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZjFD_3xIjywpxrU9Vp-ImQ_WiNidr2L';
+
+// Web Push public key (VAPID). Generate once with:
+//   npx web-push generate-vapid-keys
+// Paste the PUBLIC key here (the private one goes in Supabase env vars
+// as VAPID_PRIVATE_KEY for the send-reminders edge function).
+// Until set, the app simply won't ask for notification permission.
+const VAPID_PUBLIC_KEY = '';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let state = {
@@ -6604,6 +6611,50 @@ function confirmLogout() {
 
 function closeLogoutModal() {
   document.getElementById('logoutModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT MY DATA — GDPR / user trust
+// Calls the Coach edge function's export_my_data action which
+// pulls every row owned by the user across our tables, then
+// triggers a browser download of the JSON.
+// ═══════════════════════════════════════════════════════════
+async function exportMyData(btn) {
+  if (!state.user) return;
+  const original = btn?.innerHTML;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Preparing your export...';
+  }
+  trackEvent('data_export_started');
+  try {
+    const data = await callCoach('export_my_data', {}, { timeoutMs: 60000 });
+    if (!data) throw new Error('Empty export');
+
+    // Trigger download — pretty-printed JSON so a user inspecting it can read it
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const datestamp = new Date().toISOString().split('T')[0];
+    a.download = `stryxs-export-${datestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    trackEvent('data_export_completed');
+    toast('Export downloaded');
+  } catch (err) {
+    console.error('[Stryxs] Export failed:', err);
+    trackEvent('data_export_failed', { error: String(err.message || '').slice(0, 100) });
+    toast('Export failed — try again');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original || '📥 Download my data';
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -11122,6 +11173,184 @@ window.addEventListener('unhandledrejection', (e) => {
   } catch (_) {}
 });
 
+// ═══ PUSH NOTIFICATIONS ════════════════════════════════════════════
+// Web Push setup. Three-step flow:
+//   1) registerServiceWorker() — installs /sw.js on app load. Idempotent.
+//   2) askForNotificationPermission() — prompts the browser. Only call
+//      after the user has shown clear intent (e.g. clicked a "Get
+//      reminders" button), never on first load.
+//   3) subscribePushNotifications() — gets a subscription from the
+//      browser and persists it to Supabase. Called automatically after
+//      permission grant.
+//
+// iOS quirk: web push only works in installed PWAs (home-screen).
+// On regular Safari, Notification.requestPermission still resolves but
+// the subscription will fail. We detect this and tell the user.
+
+let _swRegistration = null;
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    _swRegistration = reg;
+    return reg;
+  } catch (e) {
+    console.warn('[Stryxs] SW register failed:', e?.message);
+    return null;
+  }
+}
+
+// Convert a base64url string (VAPID public key format) to Uint8Array
+// (which is what PushManager.subscribe expects).
+function _urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; ++i) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+// Check what state notifications are in. Returns one of:
+//   'unsupported' — browser doesn't support push at all
+//   'ios-not-installed' — iOS Safari requires PWA install
+//   'denied' — user previously denied
+//   'granted' — user has granted, may or may not be subscribed yet
+//   'default' — never asked
+function getPushPermissionState() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    return 'unsupported';
+  }
+  // iOS Safari: push only works in standalone (PWA-installed) mode
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isIOS && !isStandalone) return 'ios-not-installed';
+  return Notification.permission;
+}
+
+// Ask the user. Should only be called from a user gesture (button click).
+// Returns the resulting state.
+async function askForNotificationPermission() {
+  const state = getPushPermissionState();
+  if (state === 'unsupported' || state === 'ios-not-installed') {
+    if (state === 'ios-not-installed') {
+      toast('Add Stryxs to home screen first to enable notifications', 5000);
+    } else {
+      toast('Notifications not supported on this browser');
+    }
+    return state;
+  }
+  if (state === 'denied') {
+    toast('Notifications are blocked — enable them in your browser settings');
+    return 'denied';
+  }
+  if (state === 'granted') {
+    // Already granted — go straight to subscribing
+    await subscribePushNotifications();
+    return 'granted';
+  }
+  // 'default' — actually ask
+  trackEvent('notif_permission_requested');
+  const result = await Notification.requestPermission();
+  trackEvent('notif_permission_result', { result });
+  if (result === 'granted') {
+    await subscribePushNotifications();
+  }
+  return result;
+}
+
+// Subscribe with the push manager and save the subscription server-side.
+async function subscribePushNotifications() {
+  if (!VAPID_PUBLIC_KEY) {
+    console.warn('[Stryxs] VAPID_PUBLIC_KEY not configured — push subscribe skipped');
+    return null;
+  }
+  if (!_swRegistration) {
+    _swRegistration = await registerServiceWorker();
+  }
+  if (!_swRegistration) return null;
+
+  try {
+    // Re-use existing subscription if there is one
+    let sub = await _swRegistration.pushManager.getSubscription();
+    if (!sub) {
+      sub = await _swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+
+    // Pull the keys out of the subscription for storage
+    const json = sub.toJSON();
+    const endpoint = json.endpoint;
+    const p256dh = json.keys?.p256dh;
+    const auth = json.keys?.auth;
+    if (!endpoint || !p256dh || !auth) throw new Error('Subscription missing keys');
+
+    // Upsert into push_subscriptions (one row per user+endpoint)
+    if (state.user) {
+      const { error } = await sb.from('push_subscriptions').upsert({
+        user_id: state.user.id,
+        endpoint, p256dh, auth,
+        user_agent: (navigator.userAgent || '').slice(0, 200),
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,endpoint' });
+      if (error) {
+        console.warn('[Stryxs] push_subscriptions upsert failed:', error.message);
+        trackEvent('notif_subscribe_failed', { error: error.message.slice(0, 100) });
+        return null;
+      }
+      // Also flip the user's reminder pref to true so the cron picks them up.
+      // Default reminder time is 7am their local timezone.
+      await sb.from('profiles').update({
+        notif_workout_reminder: true,
+        notif_timezone: getClientTimezone(),
+      }).eq('id', state.user.id);
+      trackEvent('notif_subscribed');
+      toast('You\'ll get a reminder before training each day');
+    }
+    return sub;
+  } catch (e) {
+    console.warn('[Stryxs] subscribe failed:', e?.message);
+    trackEvent('notif_subscribe_failed', { error: String(e?.message || '').slice(0, 100) });
+    return null;
+  }
+}
+
+// Disable: unsubscribe + flip preference off
+async function disablePushNotifications() {
+  if (!state.user) return;
+  try {
+    if (_swRegistration) {
+      const sub = await _swRegistration.pushManager.getSubscription();
+      if (sub) {
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await sb.from('push_subscriptions').delete()
+          .eq('user_id', state.user.id)
+          .eq('endpoint', endpoint);
+      }
+    }
+    await sb.from('profiles').update({ notif_workout_reminder: false }).eq('id', state.user.id);
+    trackEvent('notif_unsubscribed');
+    toast('Notifications turned off');
+  } catch (e) {
+    console.warn('[Stryxs] disable failed:', e?.message);
+  }
+}
+
+// Register the service worker on load, regardless of permission state.
+// We don't ask for permission until the user explicitly enables.
+if ('serviceWorker' in navigator) {
+  // Defer until DOM is ready to not block initial render
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { registerServiceWorker(); });
+  } else {
+    registerServiceWorker();
+  }
+}
+
 async function callCoach(action, payload, options = {}) {
   const { data: session } = await sb.auth.getSession();
   const token = session?.session?.access_token;
@@ -12213,9 +12442,11 @@ async function sendChatMsg() {
   msgs.scrollTop = msgs.scrollHeight;
 
   try {
-    // Get context: profile, this week's plan, recent completed workouts
+    // Get context: profile, this week's plan, recent completed workouts.
+    // Send 30 workouts (not 5) — Coach now builds a 30-day training summary
+    // for trend reasoning in addition to the detailed last-7 view.
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
-    const recent = state.workouts.slice(-5).reverse();
+    const recent = state.workouts.slice(-30).reverse();
 
     // ═══ Pull imported plan profile (if user imported their plan) ═══
     // This lets Coach answer questions about the plan structure and accept corrections.
@@ -17197,6 +17428,53 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Notifications — push reminders -->
+    <div class="settings-section" id="section-notifications">
+      <div class="settings-section-header" onclick="toggleSettingsSection('notifications')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🔔</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Notifications</div>
+            <div class="settings-section-sub">Get a reminder before each training session</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div id="notifSettingsBody" style="padding: 4px;">
+            <!-- Dynamically rendered by renderNotifSettings() -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Privacy & Data — export, GDPR -->
+    <div class="settings-section" id="section-privacy">
+      <div class="settings-section-header" onclick="toggleSettingsSection('privacy')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🔒</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">Privacy & data</div>
+            <div class="settings-section-sub">Download a copy of everything Stryxs has about you</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="padding: 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px;">
+            <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 14px;">
+              Get a JSON file with all your data: profile, intake, workouts, plans, chat history, race plans, insights, and usage. Useful for backup or moving your data elsewhere.
+            </div>
+            <button class="btn ghost" onclick="exportMyData(this)" style="width: 100%;" id="exportDataBtn">
+              📥 Download my data
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Danger Zone — account deletion -->
     <div class="settings-section" id="section-danger">
       <div class="settings-section-header" onclick="toggleSettingsSection('danger')">
@@ -17556,6 +17834,93 @@ function toggleSettingsSection(id) {
   const section = document.getElementById('section-' + id);
   if (!section) return;
   section.classList.toggle('expanded');
+  // Render dynamic content for sections that compute state on open
+  if (id === 'notifications' && section.classList.contains('expanded')) {
+    renderNotifSettings();
+  }
+}
+
+// Render the Notifications settings panel based on current browser
+// permission state, subscription status, and saved preferences.
+async function renderNotifSettings() {
+  const body = document.getElementById('notifSettingsBody');
+  if (!body) return;
+
+  const state = getPushPermissionState();
+
+  // Read current saved preference
+  let savedReminderTime = '07:00';
+  let savedReminderEnabled = false;
+  try {
+    if (window.state?.user) {
+      const { data } = await sb.from('profiles')
+        .select('notif_workout_reminder, notif_workout_reminder_time')
+        .eq('id', window.state.user.id)
+        .maybeSingle();
+      if (data) {
+        savedReminderEnabled = !!data.notif_workout_reminder;
+        savedReminderTime = data.notif_workout_reminder_time || '07:00';
+      }
+    }
+  } catch (_) {}
+
+  if (state === 'unsupported') {
+    body.innerHTML = `
+      <div style="padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+        Push notifications aren't supported in this browser. Try Chrome, Edge, Firefox, or Safari (latest).
+      </div>`;
+    return;
+  }
+  if (state === 'ios-not-installed') {
+    body.innerHTML = `
+      <div style="padding: 14px 16px; background: rgba(255, 196, 0, 0.06); border: 1px solid rgba(255, 196, 0, 0.25); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+        <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Add Stryxs to your home screen first</div>
+        On iPhone/iPad, push notifications require the app to be installed (tap the Share icon in Safari → Add to Home Screen). Once installed, open Stryxs from your home screen and come back here.
+      </div>`;
+    return;
+  }
+  if (state === 'denied') {
+    body.innerHTML = `
+      <div style="padding: 14px 16px; background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;">
+        <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Notifications are blocked</div>
+        You denied notifications previously. To enable them, open your browser's site settings and allow notifications for stryxs.com, then come back here.
+      </div>`;
+    return;
+  }
+
+  // Granted or default — render the toggle
+  const isOn = state === 'granted' && savedReminderEnabled;
+  body.innerHTML = `
+    <div style="padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px;">
+        <div style="flex: 1;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 2px;">Workout reminders</div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5;">A gentle nudge each morning if there's training scheduled.</div>
+        </div>
+        <button id="notifMainToggle" onclick="${isOn ? 'disablePushNotifications().then(renderNotifSettings)' : 'askForNotificationPermission().then(renderNotifSettings)'}" class="btn ${isOn ? 'ghost' : ''}" style="font-size: 13px; padding: 8px 16px; flex-shrink: 0; ${isOn ? 'color: var(--text-dim);' : ''}">${isOn ? 'Turn off' : 'Turn on'}</button>
+      </div>
+      ${isOn ? `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
+            <span style="color: var(--text-dim);">Send reminder at</span>
+            <input type="time" id="notifTimeInput" value="${savedReminderTime}" onchange="saveReminderTime(this.value)" style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 13px;" />
+          </label>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+async function saveReminderTime(time) {
+  if (!state.user || !time) return;
+  try {
+    await sb.from('profiles').update({ notif_workout_reminder_time: time }).eq('id', state.user.id);
+    trackEvent('notif_time_changed', { time });
+    toast('Reminder time saved');
+  } catch (e) {
+    console.warn('[Stryxs] saveReminderTime failed:', e?.message);
+    toast('Could not save — try again');
+  }
 }
 
 // Equipment selection in Settings — store in a module-level set used at save time
