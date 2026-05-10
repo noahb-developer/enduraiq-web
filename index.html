@@ -353,28 +353,6 @@ body.on-landing #landingNav { display: none !important; }
 }
 .nav-menu-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
-/* Tour step 2 menu visibility fix.
-   When the tour highlights the menu panel, the panel's own backdrop-filter
-   combined with the tour overlay underneath causes browsers to fail at
-   compositing — the menu items render as blurred/empty even though they're
-   present in the DOM. Disabling the panel's backdrop-filter via a body class
-   (instead of inline styles on the panel) avoids the iOS Safari "stale render"
-   bug that comes with toggling inline backdrop-filter on/off. The class is
-   removed when the tour leaves step 2.
-
-   We ALSO force the panel background to fully opaque (vs the default 96%)
-   because the 4% transparency would otherwise let the dim overlay show
-   through, making the panel look "see-through" during the tour. */
-body.tour-step-menu-active .nav-menu-panel {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: rgb(18, 24, 42) !important;
-}
-/* Also bump menu items to full opacity in case anything dimmed them */
-body.tour-step-menu-active .nav-menu-item {
-  opacity: 1 !important;
-}
-
 .nav-menu-items {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -5898,10 +5876,12 @@ async function showSpotlightStep(idx) {
     const inView = rect.top >= 0 && rect.bottom <= window.innerHeight;
     if (step.scrollBlock === 'start') {
       // Compute absolute Y of target's top, then scroll there minus a fixed
-      // offset (80px = sticky nav height + breathing room). This guarantees
-      // the target's TOP is visible and accessible, not the bottom.
+      // offset. The offset is configurable per-step (step.scrollOffset) to
+      // accommodate cases where a tooltip will sit above the target. Default
+      // 80px = sticky nav height + breathing room.
+      const offset = typeof step.scrollOffset === 'number' ? step.scrollOffset : 80;
       const absoluteTop = rect.top + window.scrollY;
-      window.scrollTo({ top: Math.max(0, absoluteTop - 80), behavior: 'instant' });
+      window.scrollTo({ top: Math.max(0, absoluteTop - offset), behavior: 'instant' });
       await new Promise(r => setTimeout(r, 100));
     } else if (!inView) {
       const block = step.scrollBlock || 'center';
@@ -6113,22 +6093,21 @@ function startSpotlightTour() {
       desc: 'Dashboard for the overview. Coach builds your plan. Plan shows your week. Race Plan handles race-day strategy. Analyze reads your workouts. History and Trends show progress over time. Tap any tab to peek — the tour will pause.',
       nextLabel: 'Next →',
       minimizeOnTargetClick: true,
-      // The menu panel is the ONE place where elevation causes problems —
-      // toggling z-index/backdrop-filter on the panel and restoring it leaves
-      // iOS Safari in a stale render state where the menu opens "empty" on
-      // subsequent taps. lowZ avoids touching the panel's styles entirely.
-      lowZ: true,
+      // No overlay at all. Previous attempts used dim overlays (with various
+      // z-indices and body-class tricks) that all hit browser compositing
+      // bugs when combined with the menu panel's backdrop-filter — symptoms
+      // ranged from "see-through items" to "can see but can't click".
+      //
+      // The simplest reliable approach: skip the overlay entirely. The cutout
+      // outlines the panel, the tooltip explains it, and the menu items are
+      // fully clickable because there's no full-screen layer to interfere.
+      // The page behind the menu is still partially obscured (the menu's own
+      // backdrop-filter blurs it), which gives sufficient visual focus.
+      noOverlay: true,
       // Let auto-placement pick the tooltip position based on target.
       // On PC: panel is in upper-left → tooltip goes below or right.
       // On mobile: panel is bottom sheet → tooltip auto-goes above panel.
       beforeShow: () => {
-        // Add body class that disables the menu panel's backdrop-filter
-        // for the duration of step 2. Without this, the panel renders as
-        // "blurred-empty" because the panel's backdrop-filter combined with
-        // the spotlight overlay below it confuses the browser's compositor.
-        // Removed when stepping to step 3 (in step 3's beforeShow) and on
-        // tour end / minimize.
-        document.body.classList.add('tour-step-menu-active');
         const panel = document.getElementById('navMenuPanel');
         if (panel && !panel.classList.contains('open')) {
           if (typeof toggleNavMenu === 'function') toggleNavMenu();
@@ -6146,10 +6125,6 @@ function startSpotlightTour() {
       // Step 3 uses elevation (default). Avatar is small, no panel-repaint
       // issue like step 2 — elevation is fine here.
       beforeShow: () => {
-        // Remove the step 2 body class so the menu panel's backdrop-filter
-        // returns to normal (won't be visible right now since we close the
-        // menu, but ensures it works correctly if user reopens it later)
-        document.body.classList.remove('tour-step-menu-active');
         // Close the menu so it doesn't overlap with the avatar tooltip
         if (typeof closeNavMenu === 'function') closeNavMenu();
       },
@@ -6166,6 +6141,11 @@ function startSpotlightTour() {
       noOverlay: true,
       allowScroll: true,
       scrollBlock: 'start',
+      // Big scroll offset so the card top lands BELOW the tooltip (tooltip is
+      // pinned at the top of the viewport on mobile because there's not enough
+      // room above the card). Without this offset, the tooltip overlaps the
+      // card's "Tap each step in order" header.
+      scrollOffset: 220,
       // Compact tooltip — short text + smaller padding/font so it doesn't
       // cover the top of the activation card on mobile (user reported the
       // standard-sized tooltip was hiding the card's header).
