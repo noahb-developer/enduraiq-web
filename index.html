@@ -6134,7 +6134,7 @@ function startSpotlightTour() {
     {
       target: '#activationChecklistCard',
       title: 'Your getting-started list',
-      desc: 'Six things to do first. Each step unlocks once the previous is done.',
+      desc: 'Six things to do first, all on your dashboard. Each step unlocks once the previous is done.',
       nextLabel: 'Next →',
       // No overlay at all — let user see the full dashboard. The cutout draws
       // attention to the checklist card. User can scroll freely if needed.
@@ -9448,6 +9448,8 @@ async function regenerateInsights() {
       intake,
       allWorkouts: rawWorkouts || [],
       userDismissalHistory,
+      clientToday: getClientToday(),
+      clientTimezone: getClientTimezone(),
     }, { timeoutMs: 110000 });
 
     // Mark old TREND insights as 'stale' — but leave anomaly insights alone.
@@ -10998,6 +11000,30 @@ async function intakeNext() {
 }
 
 // Helper that calls our Coach edge function
+// Return today's date in the USER'S local timezone as YYYY-MM-DD. The Coach
+// edge function runs in UTC, which can be hours off from a Florida user's
+// local day — without this, late-night chats would see "today" rolled to
+// tomorrow. We compute it client-side and pass it in payloads where date
+// matters (chat, analyze_patterns).
+function getClientToday() {
+  const d = new Date();
+  // Use local components, NOT toISOString() which is UTC
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Return the user's IANA timezone (e.g. "America/New_York"). Falls back to
+// "UTC" if the browser doesn't expose Intl.DateTimeFormat.
+function getClientTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch (_) {
+    return 'UTC';
+  }
+}
+
 async function callCoach(action, payload, options = {}) {
   const { data: session } = await sb.auth.getSession();
   const token = session?.session?.access_token;
@@ -12079,6 +12105,8 @@ async function sendChatMsg() {
       plannedWorkouts: plannedWorkouts || [],
       profile: state.profile,
       activeInsights: activeInsightsRaw || [],
+      clientToday: getClientToday(),
+      clientTimezone: getClientTimezone(),
     });
 
     // Remove thinking indicator
@@ -17551,7 +17579,7 @@ async function sendCoachReactiveMessage(changes) {
 
 In 2-3 sentences, explain SPECIFICALLY how the change I made affects my upcoming training (don't reference data I haven't given you, don't make up numbers). Then ask if I want to regenerate my plan. Speak in your methodology's voice.`,
       }];
-      coachResponse = await callCoach('chat', { messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile });
+      coachResponse = await callCoach('chat', { messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile, clientToday: getClientToday(), clientTimezone: getClientTimezone() });
     } catch (err) {
       console.error('Coach chat for reactive msg failed:', err);
       coachResponse = introLines.join('\n');
