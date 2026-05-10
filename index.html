@@ -11339,15 +11339,28 @@ async function subscribePushNotifications() {
 
   // 4) Flip the user's reminder pref so the cron picks them up
   try {
-    const { error: profileError } = await sb.from('profiles').update({
+    // .select() makes supabase return the updated rows so we can verify the
+    // UPDATE actually matched something. Without this, the call returns
+    // error:null with no rows when RLS or the WHERE clause blocks it — we'd
+    // think it succeeded when it didn't.
+    const { data: updated, error: profileError } = await sb.from('profiles').update({
       notif_workout_reminder: true,
       notif_timezone: getClientTimezone(),
-    }).eq('id', state.user.id);
+    }).eq('id', state.user.id).select();
     if (profileError) {
       console.error('[Stryxs] profiles update failed:', profileError);
       trackEvent('notif_subscribe_failed', { error: profileError.message.slice(0, 100), stage: 'profile_update' });
-      toast('Subscribed, but could not save preference: ' + profileError.message.substring(0, 50), 7000);
-      // Don't return null — subscription DID land, just the preference didn't
+      toast('Subscribed, but preference save failed: ' + profileError.message.substring(0, 50), 7000);
+    } else if (!updated || updated.length === 0) {
+      // No rows came back → RLS silently blocked or no profile row exists.
+      // This is the case we were missing — surfaces with a specific message
+      // so we can debug.
+      console.error('[Stryxs] profiles update returned 0 rows for user', state.user.id);
+      trackEvent('notif_subscribe_failed', { error: '0 rows updated', stage: 'profile_update_norows' });
+      toast('Subscribed, but profile not found — try signing out and back in', 8000);
+    } else {
+      // Successful write — log it so we can see in api_usage / events
+      console.log('[Stryxs] profiles updated:', updated[0]);
     }
   } catch (e) {
     console.error('[Stryxs] profiles exception:', e);
