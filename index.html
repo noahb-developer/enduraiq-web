@@ -6751,6 +6751,43 @@ function closeLogoutModal() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// FEASIBILITY WARNINGS MODAL — Coach has flagged this setup as
+// having one or more real issues (race too soon, days too few,
+// goal too ambitious, etc.). We show them as a non-blocking
+// list so the athlete sees the truth before they look at the
+// plan as a guarantee.
+// ═══════════════════════════════════════════════════════════
+function showFeasibilityWarningsModal(warnings) {
+  if (!warnings || warnings.length === 0) return;
+  if (document.getElementById('feasibilityWarningsModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'feasibilityWarningsModal';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 16px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid rgba(255, 196, 0, 0.35); border-radius: 14px; padding: 22px 20px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+        <div style="font-size: 22px;">⚠️</div>
+        <div style="font-size: 17px; font-weight: 700;">A few honest things to know</div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 14px;">Your plan was built, but Coach flagged these issues with your setup. Read them before you commit.</div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        ${warnings.map(w => `
+          <div style="padding: 12px 14px; background: rgba(255, 196, 0, 0.06); border: 1px solid rgba(255, 196, 0, 0.2); border-radius: 10px; font-size: 13px; color: var(--text); line-height: 1.55;">
+            ${escapeHtml(w)}
+          </div>
+        `).join('')}
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 18px;">
+        <button onclick="document.getElementById('feasibilityWarningsModal')?.remove(); navigate('settings');" style="flex: 1; padding: 12px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; cursor: pointer;">Adjust in Settings</button>
+        <button onclick="document.getElementById('feasibilityWarningsModal')?.remove();" class="btn" style="flex: 1; padding: 12px; font-size: 14px;">I understand</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  trackEvent('feasibility_warnings_shown', { count: warnings.length });
+}
+
+// ═══════════════════════════════════════════════════════════
 // EXPORT MY DATA — GDPR / user trust
 // Calls the Coach edge function's export_my_data action which
 // pulls every row owned by the user across our tables, then
@@ -11890,9 +11927,24 @@ async function completeIntake() {
 
     updateProgress('Designing your periodization arc…');
     let skeleton = null;
+    let feasibilityWarnings = null;
     try {
-      skeleton = await callCoach('generate_skeleton', { intake: payload }, { timeoutMs: 30000 });
-      console.log('[Stryxs] Skeleton received:', skeleton?.length, 'weeks');
+      const skelResp = await callCoach('generate_skeleton', { intake: payload }, { timeoutMs: 30000 });
+      // The backend may return either a bare array (no warnings) OR a wrapper
+      // object { skeleton, _feasibility_warnings, ... } when there are issues.
+      // Handle both. We hold the warnings to show once the plan is built so
+      // the athlete sees them right next to "here's your plan".
+      if (Array.isArray(skelResp)) {
+        skeleton = skelResp;
+      } else if (skelResp && typeof skelResp === 'object' && Array.isArray(skelResp.skeleton)) {
+        skeleton = skelResp.skeleton;
+        feasibilityWarnings = skelResp._feasibility_warnings || null;
+        // Tag for later use — Coach has already validated this is at least minimally feasible
+        if (skelResp._feasibility_feasible === false) {
+          console.warn('[Stryxs] Backend flagged this setup as not feasible:', feasibilityWarnings);
+        }
+      }
+      console.log('[Stryxs] Skeleton received:', skeleton?.length, 'weeks', feasibilityWarnings ? `+${feasibilityWarnings.length} warning(s)` : '');
     } catch (skErr) {
       console.error('[Stryxs] Skeleton generation failed (non-blocking):', skErr);
     }
@@ -12014,6 +12066,11 @@ async function completeIntake() {
     trackEvent('plan_generated', { goal_event: payload.goal_event });
     toast('Plan ready!');
     renderCoach();
+    // If Coach flagged feasibility issues, show them now — non-blocking but
+    // the athlete needs to see them before they look at the plan as gospel.
+    if (feasibilityWarnings && feasibilityWarnings.length > 0) {
+      setTimeout(() => showFeasibilityWarningsModal(feasibilityWarnings), 600);
+    }
   } catch (err) {
     clearTimeout(masterTimeout);
     if (masterTimeoutFired) return; // Master timeout already showed an error
@@ -18710,6 +18767,66 @@ function detectImportantSettingsChanges(oldIntake, oldProfile, newValues) {
       field: 'weight_kg',
       label: 'Weight',
       detail: `changed from ${oldWeight}kg to ${newWeight}kg`,
+    });
+  }
+
+  // ─── Training days change (CRITICAL — affects which days workouts go on) ───
+  // available_days is stored as a sorted array. Compare order-insensitive.
+  const oldDays = (oldIntake.available_days || []).slice().sort();
+  const newDays = (newValues.available_days || []).slice().sort();
+  if (JSON.stringify(oldDays) !== JSON.stringify(newDays)) {
+    changes.push({
+      field: 'available_days',
+      label: 'Training days',
+      detail: `changed from ${oldDays.length ? oldDays.join(', ') : 'unset'} to ${newDays.length ? newDays.join(', ') : 'unset'}`,
+    });
+  }
+
+  // Long-workout day preference
+  if ((oldIntake.preferred_long_day || '') !== (newValues.preferred_long_day || '') && newValues.preferred_long_day) {
+    changes.push({
+      field: 'preferred_long_day',
+      label: 'Long workout day',
+      detail: `set to ${newValues.preferred_long_day}`,
+    });
+  }
+
+  // Goal-time change (target race time — affects intensity targets)
+  if ((oldIntake.goal_time || '') !== (newValues.goal_time || '')) {
+    changes.push({
+      field: 'goal_time',
+      label: 'Goal race time',
+      detail: newValues.goal_time ? `set to ${newValues.goal_time}` : 'removed',
+    });
+  }
+
+  // Personal bests — change in any benchmark means Coach should recompute zones/pacing
+  const pbFields = [
+    { key: 'pb_5k', label: '5K PB' },
+    { key: 'pb_10k', label: '10K PB' },
+    { key: 'pb_half', label: 'Half marathon PB' },
+    { key: 'pb_marathon', label: 'Marathon PB' },
+    { key: 'last_race', label: 'Last race result' },
+  ];
+  for (const { key, label } of pbFields) {
+    const oldV = (oldIntake[key] || '').trim();
+    const newV = (newValues[key] || '').trim();
+    if (oldV !== newV && newV) {
+      changes.push({
+        field: key,
+        label,
+        detail: oldV ? `changed from ${oldV} to ${newV}` : `set to ${newV}`,
+      });
+    }
+  }
+
+  // LTHR retest flag — when user explicitly opts to retest, Coach should
+  // know that LTHR values will be invalidated.
+  if ((oldIntake.lthr_choice || '') !== (newValues.lthr_choice || '') && newValues.lthr_choice === 'retest') {
+    changes.push({
+      field: 'lthr_choice',
+      label: 'LTHR retest requested',
+      detail: 'will be re-measured',
     });
   }
 
