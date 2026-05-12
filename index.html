@@ -4695,6 +4695,140 @@ function toast(msg, durationMs = 2800) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// BETA FEEDBACK WIDGET
+// Floating circle button bottom-right, opens a modal with a 1-5
+// emoji rating + freeform text. Writes to public.feedback.
+// Only renders for logged-in users. Hidden if user dismisses for
+// a week (per-user localStorage flag).
+// ═══════════════════════════════════════════════════════════
+
+function showFeedbackWidget() {
+  // Don't show twice
+  if (document.getElementById('feedbackFab')) return;
+  // Skip if user dismissed within last 7 days
+  try {
+    const uid = state.user?.id;
+    if (uid) {
+      const snoozed = localStorage.getItem(`stryxs_feedback_snoozed_${uid}`);
+      if (snoozed && Date.now() - parseInt(snoozed, 10) < 7 * 24 * 60 * 60 * 1000) return;
+    }
+  } catch (_) {}
+
+  const fab = document.createElement('button');
+  fab.id = 'feedbackFab';
+  fab.setAttribute('aria-label', 'Send feedback');
+  fab.title = 'Send feedback';
+  // Bottom-right, above the nav on mobile (sits clear of the bottom safe area)
+  fab.style.cssText = 'position: fixed; bottom: calc(20px + var(--safe-bottom, 0px)); right: 16px; z-index: 9000; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #001b14; border: none; font-size: 22px; cursor: pointer; box-shadow: 0 6px 24px rgba(0, 229, 160, 0.35), 0 2px 8px rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease;';
+  fab.innerHTML = '💬';
+  fab.onmouseenter = () => fab.style.transform = 'scale(1.08)';
+  fab.onmouseleave = () => fab.style.transform = 'scale(1)';
+  fab.onclick = openFeedbackModal;
+  document.body.appendChild(fab);
+}
+
+function hideFeedbackWidget() {
+  const fab = document.getElementById('feedbackFab');
+  if (fab) fab.remove();
+}
+
+let _feedbackRating = null;
+
+function openFeedbackModal() {
+  trackEvent('feedback_widget_opened');
+  _feedbackRating = null;
+  if (document.getElementById('feedbackModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'feedbackModal';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 16px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; max-width: 420px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);">
+      <div style="font-size: 18px; font-weight: 700; margin-bottom: 6px;">How's Stryxs going?</div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px;">Brutally honest is best. We read every reply.</div>
+
+      <div style="display: flex; justify-content: space-between; gap: 6px; margin-bottom: 16px;">
+        ${[1,2,3,4,5].map(n => {
+          const emoji = ['😞', '😕', '😐', '🙂', '😍'][n-1];
+          return `<button onclick="selectFeedbackRating(${n})" id="fbRate${n}" style="flex: 1; padding: 10px 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: 24px; cursor: pointer; transition: all 0.15s ease;">${emoji}</button>`;
+        }).join('')}
+      </div>
+
+      <textarea id="feedbackText" rows="4" placeholder="What's working? What's broken? What's missing?" style="width: 100%; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px; resize: vertical; min-height: 80px; box-sizing: border-box;"></textarea>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button onclick="snoozeFeedback()" style="padding: 11px 14px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 12px; cursor: pointer;">Don't show for a week</button>
+        <div style="flex: 1;"></div>
+        <button onclick="document.getElementById('feedbackModal')?.remove()" style="padding: 11px 16px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
+        <button onclick="submitFeedback()" class="btn" style="padding: 11px 18px; font-size: 14px;">Send</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function selectFeedbackRating(n) {
+  _feedbackRating = n;
+  // Visual: highlight chosen, dim others
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.getElementById(`fbRate${i}`);
+    if (!btn) continue;
+    if (i === n) {
+      btn.style.background = 'rgba(0, 229, 160, 0.15)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.transform = 'scale(1.08)';
+    } else {
+      btn.style.background = 'var(--bg-3)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.transform = 'scale(1)';
+    }
+  }
+}
+
+function snoozeFeedback() {
+  try {
+    const uid = state.user?.id;
+    if (uid) localStorage.setItem(`stryxs_feedback_snoozed_${uid}`, String(Date.now()));
+  } catch (_) {}
+  trackEvent('feedback_widget_snoozed');
+  document.getElementById('feedbackModal')?.remove();
+  hideFeedbackWidget();
+  toast("OK — we'll ask again next week");
+}
+
+async function submitFeedback() {
+  const text = document.getElementById('feedbackText')?.value?.trim() || '';
+  if (!text && !_feedbackRating) {
+    toast('Tell us something — even a rating helps');
+    return;
+  }
+  try {
+    const page = (typeof currentPage !== 'undefined' && currentPage) || (location.hash || 'dashboard').replace('#', '');
+    const { error } = await sb.from('feedback').insert({
+      user_id: state.user?.id || null,
+      rating: _feedbackRating,
+      message: text || null,
+      page,
+      user_agent: (navigator.userAgent || '').slice(0, 200),
+      app_version: 'v35',
+    });
+    if (error) throw error;
+    trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
+    document.getElementById('feedbackModal')?.remove();
+    toast('Thank you — we read everything');
+    // Snooze for a week so we don't ask again right after they submit
+    try {
+      const uid = state.user?.id;
+      if (uid) localStorage.setItem(`stryxs_feedback_snoozed_${uid}`, String(Date.now()));
+    } catch (_) {}
+    hideFeedbackWidget();
+  } catch (err) {
+    console.error('[Stryxs] feedback submit failed:', err);
+    toast('Could not send — try again');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // DATABASE
 // ═══════════════════════════════════════════════════════════
 async function loadProfile() {
@@ -5459,6 +5593,7 @@ async function doLogout() {
   state.profile = { runLthr: null, bikeLthr: null, subscriptionTier: 'free', trialEndsAt: null, proUntil: null };
   // Reset session flags so the next sign-in gets fresh first-load behavior
   window._stryxsCoachLoadedThisSession = false;
+  hideFeedbackWidget();
   showLanding(); navigate('landing');
 }
 
@@ -5514,6 +5649,8 @@ async function checkSession() {
 function showApp() {
   document.getElementById('mainNav').style.display = 'block';
   document.getElementById('landingNav').style.display = 'none';
+  // Show floating feedback widget for logged-in users
+  showFeedbackWidget();
   const initial = (state.user.name || 'A')[0].toUpperCase();
   const avatarEl = document.getElementById('navAvatar');
   if (avatarEl) {
@@ -6636,7 +6773,7 @@ async function exportMyData(btn) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const datestamp = new Date().toISOString().split('T')[0];
+    const datestamp = getClientToday();
     a.download = `stryxs-export-${datestamp}.json`;
     document.body.appendChild(a);
     a.click();
@@ -6873,7 +7010,7 @@ async function renderTodaysAnalyses() {
 
   // Workouts where the WORKOUT DATE is today (not the upload date — what matters
   // is when the activity actually happened). Fall back to created_at if no date field.
-  const today = new Date().toISOString().split('T')[0];
+  const today = getClientToday();
   const todays = (state.workouts || []).filter(w => {
     const workoutDate = (w.date || w.created_at || '').split('T')[0];
     return workoutDate === today;
@@ -8244,7 +8381,7 @@ async function renderDashGreeting() {
   greetingEl.textContent = `${timeOfDay}, ${name}`;
 
   // Build subtitle based on context: completed today's workout? have plan? rest day?
-  const today = new Date().toISOString().split('T')[0];
+  const today = getClientToday();
   const todaysCompleted = (state.workouts || []).find(w => {
     const d = (w.date || w.created_at || '').split('T')[0];
     return d === today;
@@ -8335,7 +8472,7 @@ async function renderDashTodayCard(intake) {
   const card = document.getElementById('todayCard');
   if (!card) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getClientToday();
 
   // Pull today's planned workout if it exists
   let todaysPlanned = null;
@@ -9704,7 +9841,7 @@ async function applyInsightToPlan(insightId, btnEl) {
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
     // Pull the next 7 days of planned workouts (don't modify past ones)
-    const today = new Date().toISOString().split('T')[0];
+    const today = getClientToday();
     const weekFromNow = new Date();
     weekFromNow.setDate(weekFromNow.getDate() + 7);
     const weekFromNowStr = weekFromNow.toISOString().split('T')[0];
@@ -13307,7 +13444,7 @@ async function applyInsight(insightId) {
     const action = insight.suggested_action;
 
     // Get next 7 days of planned workouts
-    const today = new Date().toISOString().split('T')[0];
+    const today = getClientToday();
     const sevenDaysOut = new Date();
     sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
     const { data: planned } = await sb.from('planned_workouts')
@@ -15656,7 +15793,7 @@ async function renderRacePlanner() {
     .order('race_date', { ascending: true });
 
   // Split into upcoming and past
-  const today = new Date().toISOString().split('T')[0];
+  const today = getClientToday();
   const upcoming = (existingPlans || []).filter(p => !p.race_date || p.race_date >= today);
   const past = (existingPlans || []).filter(p => p.race_date && p.race_date < today);
 
@@ -16937,7 +17074,7 @@ function openSwapWorkoutMenu(workoutId, currentDate) {
   modal.id = 'swapWorkoutModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
   // Min = today, max = current date + 14 days (don't let users move stuff months out)
-  const today = new Date().toISOString().split('T')[0];
+  const today = getClientToday();
   const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + 14);
   const maxDateStr = maxDate.toISOString().split('T')[0];
   modal.innerHTML = `
@@ -18006,7 +18143,6 @@ async function renderNotifSettings() {
           <div style="font-size: 11px; color: var(--text-mute); margin-top: 6px;">Applies to all your devices.</div>
         </div>
       ` : ''}
-      <button onclick="runNotifDiagnostic()" style="margin-top: 10px; width: 100%; padding: 8px; background: transparent; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-mute); font-size: 11px; cursor: pointer;">Run diagnostic (if something seems broken)</button>
     </div>
   `;
 }
