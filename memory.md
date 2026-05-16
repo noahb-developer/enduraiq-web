@@ -293,7 +293,26 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-**End of 2026-05-15 session (Round 3 — full audit + fix pass):** Ran 3 parallel scan agents, then fixed everything fixable in the frontend. Frontend bumped to v37 (924,069 bytes). Noah needs to commit + push `index.html`, `sw.js`, `site.webmanifest`, `vercel.json`, `README.md`, `privacy.html`, `terms.html`. After deploy, hit hard refresh.
+### 🔜 PENDING for next session (2026-05-16)
+
+**1. Verify Discord/iMessage/Twitter previews show the new hero card.**
+- We pushed the og:image fix (commit `dcaecf5`) at end-of-session 2026-05-15. Discord was still showing the old green-logo preview because Discord caches for days. Noah was tired and stopped before confirming.
+- **First thing tomorrow**: paste `https://stryxs.com/?v=3` (cache-buster URL) into Discord. Should show the dark hero card with green "train." accent.
+- If still wrong, check `view-source:https://stryxs.com/` for `og:image` content. Should be `https://stryxs.com/og-image.png` (NOT `web-app-manifest-512x512.png`).
+- For Facebook/LinkedIn re-scrape: https://developers.facebook.com/tools/debug/
+- For Twitter/X re-scrape: https://cards-dev.twitter.com/validator
+
+**2. Smoke test the deployed app** (Noah didn't get to this 2026-05-15):
+- Log in → dashboard loads with no console errors?
+- Open Coach chat → send test msg → reply works? (validates chat history newest-20 fix)
+- Settings → Manage subscription → opens Stripe portal? (validates Stripe edge function JWT auth)
+- Check the dashboard renders without `coach_insights` 404s in console (should be silent now)
+
+**3. Discord preview verified-good means we're truly shipped.** Move on to whatever's next (marketing, beta users, etc.).
+
+### What 2026-05-15 (Round 3) actually delivered
+
+Ran 3 parallel scan agents, then fixed everything fixable in the frontend. Frontend bumped to v37 (924,069 bytes), then v37+ (og:image fix). All shipped to main.
 
 ### What got fixed in v37
 
