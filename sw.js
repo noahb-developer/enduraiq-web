@@ -28,8 +28,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Stryxs';
   const options = {
     body: data.body || '',
-    icon: data.icon || '/icon-192.png',
-    badge: data.badge || '/icon-192.png',
+    icon: data.icon || '/web-app-manifest-192x192.png',
+    badge: data.badge || '/web-app-manifest-192x192.png',
     tag: data.tag || 'stryxs-notification',
     // Reuse same tag so a 2nd workout reminder replaces the 1st instead
     // of stacking. Users hate stacked notifications.

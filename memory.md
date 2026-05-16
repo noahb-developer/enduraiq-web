@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: May 2026, end of pre-launch sprint round 2 (Coach v8 / Frontend v36 / send-followups deployed).
+> Last updated: 2026-05-15, end of pre-launch sprint round 3 (Coach v8 / Frontend v37 / send-followups deployed). Round 3 was a full audit + fix pass. See section 10 for what changed.
 
 ---
 
@@ -171,10 +171,16 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index_v36.html` — 896,707 bytes
+- **Frontend:** `index.html` v37 — 924,069 bytes (post round-3 audit; live in repo `noahb-developer/stryxs` as `index.html`)
 - **Coach:** `coach_v8.ts` — 151,983 bytes
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 18,677 bytes, deployed, working (returned `success: True` on test fire)
+- **site.webmanifest:** 576 bytes (was 456 — fixed name from "MyWebSite" to "Stryxs", added start_url/scope/id)
+- **sw.js:** 2,859 bytes (was 2,827 — fixed icon paths)
+- **vercel.json:** 427 bytes (added SPA catch-all rewrite)
+- **README.md:** 230 bytes (was 14 — actually says Stryxs now)
+- **privacy.html:** 15,620 bytes (em-dash sweep)
+- **terms.html:** 17,551 bytes (em-dash sweep)
 
 ### Crons live
 - `send-workout-reminders` — hourly, sends Web Push when user's local hour matches their reminder time
@@ -287,6 +293,50 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
+**End of 2026-05-15 session (Round 3 — full audit + fix pass):** Ran 3 parallel scan agents, then fixed everything fixable in the frontend. Frontend bumped to v37 (924,069 bytes). Noah needs to commit + push `index.html`, `sw.js`, `site.webmanifest`, `vercel.json`, `README.md`, `privacy.html`, `terms.html`. After deploy, hit hard refresh.
+
+### What got fixed in v37
+
+**Critical bugs:**
+- `coach_insights` table queries (4 sites) were silently 404ing — table never existed, only `training_insights` does. Neutered `renderCoachInsights`/`applyInsight`/`dismissInsight` to no-ops; the active path is `renderInsightsMiniCard` against `training_insights`.
+- Chat history was selecting OLDEST 20 messages (`ascending: true, limit 20`) instead of newest. After 20 messages every Coach reply ran on stale ancient context with the user's current message dropped. Now `ascending: false, limit 20` then reversed.
+- `loadProfile()` silently swallowed missing-row errors via `.single()`. Now uses `.maybeSingle()`, attempts a self-heal insert, surfaces a toast + analytics event if profile is broken. Stops paying users from being silently locked out of Pro.
+- `sendChatMsg()` insert lived BEFORE the try/catch — RLS or network blip left input permanently disabled. Now wrapped, restores input + value + toasts on failure.
+- 6 UTC-vs-local date bugs: added `toLocalYMD`, `localDayStartISO`, `localDayEndISO` helpers next to `getClientToday`. Fixed `renderDashTodayCard` query, `renderDashWeekStrip` (dateStr + workouts query + bucket-by-local-day), streak calc (`trainingDays`/`adherenceDays` Set), `markRangeSkipped`, starter-week generators (LTHR-untested + LTHR-known branches).
+
+**Security / auth:**
+- `callStripe` and `callStrava` were sending only the public anon key + `user_id` in body, no JWT. Now both pull `sb.auth.getSession()` and forward `Bearer ${access_token}` plus `apikey`. **The Stripe and Strava edge functions still need to verify identity from the JWT (not trust body.user_id).** This is on Noah — see manual list.
+
+**UX / billing:**
+- Stripe activation poll extended from 8s linear → ~30s with backoff + a 30-iteration background re-check that toasts when activation lands. Final fallback message tells user to email support@stryxs.com.
+- Stripe error messages: 5xx with empty body used to surface as "Stripe undefined failed: 500"; now includes status code + best-effort body/text.
+- Push unsubscribe (`disablePushNotifications`) used to swallow all errors. Now flips profile flag FIRST (so cron stops pushing even if browser-side fails), then attempts cleanup with per-step diagnostics in the analytics event.
+- Strava OAuth callback router used to fire on ANY URL with `?code=&state=` — broke any future OAuth integration. Now requires `path === '/strava-callback'` AND both params.
+- Path-based routing added: `/upgrade`, `/coach`, `/plan`, `/history`, `/trends`, `/race`, `/settings`, `/import` now navigate to the right SPA page on first load (was hard-coded to dashboard). Means deep links from terms.html, marketing emails, etc. work.
+- `vercel.json` got a SPA catch-all rewrite `/((?!.*\\.|api/).*)` so non-asset paths land on index.html.
+
+**Cosmetic / launch readiness:**
+- `<head>` now has `og:title/description/image/url/type/site_name`, `twitter:card/title/description/image`, `link rel=canonical`, `meta robots`. og:image points at `web-app-manifest-512x512.png` as a placeholder; **Noah needs to make a real 1200x630 social preview PNG**.
+- Removed `maximum-scale=1.0, user-scalable=no` from viewport (accessibility regression).
+- `<title>` no longer has em-dash.
+- `site.webmanifest`: rewrote with name "Stryxs", short_name "Stryxs", start_url/scope/id, theme_color matching `#0a0e1a`.
+- `sw.js`: icon path now `/web-app-manifest-192x192.png` (was broken `/icon-192.png`).
+- `README.md`: rewrote with real description.
+- ~500 em-dashes purged via `' — '` → `, ` global replace + sentinel double-space cleanup. Privacy.html and terms.html also swept. ~16 em-dashes remain (typographic placeholders for empty values like `—min`/`—km`/`—`, plus end-of-line code comment ellipses — all developer-facing or visual stand-ins).
+- `app_version` bumped from `'v35'` → `'v37'` in feedback widget.
+- `crypto.randomUUID()` used for `anon_session_id` when available (Math.random fallback retained).
+- One console.log that exposed user_id removed (`savePlanToDb`).
+
+### Round 3 scan also flagged (NOT yet fixed — see section 7 + manual list)
+- **Stripe/Strava edge function code** must be updated to validate identity from JWT (frontend now sends it, but the backend has to enforce). Until then any anon-key holder could spoof any user_id.
+- **`shared_plans` table** referenced at lines ~15357/15466/15486/15536 but not in memory's table inventory. Either confirm exists in DB or this share-plan flow is broken.
+- **Schema drift to verify in Supabase Studio:** `training_insights.generated_at`, `training_insights.applied_at`, `planned_workouts.workout_notes`, `workouts.sport/source/activity_classification`, `coach_messages.context_type`, several `athlete_intake` columns (has_pool_access, has_bike_trainer, unit_preference, pb_5k/10k/half/marathon, last_race, height_cm, available_days_count), `profiles.avatar_url/bio/display_name/stripe_customer_id/stripe_subscription_id`, RPC `expire_old_trials_for_user`. All used by frontend, none documented in memory's section 3 schema.
+- **Coach actions `assess_feasibility` and `get_my_usage`** are documented in section 3 but never called from frontend. Either dead backend or unbuilt UI.
+- **Verify `support@stryxs.com`** actually receives mail — Resend is configured outbound only.
+- **Verify signup confirmation email** is on Resend not Supabase default `noreply@mail.app.supabase.io` (Supabase Studio → Auth → Emails).
+- **iOS backdrop-filter onboarding tour glitches** still untested on device.
+
+### What previous round (v36 / Coach v8) fixed (kept here for completeness)
 **End of May 12 2026 session:** Ran full scan emphasizing Coach personalization and realism. Found 5 issues:
 
 1. **Trends completely broken** (CRITICAL) — `analyzePatterns` backend returned flat single-pattern object `{needs_adjustment, severity, title, ...}`, frontend expected `{patterns: [array]}`. No insights had ever been saved. **FIXED in coach_v8.**
