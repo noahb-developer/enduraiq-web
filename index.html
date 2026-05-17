@@ -311,6 +311,28 @@ body.on-landing #landingNav { display: none !important; }
   padding: 0;
 }
 .hamburger:hover { border-color: var(--accent-border); }
+/* Small "PRO" pill shown beside the avatar in the top nav when the
+   user has an active Pro subscription. Subtle but always visible. */
+.nav-pro-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-right: 8px;
+  background: rgba(0, 229, 160, 0.12);
+  border: 1px solid rgba(0, 229, 160, 0.35);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.7px;
+  line-height: 1;
+  height: 18px;
+  flex-shrink: 0;
+}
+@media (max-width: 380px) {
+  /* On very small screens, hide the label and just show the dot */
+  .nav-pro-pill { padding: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 0; font-size: 0; }
+}
 .hamburger span:not(.hamburger-badge) {
   display: block; width: 16px; height: 2px;
   background: var(--text); border-radius: 2px;
@@ -2003,12 +2025,12 @@ select option {
   max-height: 5000px; /* large enough for any section */
 }
 .settings-section-inner {
-  padding: 4px 22px 22px;
+  padding: 20px 22px 24px;
   border-top: 1px solid var(--border);
 }
 @media (max-width: 720px) {
   .settings-section-header { padding: 14px 16px; }
-  .settings-section-inner { padding: 4px 16px 18px; }
+  .settings-section-inner { padding: 18px 16px 22px; }
   .settings-section-icon { width: 34px; height: 34px; font-size: 16px; }
 }
 
@@ -2625,11 +2647,14 @@ select option {
 
 .modal-actions {
   display: flex; gap: 10px; justify-content: flex-end;
-  padding: 16px 24px;
+  padding: 18px 24px 22px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 .modal-actions .btn { width: auto; padding: 10px 20px; }
+@media (max-width: 720px) {
+  .modal-actions { padding: 16px 18px 20px; }
+}
 
 /* LOADING */
 .loading {
@@ -3944,6 +3969,7 @@ body.on-auth .container {
       <span>Stryxs</span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
+      <span class="nav-pro-pill" id="navProPill" style="display: none;" aria-label="Pro member">PRO</span>
       <div class="user-avatar" id="navAvatar">A</div>
     </button>
   </div>
@@ -4827,7 +4853,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v41',
+      app_version: 'v42',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5715,6 +5741,9 @@ function showApp() {
       avatarEl.textContent = initial;
     }
   }
+  // Pro pill in nav — show whenever the user is Pro (or in trial). Subtle
+  // green chip beside the avatar so users always know which tier they're on.
+  refreshNavProPill();
   // Reset projections cache state for THIS user (clears whatever was in memory from a previous session)
   _projectionsCache = null;
   _projectionsCacheTime = 0;
@@ -5734,6 +5763,30 @@ function showApp() {
   // NOTE: legacy 3-step onboarding modal removed entirely. The new flow is:
   // spotlight tour offer fires from renderDashboard() on first dashboard load,
   // and the activation checklist persists on the dashboard until completed.
+}
+
+// Toggle the small PRO pill next to the nav avatar. Called from showApp
+// (initial render) and any time subscription state may have changed
+// (after Stripe activation, manual Pro grant, etc.). Pure DOM read/write,
+// no async work — safe to call frequently.
+function refreshNavProPill() {
+  const pill = document.getElementById('navProPill');
+  if (!pill) return;
+  let isPro = false;
+  try { isPro = (typeof isUserPro === 'function') && isUserPro(); } catch (_) {}
+  let status = 'free';
+  try { status = (typeof getUserSubscriptionStatus === 'function') && getUserSubscriptionStatus(); } catch (_) {}
+  if (isPro && status === 'pro') {
+    pill.style.display = '';
+    pill.textContent = 'PRO';
+    pill.setAttribute('aria-label', 'Pro member');
+  } else if (isPro && status === 'trial') {
+    pill.style.display = '';
+    pill.textContent = 'TRIAL';
+    pill.setAttribute('aria-label', 'Pro trial');
+  } else {
+    pill.style.display = 'none';
+  }
 }
 
 function showLanding() {
@@ -7288,7 +7341,7 @@ async function renderAutoSyncPanel() {
         </div>
         <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
         <div style="text-align: center;">
-          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Or upload CSV files manually →</a>
+          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('upload')">Or upload CSV files manually →</a>
         </div>
       `;
     }
@@ -17869,22 +17922,57 @@ async function renderSettings() {
           ${(() => {
             const status = getUserSubscriptionStatus();
             if (status === 'pro') {
+              const renewStr = state.profile?.proUntil
+                ? new Date(state.profile.proUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                : null;
+              const memberSinceStr = state.profile?.proSince || state.profile?.createdAt
+                ? new Date(state.profile.proSince || state.profile.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+                : null;
               return `
-                <div style="padding: 16px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.05), rgba(0, 255, 163, 0.01)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 12px; margin-bottom: 14px;">
-                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                    <span style="font-size: 24px;">⭐</span>
-                    <div>
-                      <div style="font-size: 14px; font-weight: 700; color: var(--text);">Stryxs Pro</div>
-                      <div style="font-size: 12px; color: var(--text-dim);">All features unlocked</div>
+                <div style="padding: 18px; background: linear-gradient(180deg, rgba(0, 255, 163, 0.06), rgba(0, 255, 163, 0.01)); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 12px; margin-bottom: 16px;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <span style="font-size: 28px;">⭐</span>
+                    <div style="flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text);">Stryxs Pro</div>
+                        <span style="padding: 2px 8px; background: rgba(0, 229, 160, 0.18); border: 1px solid rgba(0, 229, 160, 0.4); border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.5px;">ACTIVE</span>
+                      </div>
+                      <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">All features unlocked · $14.99 / month</div>
                     </div>
                   </div>
-                  ${state.profile?.proUntil ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">Renews on ${new Date(state.profile.proUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>` : ''}
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding-top: 12px; border-top: 1px solid rgba(0, 255, 163, 0.12);">
+                    ${renewStr ? `
+                      <div>
+                        <div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px;">Next renewal</div>
+                        <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-top: 2px;">${renewStr}</div>
+                      </div>
+                    ` : ''}
+                    ${memberSinceStr ? `
+                      <div>
+                        <div style="font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px;">Member since</div>
+                        <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-top: 2px;">${memberSinceStr}</div>
+                      </div>
+                    ` : ''}
+                  </div>
                 </div>
+
+                <!-- Usage this month -->
+                <div id="proUsageBlock" style="padding: 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <div style="font-size: 13px; font-weight: 700; color: var(--text);">Usage this month</div>
+                    <div style="font-size: 11px; color: var(--text-mute);" id="proUsageResetNote">Resets on the 1st</div>
+                  </div>
+                  <div id="proUsageBars" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="font-size: 12px; color: var(--text-dim);">Loading…</div>
+                  </div>
+                </div>
+
+                <!-- Billing controls -->
                 ${state.profile?.stripeCustomerId ? `
                   <button class="btn ghost" id="manageBillingBtn" onclick="openBillingPortal()" style="width: 100%;">Manage subscription →</button>
-                  <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">Update card · view invoices · cancel</div>
+                  <div style="margin-top: 8px; font-size: 11px; color: var(--text-mute); text-align: center;">Update card · view invoices · pause or cancel</div>
                 ` : `
-                  <div style="font-size: 12px; color: var(--text-mute); text-align: center; padding: 8px;">Manual Pro grant, no billing portal available.</div>
+                  <div style="font-size: 12px; color: var(--text-mute); text-align: center; padding: 10px; background: var(--bg-3); border-radius: 8px;">Manual Pro grant — no billing portal. Contact support@stryxs.com to make changes.</div>
                 `}
               `;
             }
@@ -18097,14 +18185,14 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- Danger Zone, account deletion -->
+    <!-- Account deletion section (was "Danger zone", renamed for tone) -->
     <div class="settings-section" id="section-danger">
       <div class="settings-section-header" onclick="toggleSettingsSection('danger')">
         <div class="settings-section-header-left">
-          <div class="settings-section-icon" style="color: #f87171;">⚠</div>
+          <div class="settings-section-icon" style="color: #f87171;">🗑</div>
           <div class="settings-section-text">
-            <div class="settings-section-title" style="color: #f87171;">Danger zone</div>
-            <div class="settings-section-sub">Delete your account and all data</div>
+            <div class="settings-section-title" style="color: #f87171;">Account deletion</div>
+            <div class="settings-section-sub">Permanently delete your account and all data</div>
           </div>
         </div>
         <div class="settings-section-chevron">›</div>
@@ -18520,10 +18608,69 @@ async function handleStravaCallback() {
 function toggleSettingsSection(id) {
   const section = document.getElementById('section-' + id);
   if (!section) return;
+  const wasExpanded = section.classList.contains('expanded');
   section.classList.toggle('expanded');
   // Render dynamic content for sections that compute state on open
   if (id === 'notifications' && section.classList.contains('expanded')) {
     renderNotifSettings();
+  }
+  if (id === 'subscription' && section.classList.contains('expanded')) {
+    renderProUsageBars();
+  }
+  // Just-opened: scroll the section header into view so the user actually
+  // sees the content (matters especially when called via navigate->Settings
+  // from a "Connect Strava" / "Manage" button elsewhere in the app — without
+  // this they land at the top of Settings and have to scroll to find the
+  // section they were sent to).
+  if (!wasExpanded && section.classList.contains('expanded')) {
+    setTimeout(() => {
+      try {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (_) {
+        // Older browsers without smooth-scroll support
+        section.scrollIntoView();
+      }
+    }, 80);
+  }
+}
+
+// Pull the user's own monthly usage (chat, plan_gen, workout_commentary
+// call counts) and render them as progress bars in the Subscription tab.
+// Pro users care about this — both for awareness and because hitting
+// limits triggers the friendly modal. Free users don't open this tab
+// often; we render the same bars if they do, using free-tier limits.
+async function renderProUsageBars() {
+  const el = document.getElementById('proUsageBars');
+  if (!el) return;
+  try {
+    const usage = await callCoach('get_my_usage', {});
+    if (!usage) {
+      el.innerHTML = '<div style="font-size: 12px; color: var(--text-mute);">Usage data unavailable right now.</div>';
+      return;
+    }
+    const rows = [
+      { label: 'Coach chats', used: Number(usage.chat_calls) || 0, max: 300 },
+      { label: 'Workout commentary', used: Number(usage.workout_commentary_calls) || 0, max: 150 },
+      { label: 'Plan generations', used: Number(usage.plan_gen_calls) || 0, max: 15 },
+    ];
+    el.innerHTML = rows.map(r => {
+      const pct = r.max > 0 ? Math.min(100, Math.round((r.used / r.max) * 100)) : 0;
+      const color = pct >= 90 ? '#f87171' : pct >= 75 ? '#fbbf24' : 'var(--accent)';
+      return `
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 5px;">
+            <span style="color: var(--text-dim);">${r.label}</span>
+            <span style="color: var(--text);"><strong>${r.used}</strong><span style="color: var(--text-mute);"> / ${r.max}</span></span>
+          </div>
+          <div style="height: 6px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: hidden;">
+            <div style="height: 100%; width: ${pct}%; background: ${color}; border-radius: 3px; transition: width 0.4s ease;"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('[Stryxs] Pro usage load failed:', err);
+    el.innerHTML = '<div style="font-size: 12px; color: var(--text-mute);">Could not load usage right now.</div>';
   }
 }
 
