@@ -4077,20 +4077,20 @@ body.on-auth .container {
         <div class="lv2-line"><span>You get faster.</span></div>
       </h1>
 
-      <p class="lv2-sub">An AI coach that actually reads your training data. Builds your plan. Adapts as you go. The first endurance coach that lives in your pocket.</p>
+      <p class="lv2-sub" data-i18n="landing.hero.subtitle">An AI coach that actually reads your training data. Builds your plan. Adapts as you go. The first endurance coach that lives in your pocket.</p>
 
       <div class="lv2-cta">
         <button class="lv2-btn-primary" onclick="navigate('signup')">
-          Start training free
+          <span data-i18n="landing.hero.cta_primary">Start training free</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
-        <button class="lv2-btn-ghost" onclick="document.getElementById('lv2-how').scrollIntoView({behavior:'smooth'})">See how it works</button>
+        <button class="lv2-btn-ghost" onclick="document.getElementById('lv2-how').scrollIntoView({behavior:'smooth'})" data-i18n="landing.hero.cta_secondary">See how it works</button>
       </div>
 
       <div class="lv2-meta">
-        <span><span class="lv2-dot"></span>7-day Pro trial, no card</span>
-        <span><span class="lv2-dot"></span>Works with Strava + CSV from any watch</span>
-        <span><span class="lv2-dot"></span>Cancel anytime</span>
+        <span><span class="lv2-dot"></span><span data-i18n="landing.meta.trial">7-day Pro trial, no card</span></span>
+        <span><span class="lv2-dot"></span><span data-i18n="landing.meta.works_with">Works with Strava + CSV from any watch</span></span>
+        <span><span class="lv2-dot"></span><span data-i18n="landing.meta.cancel">Cancel anytime</span></span>
       </div>
     </section>
 
@@ -4236,10 +4236,10 @@ body.on-auth .container {
     <!-- CTA -->
     <section class="lv2-section">
       <div class="lv2-cta-strip">
-        <h2>Stop guessing.<br>Start <em>training</em>.</h2>
-        <p>Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
+        <h2><span data-i18n="landing.cta_strip.title_a">Stop guessing.</span><br><span data-i18n="landing.cta_strip.title_b">Start training.</span></h2>
+        <p data-i18n="landing.cta_strip.subtitle">Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
         <button class="lv2-btn-primary" onclick="navigate('signup')">
-          Create your free account
+          <span data-i18n="landing.cta_strip.button">Create your free account</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </div>
@@ -4270,24 +4270,24 @@ body.on-auth .container {
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
-        <button class="lv2-nav-login" onclick="navigate('login')">Log in</button>
+        <button class="lv2-nav-login" onclick="navigate('login')" data-i18n="landing.nav.login">Log in</button>
       </div>
     </nav>
 
     <div class="lv2-auth-card">
-      <h2 class="lv2-auth-title">Create your <em>account</em></h2>
-      <p class="lv2-auth-sub">Start your 7-day Pro trial, no credit card required</p>
+      <h2 class="lv2-auth-title" data-i18n="auth.signup.title">Create your account</h2>
+      <p class="lv2-auth-sub" data-i18n="auth.signup.subtitle">Start your 7-day Pro trial, no credit card required</p>
 
       <div class="lv2-field">
-        <label>Name</label>
-        <input type="text" id="signupName" placeholder="Alex" autocomplete="name" />
+        <label data-i18n="auth.field.name">Name</label>
+        <input type="text" id="signupName" placeholder="Alex" autocomplete="name" data-i18n-attr="placeholder:auth.field.name_placeholder" />
       </div>
       <div class="lv2-field">
-        <label>Email</label>
-        <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" />
+        <label data-i18n="auth.field.email">Email</label>
+        <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
       </div>
       <div class="lv2-field">
-        <label>Password</label>
+        <label data-i18n="auth.field.password">Password</label>
         <div class="lv2-field-pw">
           <input type="password" id="signupPassword" placeholder="At least 6 characters" autocomplete="new-password" oninput="validateSignupPasswordMatch()" />
           <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('signupPassword', this)">
@@ -4306,11 +4306,11 @@ body.on-auth .container {
         <div id="signupPasswordError" class="lv2-field-error">Passwords don't match.</div>
       </div>
       <button class="lv2-btn-primary lv2-full" onclick="doSignup()">
-        Create account
+        <span data-i18n="auth.signup.button">Create account</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
       <p style="font-size: 11px; color: var(--text-mute); margin-top: 12px; line-height: 1.5; text-align: center;">By creating an account you agree to our <a href="/terms" target="_blank" style="color: var(--text-dim); text-decoration: underline;">Terms</a> and <a href="/privacy" target="_blank" style="color: var(--text-dim); text-decoration: underline;">Privacy Policy</a>.</p>
-      <p class="lv2-auth-switch">Already have an account? <a onclick="navigate('login')">Log in</a></p>
+      <p class="lv2-auth-switch"><span data-i18n="auth.signup.have_account">Already have an account?</span> <a onclick="navigate('login')" data-i18n="auth.signup.log_in_link">Log in</a></p>
     </div>
   </div>
 </div>
@@ -4333,15 +4333,15 @@ body.on-auth .container {
     </nav>
 
     <div class="lv2-auth-card">
-      <h2 class="lv2-auth-title">Welcome <em>back</em></h2>
-      <p class="lv2-auth-sub">Log in to your Stryxs account</p>
+      <h2 class="lv2-auth-title" data-i18n="auth.login.title">Welcome back</h2>
+      <p class="lv2-auth-sub" data-i18n="auth.login.subtitle">Log in to your Stryxs account</p>
 
       <div class="lv2-field">
-        <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" />
+        <label data-i18n="auth.field.email">Email</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" data-i18n-attr="placeholder:auth.field.email_placeholder" />
       </div>
       <div class="lv2-field">
-        <label>Password</label>
+        <label data-i18n="auth.field.password">Password</label>
         <div class="lv2-field-pw">
           <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" />
           <button type="button" class="lv2-field-pw-toggle" aria-label="Show password" onclick="togglePasswordVisibility('loginPassword', this)">
@@ -4350,10 +4350,10 @@ body.on-auth .container {
         </div>
       </div>
       <button class="lv2-btn-primary lv2-full" onclick="doLogin()">
-        Log in
+        <span data-i18n="auth.login.button">Log in</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
-      <p class="lv2-auth-switch">Don't have an account? <a onclick="navigate('signup')">Sign up</a></p>
+      <p class="lv2-auth-switch"><span data-i18n="auth.login.no_account">New here?</span> <a onclick="navigate('signup')" data-i18n="auth.login.signup_link">Create an account</a></p>
     </div>
   </div>
 </div>
@@ -4435,17 +4435,17 @@ body.on-auth .container {
   <div class="analyze-toggles">
     <button class="analyze-toggle" id="toggleAutoSync" onclick="toggleAnalyzeSection('autoSync')">
       <span class="analyze-toggle-icon">🔗</span>
-      <span class="analyze-toggle-label">Auto-sync</span>
+      <span class="analyze-toggle-label" data-i18n="analyze.toggle.autosync">Auto-sync</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
     <button class="analyze-toggle" id="toggleLogManual" onclick="toggleAnalyzeSection('logManual')">
       <span class="analyze-toggle-icon">✍️</span>
-      <span class="analyze-toggle-label">Log manually</span>
+      <span class="analyze-toggle-label" data-i18n="analyze.toggle.manual">Log manually</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
     <button class="analyze-toggle" id="toggleUploadCsv" onclick="toggleAnalyzeSection('uploadCsv')">
       <span class="analyze-toggle-icon">📁</span>
-      <span class="analyze-toggle-label">Upload file</span>
+      <span class="analyze-toggle-label" data-i18n="analyze.toggle.upload">Upload file</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
   </div>
@@ -4736,7 +4736,368 @@ let state = {
   user: null,
   profile: { runLthr: null, bikeLthr: null },
   workouts: [],
+  locale: 'en', // 'en' or 'fr', synced from profiles.locale on load
 };
+
+// ═══════════════════════════════════════════════════════════
+// I18N — vanilla, no library. Two tables (en, fr). t(key) does
+// a lookup, falls back to English then to the key itself.
+// Static HTML uses data-i18n="key" attributes; applyI18nToDom()
+// walks the DOM and rewrites textContent. data-i18n-attr handles
+// placeholders / aria-labels.
+// ═══════════════════════════════════════════════════════════
+const I18N = {
+  en: {
+    // Common
+    'common.save': 'Save',
+    'common.cancel': 'Cancel',
+    'common.continue': 'Continue',
+    'common.back': 'Back',
+    'common.next': 'Next',
+    'common.delete': 'Delete',
+    'common.upgrade': 'Upgrade',
+    'common.send': 'Send',
+    'common.loading': 'Loading…',
+    'common.try_again': 'Try again',
+    'common.got_it': 'Got it',
+    'common.close': 'Close',
+
+    // Landing
+    'landing.nav.login': 'Log in',
+    'landing.hero.cta_primary': 'Start training free',
+    'landing.hero.cta_secondary': 'See how it works',
+    'landing.hero.subtitle': 'An AI coach that actually reads your training data. Builds your plan. Adapts as you go. The first endurance coach that lives in your pocket.',
+    'landing.meta.trial': '7-day Pro trial, no card',
+    'landing.meta.works_with': 'Works with Strava + CSV from any watch',
+    'landing.meta.cancel': 'Cancel anytime',
+    'landing.cta_strip.title_a': 'Stop guessing.',
+    'landing.cta_strip.title_b': 'Start training.',
+    'landing.cta_strip.subtitle': 'Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.',
+    'landing.cta_strip.button': 'Create your free account',
+
+    // Auth (signup + login)
+    'auth.signup.title': 'Create your account',
+    'auth.signup.subtitle': 'Start your 7-day Pro trial, no credit card required',
+    'auth.signup.button': 'Create account',
+    'auth.signup.have_account': 'Already have an account?',
+    'auth.signup.log_in_link': 'Log in',
+    'auth.login.title': 'Welcome back',
+    'auth.login.subtitle': 'Log in to your Stryxs account',
+    'auth.login.button': 'Log in',
+    'auth.login.forgot': 'Forgot password?',
+    'auth.login.no_account': 'New here?',
+    'auth.login.signup_link': 'Create an account',
+    'auth.field.name': 'Name',
+    'auth.field.email': 'Email',
+    'auth.field.password': 'Password',
+    'auth.field.name_placeholder': 'Alex',
+    'auth.field.email_placeholder': 'you@example.com',
+
+    // Language picker
+    'lang.picker.title': 'Choose your language',
+    'lang.picker.subtitle': 'You can change this later in Settings.',
+    'lang.english': 'English',
+    'lang.french': 'Français',
+    'lang.settings.title': 'Language',
+    'lang.settings.sub': 'Choose the language of the app. Coach also replies in this language.',
+    'lang.settings.saved': 'Language updated',
+
+    // Nav / pages
+    'nav.dashboard': 'Today',
+    'nav.coach': 'Coach',
+    'nav.plan': 'Plan',
+    'nav.analyze': 'Analyze',
+    'nav.history': 'History',
+    'nav.trends': 'Trends',
+    'nav.settings': 'Settings',
+
+    // Dashboard
+    'dash.recent_workouts': 'Recent workouts',
+    'dash.no_workouts_yet': 'No workouts yet',
+    'dash.empty.title': 'Log your first workout to get going',
+    'dash.empty.subtitle': "Coach needs at least one workout to give you real feedback. Pick whichever works for you.",
+    'dash.empty.cta_strava': 'Connect Strava',
+    'dash.empty.cta_manual': 'Log manually',
+    'dash.empty.cta_upload': 'Upload watch file',
+
+    // Coach
+    'coach.tab.title': 'Coach',
+    'coach.tab.subtitle': 'Your AI endurance coach. Ask anything about your training, a workout, or how to improve.',
+    'coach.input.placeholder': 'Ask Coach anything…',
+    'coach.trial.hint': '✨ Free Coach trial, {remaining} message{plural} left. Upgrade to Pro for unlimited chat.',
+    'coach.trial.exhausted': "You've used your {limit} free Coach messages. Upgrade to Pro for unlimited chat.",
+
+    // Analyze (manual entry)
+    'analyze.title': 'Analyze Workout',
+    'analyze.subtitle': 'Sync, upload, or review today’s workouts.',
+    'analyze.toggle.autosync': 'Auto-sync',
+    'analyze.toggle.manual': 'Log manually',
+    'analyze.toggle.upload': 'Upload file',
+    'manual.header': 'Log a workout by hand.',
+    'manual.header_sub': "Useful if you don't want to use Strava or just want to log something quick. Coach reads these like any other workout.",
+    'manual.sport': 'Sport',
+    'manual.sport.run': 'Run',
+    'manual.sport.bike': 'Bike',
+    'manual.sport.swim': 'Swim',
+    'manual.sport.strength': 'Strength',
+    'manual.sport.other': 'Other',
+    'manual.date': 'Date',
+    'manual.duration': 'Duration (min)',
+    'manual.distance': 'Distance ({unit})',
+    'manual.avg_hr': 'Avg HR',
+    'manual.max_hr': 'Max HR',
+    'manual.rpe': 'Perceived effort (optional, 1-10)',
+    'manual.felt': 'How it felt (optional)',
+    'manual.felt.easy': 'easy',
+    'manual.felt.hard': 'hard',
+    'manual.felt.strong': 'strong',
+    'manual.felt.flat': 'flat',
+    'manual.felt.sore': 'sore',
+    'manual.felt.sick': 'sick',
+    'manual.notes': 'Notes (optional)',
+    'manual.notes_placeholder': 'Legs felt heavy after Friday brick, easy progression run',
+    'manual.submit': 'Save workout',
+    'manual.saved': '✓ Saved. Refresh to see it on the dashboard.',
+    'manual.toast_saved': 'Workout saved',
+    'manual.err_date': 'Pick a date.',
+    'manual.err_duration': 'Duration is required (minutes).',
+    'manual.err_save': 'Save failed: {msg}',
+
+    // Settings (section headers)
+    'settings.title': 'Settings',
+    'settings.section.language': 'Language',
+    'settings.section.profile': 'Profile',
+    'settings.section.personal': 'Personal info',
+    'settings.section.goals': 'Goals & race',
+    'settings.section.benchmarks': 'Benchmarks',
+    'settings.section.equipment': 'Equipment',
+    'settings.section.connections': 'Connections',
+    'settings.section.subscription': 'Subscription',
+    'settings.section.notifications': 'Notifications',
+    'settings.section.privacy': 'Privacy & data',
+    'settings.section.account': 'Account deletion',
+
+    // Pro upsell (compact)
+    'pro.feature_gate.coach_chat.title': 'Coach chat is a Pro feature',
+    'pro.feature_gate.coach_chat.desc': 'Upgrade to chat unlimited with your AI coach.',
+  },
+  fr: {
+    // Common
+    'common.save': 'Enregistrer',
+    'common.cancel': 'Annuler',
+    'common.continue': 'Continuer',
+    'common.back': 'Retour',
+    'common.next': 'Suivant',
+    'common.delete': 'Supprimer',
+    'common.upgrade': 'Passer Pro',
+    'common.send': 'Envoyer',
+    'common.loading': 'Chargement…',
+    'common.try_again': 'Réessayer',
+    'common.got_it': "C'est compris",
+    'common.close': 'Fermer',
+
+    // Landing
+    'landing.nav.login': 'Connexion',
+    'landing.hero.cta_primary': "Commencer l'entraînement",
+    'landing.hero.cta_secondary': 'Voir comment ça marche',
+    'landing.hero.subtitle': "Un coach IA qui lit vraiment tes données d'entraînement. Construit ton plan. S'adapte au fur et à mesure. Le premier coach d'endurance qui tient dans ta poche.",
+    'landing.meta.trial': 'Essai Pro 7 jours, sans carte',
+    'landing.meta.works_with': 'Compatible Strava + CSV de toutes les montres',
+    'landing.meta.cancel': 'Annulable à tout moment',
+    'landing.cta_strip.title_a': 'Arrête de deviner.',
+    'landing.cta_strip.title_b': "Commence à t'entraîner.",
+    'landing.cta_strip.subtitle': 'Commence avec un essai Pro de 7 jours, sans carte requise. Ensuite, continue avec le tier gratuit ou reste sur Pro pour la génération de plan illimitée, le coaching adaptatif et l’analyse de tendances en profondeur.',
+    'landing.cta_strip.button': 'Créer ton compte gratuit',
+
+    // Auth (signup + login)
+    'auth.signup.title': 'Crée ton compte',
+    'auth.signup.subtitle': 'Commence ton essai Pro de 7 jours, sans carte de crédit',
+    'auth.signup.button': 'Créer le compte',
+    'auth.signup.have_account': 'Tu as déjà un compte ?',
+    'auth.signup.log_in_link': 'Connexion',
+    'auth.login.title': 'Bon retour',
+    'auth.login.subtitle': 'Connecte-toi à ton compte Stryxs',
+    'auth.login.button': 'Connexion',
+    'auth.login.forgot': 'Mot de passe oublié ?',
+    'auth.login.no_account': 'Nouveau ici ?',
+    'auth.login.signup_link': 'Créer un compte',
+    'auth.field.name': 'Nom',
+    'auth.field.email': 'E-mail',
+    'auth.field.password': 'Mot de passe',
+    'auth.field.name_placeholder': 'Alex',
+    'auth.field.email_placeholder': 'toi@exemple.com',
+
+    // Language picker
+    'lang.picker.title': 'Choisis ta langue',
+    'lang.picker.subtitle': 'Tu peux changer ça plus tard dans les Paramètres.',
+    'lang.english': 'English',
+    'lang.french': 'Français',
+    'lang.settings.title': 'Langue',
+    'lang.settings.sub': "Choisis la langue de l'application. Coach répond aussi dans cette langue.",
+    'lang.settings.saved': 'Langue mise à jour',
+
+    // Nav / pages
+    'nav.dashboard': "Aujourd'hui",
+    'nav.coach': 'Coach',
+    'nav.plan': 'Plan',
+    'nav.analyze': 'Analyser',
+    'nav.history': 'Historique',
+    'nav.trends': 'Tendances',
+    'nav.settings': 'Paramètres',
+
+    // Dashboard
+    'dash.recent_workouts': 'Séances récentes',
+    'dash.no_workouts_yet': 'Aucune séance pour le moment',
+    'dash.empty.title': 'Enregistre ta première séance pour commencer',
+    'dash.empty.subtitle': "Coach a besoin d'au moins une séance pour te donner un vrai retour. Choisis ce qui te convient.",
+    'dash.empty.cta_strava': 'Connecter Strava',
+    'dash.empty.cta_manual': 'Enregistrer à la main',
+    'dash.empty.cta_upload': 'Importer un fichier',
+
+    // Coach
+    'coach.tab.title': 'Coach',
+    'coach.tab.subtitle': "Ton coach d'endurance IA. Pose-lui n'importe quelle question sur ton entraînement, une séance, ou comment progresser.",
+    'coach.input.placeholder': 'Pose une question à Coach…',
+    'coach.trial.hint': '✨ Essai gratuit Coach, {remaining} message{plural} restant{plural}. Passe Pro pour discuter sans limite.',
+    'coach.trial.exhausted': "Tu as utilisé tes {limit} messages gratuits avec Coach. Passe Pro pour discuter sans limite.",
+
+    // Analyze (manual entry)
+    'analyze.title': 'Analyser une séance',
+    'analyze.subtitle': "Synchronise, importe, ou revois les séances d'aujourd'hui.",
+    'analyze.toggle.autosync': 'Synchro auto',
+    'analyze.toggle.manual': 'Saisir à la main',
+    'analyze.toggle.upload': 'Importer un fichier',
+    'manual.header': 'Enregistre une séance à la main.',
+    'manual.header_sub': "Utile si tu ne veux pas utiliser Strava ou si tu veux juste logger vite. Coach lit ces séances comme les autres.",
+    'manual.sport': 'Sport',
+    'manual.sport.run': 'Course',
+    'manual.sport.bike': 'Vélo',
+    'manual.sport.swim': 'Natation',
+    'manual.sport.strength': 'Muscu',
+    'manual.sport.other': 'Autre',
+    'manual.date': 'Date',
+    'manual.duration': 'Durée (min)',
+    'manual.distance': 'Distance ({unit})',
+    'manual.avg_hr': 'FC moy',
+    'manual.max_hr': 'FC max',
+    'manual.rpe': 'Effort perçu (optionnel, 1-10)',
+    'manual.felt': 'Comment tu te sentais (optionnel)',
+    'manual.felt.easy': 'facile',
+    'manual.felt.hard': 'dur',
+    'manual.felt.strong': 'fort',
+    'manual.felt.flat': 'plat',
+    'manual.felt.sore': 'courbatures',
+    'manual.felt.sick': 'malade',
+    'manual.notes': 'Notes (optionnel)',
+    'manual.notes_placeholder': "Jambes lourdes après le brick de vendredi, course en progression facile",
+    'manual.submit': 'Enregistrer la séance',
+    'manual.saved': '✓ Enregistrée. Rafraîchis pour la voir sur le tableau de bord.',
+    'manual.toast_saved': 'Séance enregistrée',
+    'manual.err_date': 'Choisis une date.',
+    'manual.err_duration': 'La durée est requise (minutes).',
+    'manual.err_save': 'Échec de la sauvegarde : {msg}',
+
+    // Settings (section headers)
+    'settings.title': 'Paramètres',
+    'settings.section.language': 'Langue',
+    'settings.section.profile': 'Profil',
+    'settings.section.personal': 'Infos personnelles',
+    'settings.section.goals': 'Objectifs & course',
+    'settings.section.benchmarks': 'Repères',
+    'settings.section.equipment': 'Matériel',
+    'settings.section.connections': 'Connexions',
+    'settings.section.subscription': 'Abonnement',
+    'settings.section.notifications': 'Notifications',
+    'settings.section.privacy': 'Confidentialité & données',
+    'settings.section.account': 'Suppression du compte',
+
+    // Pro upsell
+    'pro.feature_gate.coach_chat.title': 'Le chat Coach est une fonction Pro',
+    'pro.feature_gate.coach_chat.desc': "Passe Pro pour discuter sans limite avec ton coach IA.",
+  },
+};
+
+// Pick the active translation, fall back to English, finally to the key itself.
+// `params` substitutes {placeholder} tokens in the string.
+function t(key, params) {
+  const lang = (state.locale && I18N[state.locale]) ? state.locale : 'en';
+  let s = I18N[lang][key];
+  if (s == null) s = I18N.en[key];
+  if (s == null) s = key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      s = s.split('{' + k + '}').join(String(v));
+    }
+  }
+  return s;
+}
+
+// Walks the DOM and replaces text/attrs for elements tagged with data-i18n.
+// Call after rendering a page or after setLocale changes.
+function applyI18nToDom(root) {
+  const r = root || document;
+  r.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+  r.querySelectorAll('[data-i18n-attr]').forEach(el => {
+    // Format: "placeholder:key" or multi: "placeholder:key,aria-label:key2"
+    const spec = el.getAttribute('data-i18n-attr') || '';
+    spec.split(',').forEach(pair => {
+      const [attr, key] = pair.split(':').map(s => s && s.trim());
+      if (attr && key) el.setAttribute(attr, t(key));
+    });
+  });
+}
+
+// Detect initial locale: profile.locale > localStorage > navigator > 'en'.
+// Runs before any UI renders so the first paint is in the right language.
+function detectInitialLocale() {
+  try {
+    const stored = localStorage.getItem('stryxs_locale');
+    if (stored === 'en' || stored === 'fr') return stored;
+  } catch (_) {}
+  const nav = (navigator.language || '').toLowerCase();
+  if (nav.startsWith('fr')) return 'fr';
+  return 'en';
+}
+
+// Set the active locale, persist locally + on profile, re-apply to DOM.
+async function setLocale(loc, opts) {
+  if (loc !== 'en' && loc !== 'fr') return;
+  state.locale = loc;
+  try { localStorage.setItem('stryxs_locale', loc); } catch (_) {}
+  applyI18nToDom();
+  // Update <html lang> for accessibility + browser hints
+  try { document.documentElement.setAttribute('lang', loc); } catch (_) {}
+  // Persist to profile if user is signed in (non-blocking)
+  if (state.user && !opts?.skipDbWrite) {
+    try {
+      await sb.from('profiles').update({ locale: loc }).eq('id', state.user.id);
+    } catch (e) { console.warn('[Stryxs] locale DB write failed (non-fatal):', e); }
+  }
+  // Re-render the currently-active page so dynamic strings re-flow
+  try {
+    if (typeof rerenderActivePage === 'function') rerenderActivePage();
+  } catch (_) {}
+}
+
+function rerenderActivePage() {
+  const active = document.querySelector('.page.active');
+  const id = active?.id || '';
+  // Map page id → its render function, where one exists
+  if (id === 'page-dashboard' && typeof renderDashboard === 'function') renderDashboard();
+  else if (id === 'page-coach' && typeof renderCoach === 'function') renderCoach();
+  else if (id === 'page-settings' && typeof renderSettings === 'function') renderSettings();
+  else if (id === 'page-upload' && typeof renderTodaysAnalyses === 'function') renderTodaysAnalyses();
+  else if (id === 'page-history' && typeof renderHistory === 'function') renderHistory();
+  else if (id === 'page-trends' && typeof renderTrends === 'function') renderTrends();
+  else if (id === 'page-plan' && typeof renderPlan === 'function') renderPlan();
+}
+
+// Apply initial locale BEFORE first render so users get the right language immediately.
+state.locale = detectInitialLocale();
+try { document.documentElement.setAttribute('lang', state.locale); } catch (_) {}
 
 function toast(msg, durationMs = 2800) {
   const t = document.getElementById('toast');
@@ -4863,7 +5224,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v45',
+      app_version: 'v48',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -4939,9 +5300,15 @@ async function loadProfile() {
     proUntil: data.pro_until || null,
     stripeCustomerId: data.stripe_customer_id || null,
     stripeSubscriptionId: data.stripe_subscription_id || null,
+    // ─── Locale (UI language) ───
+    locale: (data.locale === 'fr' || data.locale === 'en') ? data.locale : null,
   };
   if (data.name) state.user.name = data.name;
   if (data.display_name) state.user.name = data.display_name;
+  // Apply profile locale (overrides browser/localStorage default) — non-blocking, skip DB write.
+  if (state.profile.locale && state.profile.locale !== state.locale) {
+    setLocale(state.profile.locale, { skipDbWrite: true });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5626,6 +5993,69 @@ async function doSignup() {
   toast(`Welcome, ${name}!`);
   showApp();
   navigate('dashboard');
+  // First-time language picker. Fresh signups never have profile.locale set yet
+  // (DB default is 'en' but we treat it as "not chosen"), so we ask once.
+  // The choice is saved to profiles.locale immediately + translates the UI live.
+  showLanguagePickerIfFirstTime();
+}
+
+// Show the language picker modal exactly once per user. Sets a localStorage
+// flag so we don't ask again — the Settings → Language section is the place
+// to change it after this.
+function showLanguagePickerIfFirstTime() {
+  if (!state.user) return;
+  const flagKey = `stryxs_lang_picker_shown_${state.user.id}`;
+  let shown = false;
+  try { shown = localStorage.getItem(flagKey) === '1'; } catch (_) {}
+  if (shown) return;
+  showLanguagePickerModal();
+  try { localStorage.setItem(flagKey, '1'); } catch (_) {}
+}
+
+// Renders the language picker as a centered modal. Two big buttons.
+// On select: saves to profile + localStorage + re-renders the active page.
+function showLanguagePickerModal() {
+  // Remove any existing instance
+  document.getElementById('langPickerModal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'langPickerModal';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 26px 22px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 22px;">🌐</span>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text);">${t('lang.picker.title')}</div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 18px;">${t('lang.picker.subtitle')}</div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button onclick="pickLanguage('en')" class="lang-pick-btn" data-lang="en" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left;">
+          <span style="font-size: 22px;">🇬🇧</span>
+          <span>English</span>
+        </button>
+        <button onclick="pickLanguage('fr')" class="lang-pick-btn" data-lang="fr" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left;">
+          <span style="font-size: 22px;">🇫🇷</span>
+          <span>Français</span>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function pickLanguage(loc) {
+  await setLocale(loc);
+  trackEvent('language_picked', { locale: loc, source: 'signup_modal' });
+  document.getElementById('langPickerModal')?.remove();
+}
+
+// Called from Settings → Language buttons. Same as pickLanguage but with a
+// confirmation toast since there's no modal closing to signal success.
+async function pickLanguageFromSettings(loc) {
+  if (loc === state.locale) return; // already on this language, no-op
+  await setLocale(loc);
+  trackEvent('language_picked', { locale: loc, source: 'settings' });
+  toast(t('lang.settings.saved'));
 }
 
 // Toggle password input visibility. Swaps the input's type between password
@@ -7418,28 +7848,28 @@ function renderManualEntryForm() {
   const todayStr = getClientToday(); // YYYY-MM-DD in local tz
 
   const sportOptions = [
-    { key: 'run', label: 'Run', emoji: '🏃' },
-    { key: 'bike', label: 'Bike', emoji: '🚴' },
-    { key: 'swim', label: 'Swim', emoji: '🏊' },
-    { key: 'strength', label: 'Strength', emoji: '💪' },
-    { key: 'other', label: 'Other', emoji: '⚡' },
+    { key: 'run', emoji: '🏃' },
+    { key: 'bike', emoji: '🚴' },
+    { key: 'swim', emoji: '🏊' },
+    { key: 'strength', emoji: '💪' },
+    { key: 'other', emoji: '⚡' },
   ];
 
   container.innerHTML = `
     <div style="padding: 14px; background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(80, 130, 255, 0.15); border-radius: 10px; margin-bottom: 16px;">
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-        <strong style="color: var(--text);">Log a workout by hand.</strong> Useful if you don't want to use Strava or just want to log something quick. Coach reads these like any other workout.
+        <strong style="color: var(--text);">${t('manual.header')}</strong> ${t('manual.header_sub')}
       </div>
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 16px;">
       <!-- Sport picker -->
       <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Sport</label>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.sport')}</label>
         <div id="manualSportChips" style="display: flex; gap: 6px; flex-wrap: wrap;">
           ${sportOptions.map(s => `
             <button type="button" data-sport="${s.key}" onclick="selectManualSport('${s.key}')" class="manual-sport-chip ${s.key === 'run' ? 'active' : ''}" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: 13px; cursor: pointer; transition: all 0.15s;">
-              <span>${s.emoji}</span><span>${s.label}</span>
+              <span>${s.emoji}</span><span>${t('manual.sport.' + s.key)}</span>
             </button>
           `).join('')}
         </div>
@@ -7448,11 +7878,11 @@ function renderManualEntryForm() {
       <!-- Date + Duration row -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Date</label>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.date')}</label>
           <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Duration (min)</label>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.duration')}</label>
           <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
       </div>
@@ -7460,22 +7890,22 @@ function renderManualEntryForm() {
       <!-- Distance + Avg HR + Max HR row -->
       <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Distance (${distUnit})</label>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.distance', { unit: distUnit })}</label>
           <input type="number" id="manualDistance" min="0" step="0.1" inputmode="decimal" placeholder="8.0" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Avg HR</label>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.avg_hr')}</label>
           <input type="number" id="manualAvgHr" min="40" max="230" step="1" inputmode="numeric" placeholder="148" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Max HR</label>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.max_hr')}</label>
           <input type="number" id="manualMaxHr" min="40" max="230" step="1" inputmode="numeric" placeholder="172" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
       </div>
 
       <!-- Perceived effort (RPE) -->
       <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Perceived effort (optional, 1-10)</label>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.rpe')}</label>
         <div id="manualRpeRow" style="display: flex; gap: 4px; flex-wrap: wrap;">
           ${[1,2,3,4,5,6,7,8,9,10].map(n => `
             <button type="button" data-rpe="${n}" onclick="selectManualRpe(${n})" class="manual-rpe-chip" style="flex: 1; min-width: 32px; padding: 8px 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer;">${n}</button>
@@ -7485,23 +7915,23 @@ function renderManualEntryForm() {
 
       <!-- How it felt -->
       <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">How it felt (optional)</label>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.felt')}</label>
         <div id="manualFeltRow" style="display: flex; gap: 6px; flex-wrap: wrap;">
           ${['easy','hard','strong','flat','sore','sick'].map(f => `
-            <button type="button" data-felt="${f}" onclick="toggleManualFeltChip('${f}')" class="manual-felt-chip" style="padding: 8px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; cursor: pointer; text-transform: capitalize;">${f}</button>
+            <button type="button" data-felt="${f}" onclick="toggleManualFeltChip('${f}')" class="manual-felt-chip" style="padding: 8px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; cursor: pointer; text-transform: capitalize;">${t('manual.felt.' + f)}</button>
           `).join('')}
         </div>
       </div>
 
       <!-- Notes -->
       <div>
-        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Notes (optional)</label>
-        <textarea id="manualNotes" rows="2" placeholder="Legs felt heavy after Friday brick, easy progression run" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.notes')}</label>
+        <textarea id="manualNotes" rows="2" placeholder="${t('manual.notes_placeholder')}" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
       </div>
 
       <!-- Submit -->
       <div style="display: flex; gap: 10px; margin-top: 4px;">
-        <button class="btn" onclick="submitManualWorkout(this)" style="flex: 1;">Save workout</button>
+        <button class="btn" onclick="submitManualWorkout(this)" style="flex: 1;">${t('manual.submit')}</button>
       </div>
 
       <div id="manualEntryStatus" style="font-size: 12px; color: var(--text-mute); min-height: 16px;"></div>
@@ -7560,8 +7990,8 @@ async function submitManualWorkout(btn) {
   const notes = (notesEl?.value || '').trim();
 
   // Minimum required: sport (default 'run'), date, duration > 0
-  if (!date) { statusEl.textContent = 'Pick a date.'; statusEl.style.color = '#f87171'; return; }
-  if (!durationMin || durationMin <= 0) { statusEl.textContent = 'Duration is required (minutes).'; statusEl.style.color = '#f87171'; return; }
+  if (!date) { statusEl.textContent = t('manual.err_date'); statusEl.style.color = '#f87171'; return; }
+  if (!durationMin || durationMin <= 0) { statusEl.textContent = t('manual.err_duration'); statusEl.style.color = '#f87171'; return; }
 
   // Convert distance to km for storage (rest of app expects km)
   let distanceKm = null;
@@ -7631,16 +8061,16 @@ async function submitManualWorkout(btn) {
     trackEvent('manual_workout_logged', { sport: manualEntryState.sport, has_distance: distanceKm != null, has_hr: avgHr != null, classification });
 
     statusEl.style.color = 'var(--accent)';
-    statusEl.textContent = '✓ Saved. Refresh to see it on the dashboard.';
-    toast('Workout saved');
+    statusEl.textContent = t('manual.saved');
+    toast(t('manual.toast_saved'));
 
     // Reset the form for the next entry (keep panel open, the user might log another)
     setTimeout(() => { renderManualEntryForm(); }, 800);
   } catch (err) {
     console.error('[Stryxs] manual workout save failed:', err);
     statusEl.style.color = '#f87171';
-    statusEl.textContent = 'Save failed: ' + (err.message || 'unknown');
-    if (btn) { btn.disabled = false; btn.textContent = 'Save workout'; }
+    statusEl.textContent = t('manual.err_save', { msg: err.message || 'unknown' });
+    if (btn) { btn.disabled = false; btn.textContent = t('manual.submit'); }
   }
 }
 
@@ -9204,12 +9634,12 @@ async function renderDashboard() {
       rec.innerHTML = `
         <div class="empty">
           <div class="empty-icon">📊</div>
-          <div class="empty-title">Log your first workout to get going</div>
-          <div class="empty-desc" style="margin-bottom: 18px;">Coach needs at least one workout to give you real feedback. Pick whichever works for you.</div>
+          <div class="empty-title">${t('dash.empty.title')}</div>
+          <div class="empty-desc" style="margin-bottom: 18px;">${t('dash.empty.subtitle')}</div>
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
-            <button class="btn ghost" onclick="navigate('upload')">Log manually</button>
-            <button class="btn ghost" onclick="navigate('upload')">Upload watch file</button>
+            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">${t('dash.empty.cta_strava')}</button>
+            <button class="btn ghost" onclick="navigate('upload')">${t('dash.empty.cta_manual')}</button>
+            <button class="btn ghost" onclick="navigate('upload')">${t('dash.empty.cta_upload')}</button>
           </div>
         </div>`;
     } else {
@@ -13030,14 +13460,14 @@ async function completeIntake() {
 function renderCoachInputRow(gate) {
   if (gate.allowed) {
     const trialHint = gate.isFreeTrial
-      ? `<div style="font-size: 11px; color: var(--text-mute); padding: 4px 6px 0; line-height: 1.4;">✨ Free Coach trial, ${gate.remaining} message${gate.remaining === 1 ? '' : 's'} left. Upgrade to Pro for unlimited chat.</div>`
+      ? `<div style="font-size: 11px; color: var(--text-mute); padding: 4px 6px 0; line-height: 1.4;">${t('coach.trial.hint', { remaining: gate.remaining, plural: gate.remaining === 1 ? '' : 's' })}</div>`
       : '';
     return `
       <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
         ${trialHint}
         <div style="display: flex; gap: 8px; align-items: flex-end;">
-          <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
-          <button class="btn" onclick="sendChatMsg()">Send</button>
+          <textarea id="chatInput" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
+          <button class="btn" onclick="sendChatMsg()">${t('common.send')}</button>
         </div>
       </div>
     `;
@@ -13046,9 +13476,9 @@ function renderCoachInputRow(gate) {
   return `
     <div style="flex: 1; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 18px;">🔒</span>
-      <span>You've used your ${FREE_COACH_TRIAL_LIMIT} free Coach messages. Upgrade to Pro for unlimited chat.</span>
+      <span>${t('coach.trial.exhausted', { limit: FREE_COACH_TRIAL_LIMIT })}</span>
     </div>
-    <button class="btn" onclick="navigate('upgrade')" style="white-space: nowrap;">Upgrade</button>
+    <button class="btn" onclick="navigate('upgrade')" style="white-space: nowrap;">${t('common.upgrade')}</button>
   `;
 }
 
@@ -13082,11 +13512,11 @@ async function renderCoachChat(el, intake) {
 
   el.innerHTML = `
     <div class="coach-hero coach-hero-chat">
-      <div class="coach-hero-mobile-title">Coach</div>
+      <div class="coach-hero-mobile-title">${t('coach.tab.title')}</div>
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
-        <h2>Coach</h2>
-        <p>Your AI endurance coach. Ask anything about your training, a workout, or how to improve.</p>
+        <h2>${t('coach.tab.title')}</h2>
+        <p>${t('coach.tab.subtitle')}</p>
       </div>
     </div>
 
@@ -13627,7 +14057,7 @@ async function sendChatMsg() {
   // Defense in depth, free users get FREE_COACH_TRIAL_LIMIT messages, then Pro wall.
   const gate = await canSendCoachMsg();
   if (!gate.allowed) {
-    toast(`You've used your ${FREE_COACH_TRIAL_LIMIT} free Coach messages. Upgrade to keep chatting.`, 5000);
+    toast(t('coach.trial.exhausted', { limit: FREE_COACH_TRIAL_LIMIT }), 5000);
     navigate('upgrade');
     return;
   }
@@ -18274,6 +18704,36 @@ async function renderSettings() {
   }
 
   el.innerHTML = `
+    <!-- Language Section (added v48) -->
+    <div class="settings-section" id="section-language">
+      <div class="settings-section-header" onclick="toggleSettingsSection('language')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🌐</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">${t('lang.settings.title')}</div>
+            <div class="settings-section-sub">${t('lang.settings.sub')}</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button onclick="pickLanguageFromSettings('en')" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${state.locale === 'en' ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${state.locale === 'en' ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${state.locale === 'en' ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left;">
+              <span style="font-size: 20px;">🇬🇧</span>
+              <span style="flex: 1;">English</span>
+              ${state.locale === 'en' ? '<span style="font-size: 14px;">✓</span>' : ''}
+            </button>
+            <button onclick="pickLanguageFromSettings('fr')" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${state.locale === 'fr' ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${state.locale === 'fr' ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${state.locale === 'fr' ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left;">
+              <span style="font-size: 20px;">🇫🇷</span>
+              <span style="flex: 1;">Français</span>
+              ${state.locale === 'fr' ? '<span style="font-size: 14px;">✓</span>' : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Profile Section -->
     <div class="settings-section expanded" id="section-profile">
       <div class="settings-section-header" onclick="toggleSettingsSection('profile')">
@@ -21029,6 +21489,9 @@ function animateShowcase() {
 (async function init() {
   initUpload();
   initReveals();
+  // Apply the detected initial locale to all static [data-i18n] elements
+  // before anything else paints. The first frame is in the right language.
+  applyI18nToDom();
 
   // Check if this is a public share URL, supports both /share/{token} and ?share={token}
   const path = window.location.pathname;
