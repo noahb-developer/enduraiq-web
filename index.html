@@ -4839,13 +4839,18 @@ const I18N = {
     'manual.sport.run': 'Run',
     'manual.sport.bike': 'Bike',
     'manual.sport.swim': 'Swim',
-    'manual.sport.strength': 'Strength',
+    'manual.sport.strength': 'Gym',
     'manual.sport.other': 'Other',
     'manual.date': 'Date',
     'manual.duration': 'Duration (min)',
     'manual.distance': 'Distance ({unit})',
     'manual.avg_hr': 'Avg HR',
     'manual.max_hr': 'Max HR',
+    'manual.distance_opt': 'Distance ({unit}) (optional)',
+    'manual.avg_hr_opt': 'Avg HR (optional)',
+    'manual.max_hr_opt': 'Max HR (optional)',
+    'manual.other_details': 'What did you do?',
+    'manual.other_details_placeholder': 'e.g. yoga, hiking, paddleboarding, climbing',
     'manual.rpe': 'Perceived effort (optional, 1-10)',
     'manual.felt': 'How it felt (optional)',
     'manual.felt.easy': 'easy',
@@ -4970,7 +4975,7 @@ const I18N = {
     'manual.header': 'Enregistre une séance à la main.',
     'manual.header_sub': "Utile si tu ne veux pas utiliser Strava ou si tu veux juste logger vite. Coach lit ces séances comme les autres.",
     'manual.sport': 'Sport',
-    'manual.sport.run': 'Course',
+    'manual.sport.run': 'Course à pied',
     'manual.sport.bike': 'Vélo',
     'manual.sport.swim': 'Natation',
     'manual.sport.strength': 'Muscu',
@@ -4980,6 +4985,11 @@ const I18N = {
     'manual.distance': 'Distance ({unit})',
     'manual.avg_hr': 'FC moy',
     'manual.max_hr': 'FC max',
+    'manual.distance_opt': 'Distance ({unit}) (optionnel)',
+    'manual.avg_hr_opt': 'FC moy (optionnel)',
+    'manual.max_hr_opt': 'FC max (optionnel)',
+    'manual.other_details': "Qu'est-ce que tu as fait ?",
+    'manual.other_details_placeholder': 'ex. yoga, randonnée, escalade, paddle',
     'manual.rpe': 'Effort perçu (optionnel, 1-10)',
     'manual.felt': 'Comment tu te sentais (optionnel)',
     'manual.felt.easy': 'facile',
@@ -6029,13 +6039,13 @@ function showLanguagePickerModal() {
       </div>
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 18px;">${t('lang.picker.subtitle')}</div>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button onclick="pickLanguage('en')" class="lang-pick-btn" data-lang="en" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left;">
-          <span style="font-size: 22px;">🇬🇧</span>
-          <span>English</span>
+        <button onclick="pickLanguage('en')" class="lang-pick-btn" data-lang="en" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; border-radius: 6px; background: var(--bg-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">EN</span>
+          <span style="flex: 1;">English</span>
         </button>
-        <button onclick="pickLanguage('fr')" class="lang-pick-btn" data-lang="fr" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left;">
-          <span style="font-size: 22px;">🇫🇷</span>
-          <span>Français</span>
+        <button onclick="pickLanguage('fr')" class="lang-pick-btn" data-lang="fr" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; border-radius: 6px; background: var(--bg-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">FR</span>
+          <span style="flex: 1;">Français</span>
         </button>
       </div>
     </div>
@@ -6049,12 +6059,46 @@ async function pickLanguage(loc) {
   document.getElementById('langPickerModal')?.remove();
 }
 
-// Called from Settings → Language buttons. Same as pickLanguage but with a
-// confirmation toast since there's no modal closing to signal success.
+// Renders the two language buttons. Extracted so we can swap them live after
+// a click without rebuilding the whole Settings page (the previous version
+// relied on rerenderActivePage which made the change feel like nothing
+// happened to the user looking right at the buttons).
+//
+// Notes on visuals:
+// - No emoji flags. Windows/Chrome on Windows render regional-indicator
+//   pairs as plain text ("GB", "FR") which looks broken next to a label.
+//   Using styled monogram badges instead, which are universal.
+// - align-items: center keeps the badge and label vertically aligned.
+function renderLanguageButtons() {
+  const langs = [
+    { code: 'en', badge: 'EN', label: 'English' },
+    { code: 'fr', badge: 'FR', label: 'Français' },
+  ];
+  return langs.map(l => {
+    const active = state.locale === l.code;
+    return `
+      <button onclick="pickLanguageFromSettings('${l.code}')"
+              style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${active ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${active ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 22px; border-radius: 6px; background: ${active ? 'rgba(0,27,20,0.18)' : 'var(--bg-2)'}; color: ${active ? '#001b14' : 'var(--text-dim)'}; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">${l.badge}</span>
+        <span style="flex: 1;">${l.label}</span>
+        ${active ? '<span style="font-size: 14px;">✓</span>' : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+// Called from Settings → Language buttons. Switches locale + retranslates
+// the entire app (data-i18n elements + active page rerender) + swaps the
+// button styling in place so the user gets immediate visible feedback.
 async function pickLanguageFromSettings(loc) {
   if (loc === state.locale) return; // already on this language, no-op
   await setLocale(loc);
   trackEvent('language_picked', { locale: loc, source: 'settings' });
+  // Swap the language buttons in place so the user SEES the change land
+  // (rerenderActivePage handles the rest of Settings, but the buttons need
+  // the new state.locale styling and active-check refresh).
+  const row = document.getElementById('languageButtonsRow');
+  if (row) row.innerHTML = renderLanguageButtons();
   toast(t('lang.settings.saved'));
 }
 
@@ -7783,7 +7827,7 @@ async function renderAutoSyncPanel() {
         </div>
         <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white; font-size: 13px; padding: 10px 14px; width: 100%; justify-content: center; margin-bottom: 8px;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
         <div style="text-align: center;">
-          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="navigate('upload')">Or upload CSV files manually →</a>
+          <a style="color: var(--text-dim); cursor: pointer; font-size: 12px;" onclick="toggleAnalyzeSection('uploadCsv')">Or upload CSV files manually →</a>
         </div>
       `;
     }
@@ -7887,20 +7931,10 @@ function renderManualEntryForm() {
         </div>
       </div>
 
-      <!-- Distance + Avg HR + Max HR row -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-        <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.distance', { unit: distUnit })}</label>
-          <input type="number" id="manualDistance" min="0" step="0.1" inputmode="decimal" placeholder="8.0" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
-        </div>
-        <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.avg_hr')}</label>
-          <input type="number" id="manualAvgHr" min="40" max="230" step="1" inputmode="numeric" placeholder="148" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
-        </div>
-        <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.max_hr')}</label>
-          <input type="number" id="manualMaxHr" min="40" max="230" step="1" inputmode="numeric" placeholder="172" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
-        </div>
+      <!-- Activity-details + Distance/HR rows. Whole block re-renders when sport changes.
+           Strength/Gym hides distance (n/a). Other shows an "activity details" text field. -->
+      <div id="manualVariableFields">
+        ${renderManualVariableFields(manualEntryState.sport, distUnit)}
       </div>
 
       <!-- Perceived effort (RPE) -->
@@ -7951,11 +7985,57 @@ function renderManualEntryForm() {
   }
 }
 
+// Variable form fields: change with the selected sport.
+// - run/bike/swim: distance + avg HR + max HR (all optional but typical)
+// - strength (Gym): no distance (n/a), HR fields kept for users who do track it
+// - other: "what did you do?" text + distance + HR (all optional)
+function renderManualVariableFields(sport, distUnit) {
+  const showDistance = sport !== 'strength';
+  const showOtherDetails = sport === 'other';
+  const cols = showDistance ? '1fr 1fr 1fr' : '1fr 1fr';
+
+  const otherDetailsRow = showOtherDetails ? `
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.other_details')}</label>
+      <input type="text" id="manualOtherDetails" placeholder="${t('manual.other_details_placeholder')}" maxlength="100" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+    </div>
+  ` : '';
+
+  const distanceCol = showDistance ? `
+    <div>
+      <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.distance_opt', { unit: distUnit })}</label>
+      <input type="number" id="manualDistance" min="0" step="0.1" inputmode="decimal" placeholder="8.0" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+    </div>
+  ` : '';
+
+  return `
+    ${otherDetailsRow}
+    <div style="display: grid; grid-template-columns: ${cols}; gap: 12px;">
+      ${distanceCol}
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.avg_hr_opt')}</label>
+        <input type="number" id="manualAvgHr" min="40" max="230" step="1" inputmode="numeric" placeholder="148" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+      </div>
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.max_hr_opt')}</label>
+        <input type="number" id="manualMaxHr" min="40" max="230" step="1" inputmode="numeric" placeholder="172" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+      </div>
+    </div>
+  `;
+}
+
 function selectManualSport(sport) {
   manualEntryState.sport = sport;
   document.querySelectorAll('#manualSportChips .manual-sport-chip').forEach(b => {
     b.classList.toggle('active', b.dataset.sport === sport);
   });
+  // Re-render the variable fields block so distance hides for Gym
+  // and the "what did you do?" input shows for Other.
+  const variable = document.getElementById('manualVariableFields');
+  if (variable) {
+    const distUnit = getUserUnits() === 'imperial' ? 'mi' : 'km';
+    variable.innerHTML = renderManualVariableFields(sport, distUnit);
+  }
 }
 
 function selectManualRpe(n) {
@@ -7976,18 +8056,20 @@ function toggleManualFeltChip(f) {
 async function submitManualWorkout(btn) {
   const dateEl = document.getElementById('manualDate');
   const durEl = document.getElementById('manualDuration');
-  const distEl = document.getElementById('manualDistance');
+  const distEl = document.getElementById('manualDistance'); // may not exist for strength
   const avgHrEl = document.getElementById('manualAvgHr');
   const maxHrEl = document.getElementById('manualMaxHr');
   const notesEl = document.getElementById('manualNotes');
+  const otherDetailsEl = document.getElementById('manualOtherDetails'); // only present when sport='other'
   const statusEl = document.getElementById('manualEntryStatus');
 
   const date = dateEl?.value;
   const durationMin = parseFloat(durEl?.value);
-  const distanceRaw = parseFloat(distEl?.value);
+  const distanceRaw = distEl ? parseFloat(distEl.value) : NaN;
   const avgHr = parseInt(avgHrEl?.value) || null;
   const maxHr = parseInt(maxHrEl?.value) || null;
   const notes = (notesEl?.value || '').trim();
+  const otherDetails = (otherDetailsEl?.value || '').trim();
 
   // Minimum required: sport (default 'run'), date, duration > 0
   if (!date) { statusEl.textContent = t('manual.err_date'); statusEl.style.color = '#f87171'; return; }
@@ -8019,6 +8101,13 @@ async function submitManualWorkout(btn) {
       }
     } catch (_) { /* non-blocking */ }
 
+    // For "other" sport, prepend the activity-details to description so Coach
+    // and the workout view know what the athlete actually did (yoga, hiking, etc).
+    let description = notes || null;
+    if (manualEntryState.sport === 'other' && otherDetails) {
+      description = notes ? `${otherDetails}. ${notes}` : otherDetails;
+    }
+
     // Build the workout object — mirrors fields the rest of the app reads
     const workout = {
       sport: manualEntryState.sport,
@@ -8027,7 +8116,8 @@ async function submitManualWorkout(btn) {
       distance: distanceKm,  // km
       avgHr: avgHr,
       maxHr: maxHr,
-      description: notes || null,
+      description: description,
+      activity_subtype: (manualEntryState.sport === 'other' && otherDetails) ? otherDetails : null,
       source: 'manual',
       activity_classification: classification,
       _logged_at: new Date().toISOString(),
@@ -18704,36 +18794,6 @@ async function renderSettings() {
   }
 
   el.innerHTML = `
-    <!-- Language Section (added v48) -->
-    <div class="settings-section" id="section-language">
-      <div class="settings-section-header" onclick="toggleSettingsSection('language')">
-        <div class="settings-section-header-left">
-          <div class="settings-section-icon">🌐</div>
-          <div class="settings-section-text">
-            <div class="settings-section-title">${t('lang.settings.title')}</div>
-            <div class="settings-section-sub">${t('lang.settings.sub')}</div>
-          </div>
-        </div>
-        <div class="settings-section-chevron">›</div>
-      </div>
-      <div class="settings-section-body">
-        <div class="settings-section-inner">
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button onclick="pickLanguageFromSettings('en')" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${state.locale === 'en' ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${state.locale === 'en' ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${state.locale === 'en' ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left;">
-              <span style="font-size: 20px;">🇬🇧</span>
-              <span style="flex: 1;">English</span>
-              ${state.locale === 'en' ? '<span style="font-size: 14px;">✓</span>' : ''}
-            </button>
-            <button onclick="pickLanguageFromSettings('fr')" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${state.locale === 'fr' ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${state.locale === 'fr' ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${state.locale === 'fr' ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left;">
-              <span style="font-size: 20px;">🇫🇷</span>
-              <span style="flex: 1;">Français</span>
-              ${state.locale === 'fr' ? '<span style="font-size: 14px;">✓</span>' : ''}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Profile Section -->
     <div class="settings-section expanded" id="section-profile">
       <div class="settings-section-header" onclick="toggleSettingsSection('profile')">
@@ -19103,6 +19163,27 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Language Section (sits under Connections, less critical than HR/Goals) -->
+    <div class="settings-section" id="section-language">
+      <div class="settings-section-header" onclick="toggleSettingsSection('language')">
+        <div class="settings-section-header-left">
+          <div class="settings-section-icon">🌐</div>
+          <div class="settings-section-text">
+            <div class="settings-section-title">${t('lang.settings.title')}</div>
+            <div class="settings-section-sub">${t('lang.settings.sub')}</div>
+          </div>
+        </div>
+        <div class="settings-section-chevron">›</div>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-section-inner">
+          <div id="languageButtonsRow" style="display: flex; flex-direction: column; gap: 10px;">
+            ${renderLanguageButtons()}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- HR Zones Section -->
     <div class="settings-section" id="section-hr">
       <div class="settings-section-header" onclick="toggleSettingsSection('hr')">
@@ -19258,7 +19339,7 @@ async function renderSettings() {
     <div class="settings-section" id="section-danger">
       <div class="settings-section-header" onclick="toggleSettingsSection('danger')">
         <div class="settings-section-header-left">
-          <div class="settings-section-icon" style="color: #f87171;">🗑</div>
+          <div class="settings-section-icon" style="color: #f87171;">⚠️</div>
           <div class="settings-section-text">
             <div class="settings-section-title" style="color: #f87171;">Account deletion</div>
             <div class="settings-section-sub">Permanently delete your account and all data</div>
