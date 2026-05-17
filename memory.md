@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-16, end of brief verify-and-plan session. Discord preview confirmed working. Coach quality deep-dive queued for 2026-05-17. See section 10.
+> Last updated: 2026-05-17, end of Coach quality deep-dive (Areas 1-3 all shipped). Frontend v40, Coach edge function refreshed, send-followups has weekly insights branch, Strava sync now captures full detail. See section 10.
 
 ---
 
@@ -76,7 +76,7 @@ Picked via `pickPersona(goal_event)` in Coach. Each persona has its own intensit
 ### Database tables (all in `public` schema)
 - `profiles` — name, run_lthr, bike_lthr, subscription_tier, trial_ends_at, pro_until, **notif_workout_reminder, notif_workout_reminder_time, notif_timezone** (notif columns from migrate_v3)
 - `athlete_intake` — full intake answers (goal_event, race_date, current_weekly_hours, available_days, equipment, experience_level, race_experience, injuries, age, sex, weight_kg, PBs, preferred_long_day, goal_time, lthr_choice, plan_path, completed, insights_last_generated_at)
-- `workouts` — synced/imported workout data, `id` is **uuid**, `workout_data` is jsonb
+- `workouts` — synced/imported workout data, `id` is **uuid**, `workout_data` is jsonb. As of 2026-05-17, Strava-sourced rows newly created can also carry `polyline`, `description`, `perceived_exertion`, `suffer_score`, `gear_name`, `gear_id`, `sport_type`, `splits` (per-km), `avgPower`, `maxPower`, `normalizedPower`, `avgWatts`, `avgTemp`, `total_photo_count`. Historical rows synced before 2026-05-17 don't have these fields yet (backfill action pending).
 - `planned_workouts` — `id` is **uuid**. Columns include `scheduled_date`, `sport`, `workout_type`, `duration_minutes`, `distance_km`, `description`, `intensity_target`, `completed`, **`skipped`, `skip_reason`, `skipped_at`** (skip cols from migrate_v2)
 - `training_plans` — generated plans, `plan_data` jsonb
 - `coach_messages` — chat history with Coach
@@ -171,10 +171,11 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v37 — 924,069 bytes (post round-3 audit; live in repo `noahb-developer/stryxs` as `index.html`)
-- **Coach:** `coach_v8.ts` — 151,983 bytes
+- **Frontend:** `index.html` v40 — 944,878 bytes (post Coach quality pass; live in repo `noahb-developer/stryxs` as `index.html`)
+- **Coach edge function:** 154,682 bytes (was 151,983 as coach_v8). Now has bucketed reactivity-message routing in frontend, severity-tuned analyzePatterns, workoutCommentary accepts activeInsights, dispatcher accepts both `allWorkouts`/`recentWorkouts` aliases. Effectively v9 but file is just `index.ts` in `coach/`.
 - **send-reminders:** 8,433 bytes, deployed, working
-- **send-followups:** 18,677 bytes, deployed, working (returned `success: True` on test fire)
+- **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
+- **strava edge function:** 49,977 bytes (was ~44 KB). Now requests `watts`/`latlng`/`temp` streams, captures polyline + description + perceived_exertion + suffer_score + gear + splits_metric + avgPower + maxPower + normalizedPower into workout_data. Bulk sync fetches detail endpoint per new activity (webhook already did).
 - **site.webmanifest:** 576 bytes (was 456 — fixed name from "MyWebSite" to "Stryxs", added start_url/scope/id)
 - **sw.js:** 2,859 bytes (was 2,827 — fixed icon paths)
 - **vercel.json:** 427 bytes (added SPA catch-all rewrite)
@@ -293,39 +294,69 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 PENDING for next session (2026-05-17) — COACH QUALITY DEEP-DIVE
+### 🔜 PENDING for next session
 
-**Noah's mandate (end-of-session 2026-05-16):** "The coaches are the most important thing. This is why people will pay for this app. If it messes up, doesn't do something, or overloads, we are cooked." Coach quality > everything else for the next session. Beta users will catch UI bugs; only Noah + Claude can audit Coach behavior depth.
+**1. Strava historical backfill** (queued, will be tackled right after this memory update)
+Existing workouts synced before 2026-05-17 don't have the new fields (polyline / description / perceived_exertion / suffer_score / gear / splits / power). Plan:
+- Add `backfill_details` action to strava edge function
+- Finds user's Strava workouts where `polyline` is null (proxy for "synced pre-3a")
+- For each (cap ~50/call to stay within Strava 100/15min rate limit): fetch detail endpoint, rebuild workout_data preserving classification + completed/skipped state, update
+- Frontend: button in Settings → Strava section, "Update older workouts with new data fields". Toast progress, prompt to click again if more remaining.
 
-Three audit areas, in priority order:
+**2. Pro upsell tuning**
+Pass 3b put a Pro upsell card at the bottom of free-user workout views. Beta testers used to see drift / Coach's Read narrative for free; they don't now. Risk: feels like a regression. Watch beta feedback. If it lands poorly: tone down to inline "✨" badge, OR roll back the gate entirely and find a different Pro lever, OR A/B test post-launch.
 
-**1. Coach reactivity to mid-plan user changes**
-When a user changes intake AFTER a plan exists (adds "got a bike", new pool access, injury, new PB, available_days change, equipment change, etc.), Coach must:
-- Detect the change (today: `detectImportantSettingsChanges` in `index.html`, expanded in v36)
-- Make a judgment: does the plan need modifying or not?
-- Either modify the plan, OR proactively tell the user "noted, no change needed, here's why"
-- Today's likely gap: detection exists, but the "Coach decides + acts" loop after detection is unclear. Trace `detectImportantSettingsChanges` callers — does it just fire a chat message, or does it actually invoke `apply_chat_correction` / regenerate sections of the plan? Map the full flow.
+**3. workout_feedback UI** (still deferred from May 2026 backlog)
+Table exists, no UI captures it. Coach doesn't read it. Adding it gives Coach a subjective-effort signal separate from HR/pace. ~30 min build per memory section 7.
 
-**2. Insights system end-to-end**
-- Backend: `analyzePatterns` writes to `training_insights` (was fixed in Coach v8 — verify it actually populates with real workout data).
-- UI surface: `renderInsightsMiniCard` shows them. Confirm the card is good — readable, actionable, not noisy.
-- **Coach context: does Coach READ insights when chatting / `workoutCommentary` / generating plans?** Or are insights orphaned in their own UI card with no influence on Coach output? This is the big question.
-- Severity tuning: Coach must NOT be harsh. `urgent` reserved for safety (overtraining flags, injury risk). Default to `actionable` or `info`. Audit `analyzePatterns` severity assignment logic.
-- Insights should influence plan modifications, not just display passively. Verify the loop.
+**4. Verify email branding** (still deferred)
+Noah still hasn't checked whether signup verify email is on Resend or Supabase default. Supabase Studio → Authentication → Emails → SMTP settings.
 
-**3. Strava data — show in-app, never "go look at Strava"**
-- Audit every place frontend currently links OUT to Strava instead of displaying the data inline. Grep for `strava.com/activities`, "view on Strava", external link icons in workout views.
-- Workout detail view must surface every metric Strava gives us: HR zones + time in each, splits/laps, power (cycling), elevation gain/profile, cadence, perceived effort if logged on Strava side, weather if synced.
-- Coach context block: when Coach comments on a workout or builds the next one, it must have access to that rich Strava data — not just duration/distance.
-- **Value-prop framing:** if users have to click out to Strava for detail, they could just use Strava alone. The app must be the destination for workout review.
+### What 2026-05-17 delivered — Coach quality deep-dive (full sprint)
 
-**How to approach tomorrow:**
-- Start with `coach_v8.ts` reads: chat context block, `analyzePatterns`, `workoutCommentary`, `generatePlan`, settings-change handling, insights-into-context flow.
-- Then `index.html`: insights UI (`renderInsightsMiniCard` + surrounding), workout detail view, every Strava deep-link reference, `detectImportantSettingsChanges` flow.
-- Noah offered to do deep research in claude.ai chat for methodology questions ("how should a Friel-style coach react to athlete adding equipment mid-plan", etc.) — invoke that when judging what "good Coach reaction" actually looks like.
-- Likely outputs: changes to `coach_v8.ts` (chat context block, insights reading, severity logic) + frontend changes (rich workout detail view, removed Strava deep-links).
+**Three areas attacked end-to-end:** Coach reactivity to settings changes, insights system, Strava data depth. Each area shipped in clean independent deploys. Noah opted out of manual testing — beta users will catch issues. Total: 4 commits to main (frontend v38, v39, v40 + memory) + 3 edge function deploys (coach, send-followups, strava).
 
-**Deploy status end-of-session 2026-05-16:** No code changes this session. Frontend v37 and Coach v8 unchanged. Last commit `28346ce` (before memory update). Nothing to push to Vercel.
+#### Area 1 — Coach reactivity (frontend v38, commit `2198899`)
+`detectImportantSettingsChanges` already caught everything, but `sendCoachReactiveMessage` was one-size-fits-all (every change spawned the same "want me to regen?" chat call). Now routes by bucket:
+- **SILENT** (run_lthr, bike_lthr, weight_kg, lthr_choice, preferred_long_day): no message, no AI call. These are absorbed by storage. Saves ~1.5K tokens per save.
+- **NOTIFY** (pb_5k, pb_10k, pb_half, pb_marathon, last_race, injuries): brief Coach acknowledgment via focused prompt, no regen button. Prompt explicitly instructs Coach not to celebrate slower PBs and not to propose plan changes for injuries.
+- **ASK** (equipment, goal_event, race_date, experience_level, current_weekly_hours, available_days, goal_time): Coach proposes regen + button (existing flow), now also fetches next 7 planned workouts and passes to Coach so it can name specific impacted sessions.
+- Combined ASK + NOTIFY in one save folds into a single message instead of two.
+
+Net token effect: saves with only SILENT changes cost 0 tokens (was 1.5K). Average save is cheaper AND Coach feels more proactive.
+
+#### Area 2 — Insights overhaul (Coach edge + send-followups + frontend v39, commit `5ef0b59`)
+**Latent bug found and fixed:** Frontend sent `payload.allWorkouts` and `payload.userDismissalHistory`, but `analyze_patterns` dispatcher read `payload.recentWorkouts` and ignored dismissals. Net result: analyzePatterns got an empty workouts array and returned `{patterns: [], data_sufficiency: 'low'}` every time. **Insights were silently broken since v8.** Dispatcher now accepts both key names (`allWorkouts || recentWorkouts || []`) and forwards `userDismissalHistory`.
+
+Other Area 2 changes:
+- Severity rule strict-tuned in `analyzePatterns` prompt: `urgent` reserved for genuine safety (overtraining >=2 weeks, injury risk patterns, race readiness AND <4 weeks AND missed key workouts). Default `actionable`. `info` for positives only. Explicit "you are a coach, not an alarm system" tone rule.
+- `workoutCommentary` now accepts `activeInsights` param. Frontend fetches up to 5 active insights before calling and passes them. Coach is instructed to tie an insight to the workout only when DIRECTLY relevant ("this run lines up with the drift pattern from last week"), and stay silent otherwise. Never list.
+- **Sunday weekly insights cron:** `send-followups` (existing daily 14:00 UTC cron) now has an `isSunday` branch that runs `analyze_patterns` for every user who logged a workout in the past 7 days. Mirrors frontend's manual regenerate flow (TREND_PATTERN_TYPES marked stale, fresh ones inserted, `insights_last_generated_at` bumped, info-only generic patterns filtered out). New helpers `refreshInsightsForUser` + `getUsersWithRecentWorkouts`.
+
+Token cost: ~5K per active user per week ≈ $2/week at 100 active users. Well under per-user $5 cap.
+
+#### Area 3 — Strava data depth (strava edge + frontend v40, commit `0568dbb`)
+
+**Pass 3a — backend data capture (strava edge function):**
+- Streams request expanded: now also pulls `watts`, `latlng`, `temp` (per-second arrays from Strava)
+- `synthesizeLaps` captures power per lap from `watts` stream
+- `enrichWithDeepAnalysis` summary computes `avgPower`, `maxPower`, and a true Normalized Power (30-sec rolling avg, ^4, mean, ^0.25)
+- `analyzeBike` surfaces those power numbers on the analysis output
+- `stravaActivityToWorkout` now captures detail-endpoint fields: `polyline`, `description`, `perceived_exertion`, `suffer_score`, `gear_name`, `gear_id`, `sport_type`, `splits` (per-km, normalized from `splits_metric`), `total_photo_count`, `avgWatts`, `avgTemp`
+- `importActivity` heuristically detects whether the passed activity is summary or detailed (looks for map.polyline / description / gear / splits_metric) and fetches detail endpoint when summary. Webhook path already had detail, skips the extra fetch. Bulk sync now upgrades automatically. Extra cost: 1 API call per NEW activity import.
+
+**Pass 3b — frontend display (index.html v40):**
+- New render helpers: `decodePolyline` + `renderGpsMapPreview` (SVG route, no map tiles needed), `renderHrZoneBars` (horizontal bars), `renderSplitsTable` (per-km/per-lap table), `renderPowerStats` (avg/max free, NP Pro), `renderWorkoutMeta` (RPE/suffer/gear/photos/temp chips + description block), `renderStravaFooter` (single tiny "Open on Strava"), `renderProUpsell` (single card per workout).
+- `renderSummaryWorkout`, `renderRun`, `renderBike` all rewired to use the new helpers. Old layered "View on Strava" CTAs (4+ inline mentions across the diagnostic branches) collapsed to one footer link.
+- **Pro gate v1:**
+  - Free: HR zone bars/donut, splits, basic power (avg/max), GPS map, perceived effort, gear, description, key insights (math callouts), cadence (run)
+  - Pro: Coach's Read narrative, cardiac drift number + verdict, race projection (bike), normalized power
+- Diagnostic notices for no-HR / unsupported / streams-failed are quiet one-line callouts instead of the prior "go look at Strava" banners.
+
+**Caveat:** historical Strava activities in DB don't have the new fields. New activities going forward will. Backfill action is the next-up item.
+
+### What 2026-05-17 reconsidered (not changed yet)
+- Strava `getZones` LTHR fallbacks (`lthr || 170` for run, `lthr || 165` for bike) live in the strava edge function copy of `analyzeRun`/`analyzeBike`. The frontend has its own copies of those functions. Drift detection / classification works regardless, but fallback LTHR is a guess for users without one. Not a regression, just noting.
 
 ### What 2026-05-16 confirmed (brief verify-and-plan session)
 - ✅ **Discord preview works.** Noah confirmed after pasting `https://stryxs.com/?social=1`. Hero card with green "train." accent renders.
