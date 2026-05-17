@@ -330,28 +330,6 @@ body.on-landing #landingNav { display: none !important; }
   padding: 0;
 }
 .hamburger:hover { border-color: var(--accent-border); }
-/* Small "PRO" pill shown beside the avatar in the top nav when the
-   user has an active Pro subscription. Subtle but always visible. */
-.nav-pro-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  margin-right: 8px;
-  background: rgba(0, 229, 160, 0.12);
-  border: 1px solid rgba(0, 229, 160, 0.35);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: 0.7px;
-  line-height: 1;
-  height: 18px;
-  flex-shrink: 0;
-}
-@media (max-width: 380px) {
-  /* On very small screens, hide the label and just show the dot */
-  .nav-pro-pill { padding: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 0; font-size: 0; }
-}
 .hamburger span:not(.hamburger-badge) {
   display: block; width: 16px; height: 2px;
   background: var(--text); border-radius: 2px;
@@ -3987,7 +3965,6 @@ body.on-auth .container {
       <span>Stryx<em>s</em></span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
-      <span class="nav-pro-pill" id="navProPill" style="display: none;" aria-label="Pro member">PRO</span>
       <div class="user-avatar" id="navAvatar">A</div>
     </button>
   </div>
@@ -4871,7 +4848,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v44',
+      app_version: 'v45',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5759,9 +5736,6 @@ function showApp() {
       avatarEl.textContent = initial;
     }
   }
-  // Pro pill in nav — show whenever the user is Pro (or in trial). Subtle
-  // green chip beside the avatar so users always know which tier they're on.
-  refreshNavProPill();
   // Reset projections cache state for THIS user (clears whatever was in memory from a previous session)
   _projectionsCache = null;
   _projectionsCacheTime = 0;
@@ -5783,29 +5757,6 @@ function showApp() {
   // and the activation checklist persists on the dashboard until completed.
 }
 
-// Toggle the small PRO pill next to the nav avatar. Called from showApp
-// (initial render) and any time subscription state may have changed
-// (after Stripe activation, manual Pro grant, etc.). Pure DOM read/write,
-// no async work — safe to call frequently.
-function refreshNavProPill() {
-  const pill = document.getElementById('navProPill');
-  if (!pill) return;
-  let isPro = false;
-  try { isPro = (typeof isUserPro === 'function') && isUserPro(); } catch (_) {}
-  let status = 'free';
-  try { status = (typeof getUserSubscriptionStatus === 'function') && getUserSubscriptionStatus(); } catch (_) {}
-  if (isPro && status === 'pro') {
-    pill.style.display = '';
-    pill.textContent = 'PRO';
-    pill.setAttribute('aria-label', 'Pro member');
-  } else if (isPro && status === 'trial') {
-    pill.style.display = '';
-    pill.textContent = 'TRIAL';
-    pill.setAttribute('aria-label', 'Pro trial');
-  } else {
-    pill.style.display = 'none';
-  }
-}
 
 function showLanding() {
   document.getElementById('mainNav').style.display = 'none';
