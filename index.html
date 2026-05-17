@@ -4827,7 +4827,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v37',
+      app_version: 'v38',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -18961,53 +18961,177 @@ function detectImportantSettingsChanges(oldIntake, oldProfile, newValues) {
   return changes;
 }
 
-async function sendCoachReactiveMessage(changes) {
-  try {
-    const summary = changes.map(c => `**${c.label}**: ${c.detail}`).join('\n• ');
+// ═══════════════════════════════════════════════════════════════
+// Coach reactivity to settings changes — bucketed dispatch
+//
+// Three buckets:
+//   SILENT  — change is already absorbed by storage (LTHR recomputes
+//             zones dynamically, weight + long-day pref + retest flag
+//             just sit in intake). No message, no AI call.
+//   NOTIFY  — Coach posts a brief methodology-aware acknowledgment.
+//             Used for new PBs and injury updates. No regen button —
+//             these don't require plan modification, just an ack.
+//   ASK     — Coach posts a message proposing regeneration with a
+//             button. Used for changes that genuinely require a fresh
+//             plan: equipment, goal/date, experience, hours, days, time.
+//
+// If both NOTIFY and ASK fire from one settings save, the NOTIFY
+// content is folded into the ASK message so the user sees ONE message
+// instead of two.
+// ═══════════════════════════════════════════════════════════════
+const SETTINGS_BUCKET_SILENT = new Set([
+  'run_lthr', 'bike_lthr', 'weight_kg', 'lthr_choice', 'preferred_long_day',
+]);
+const SETTINGS_BUCKET_NOTIFY = new Set([
+  'pb_5k', 'pb_10k', 'pb_half', 'pb_marathon', 'last_race', 'injuries',
+]);
+// Everything not in SILENT or NOTIFY falls into ASK.
 
-    // Generate a Coach message acknowledging the change and offering to regenerate
+function bucketizeSettingsChanges(changes) {
+  const silent = [], notify = [], ask = [];
+  for (const c of (changes || [])) {
+    if (SETTINGS_BUCKET_SILENT.has(c.field)) silent.push(c);
+    else if (SETTINGS_BUCKET_NOTIFY.has(c.field)) notify.push(c);
+    else ask.push(c);
+  }
+  return { silent, notify, ask };
+}
+
+// Main entry: called from saveAllSettings. Routes by bucket.
+async function sendCoachReactiveMessage(changes) {
+  if (!changes || changes.length === 0) return;
+  const buckets = bucketizeSettingsChanges(changes);
+
+  // Silent: nothing to send. Track for analytics so we can see what
+  // changes are flowing through this path.
+  if (buckets.silent.length > 0) {
+    try { trackEvent('settings_silent_changes_applied', { fields: buckets.silent.map(c => c.field) }); } catch(e) {}
+  }
+
+  if (buckets.ask.length > 0) {
+    // ASK present: send one combined message that also acknowledges
+    // any NOTIFY changes. One message, less chat noise.
+    await sendCoachAskMessage(buckets.ask, buckets.notify);
+  } else if (buckets.notify.length > 0) {
+    // Only notify-class changes: brief Coach acknowledgment, no regen.
+    await sendCoachNotifyMessage(buckets.notify);
+  }
+}
+
+// NOTIFY bucket — brief Coach acknowledgment for new PBs and injuries.
+// No regen button (these don't require a plan rebuild on their own).
+async function sendCoachNotifyMessage(notifyChanges) {
+  try {
+    const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
+    if (!intake) return;
+
+    const pbChanges = notifyChanges.filter(c => ['pb_5k', 'pb_10k', 'pb_half', 'pb_marathon', 'last_race'].includes(c.field));
+    const injuryChanges = notifyChanges.filter(c => c.field === 'injuries');
+
+    let promptText;
+    if (injuryChanges.length > 0 && pbChanges.length === 0) {
+      promptText = `I just logged a new injury or health note: "${intake.injuries}". In 2 sentences max, acknowledge it from a safety standpoint in your methodology's voice. Remind me to take it easy and see a physio if pain persists. Do NOT propose plan changes yet, I will tell you if I want to scale back. Do NOT reference data I haven't given you. Do NOT make up numbers.`;
+    } else if (pbChanges.length > 0 && injuryChanges.length === 0) {
+      const pbSummary = pbChanges.map(c => `${c.label} ${c.detail}`).join(', ');
+      promptText = `I just logged new race results: ${pbSummary}. In 2 sentences max, acknowledge from your methodology's perspective: what this signals about my current fitness, and confirm you will use it for future intensity targets. If any new PB is SLOWER than the previous one, acknowledge that honestly rather than celebrating. Do NOT propose plan changes, those will reflect on the next plan cycle. Do NOT reference data I haven't given you. Do NOT make up numbers.`;
+    } else {
+      const pbSummary = pbChanges.map(c => `${c.label} ${c.detail}`).join(', ');
+      promptText = `I just updated multiple things at once. New race results: ${pbSummary}. Injury/health note also updated: "${intake.injuries}". In 2-3 sentences, acknowledge both from your methodology's voice: what the PBs signal, and a safety reminder about the injury. Do NOT propose plan changes. Do NOT reference data I haven't given you. Do NOT make up numbers.`;
+    }
+
+    let coachResponse;
+    try {
+      const messages = [{ role: 'user', content: promptText }];
+      coachResponse = await callCoach('chat', {
+        messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile,
+        clientToday: getClientToday(), clientTimezone: getClientTimezone(),
+      });
+    } catch (err) {
+      console.error('Coach chat for notify msg failed:', err);
+      // Fallback: terse confirmation without Coach voice
+      coachResponse = notifyChanges.map(c => `Got it, ${c.label.toLowerCase()}: ${c.detail}.`).join(' ');
+    }
+
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id,
+      role: 'coach',
+      content: coachResponse,
+      context_type: 'settings_change_notify',
+    });
+    setCoachUnread(true);
+    toast('Coach noted your update');
+  } catch (err) {
+    console.error('sendCoachNotifyMessage failed:', err);
+  }
+}
+
+// ASK bucket — Coach proposes a regen, user clicks the "Regenerate plan now"
+// button rendered by renderMsg for context_type 'settings_change_reactive'.
+// Passes the next 7 planned workouts so Coach can reference specifics.
+// Optional secondary arg: notify changes to fold into the same message.
+async function sendCoachAskMessage(askChanges, notifyChanges = []) {
+  try {
+    const askSummary = askChanges.map(c => `**${c.label}**: ${c.detail}`).join('\n• ');
+    const notifySummary = (notifyChanges && notifyChanges.length > 0)
+      ? notifyChanges.map(c => `**${c.label}**: ${c.detail}`).join('\n• ')
+      : '';
+
+    // Fallback message if the Coach call fails
     const introLines = [
       `I noticed you updated some important settings:`,
-      `\n• ${summary}\n`,
+      `\n• ${askSummary}\n`,
+      notifySummary ? `\nAlso noted:\n• ${notifySummary}\n` : '',
       `\nLet me know if you want me to regenerate your upcoming plan to reflect these changes.`,
     ];
 
-    // Get current intake for context
     const { data: intake } = await sb.from('athlete_intake').select('*').eq('user_id', state.user.id).single();
 
-    // Call Coach to write a methodology-aware response
+    // Pull next 7 planned workouts so Coach can name specific impacted sessions
+    const todayStr = getClientToday();
+    const { data: upcomingPlanned } = await sb.from('planned_workouts')
+      .select('scheduled_date, sport, workout_type, duration_minutes, distance_km, description, intensity_target, completed, skipped')
+      .eq('user_id', state.user.id)
+      .gte('scheduled_date', todayStr)
+      .order('scheduled_date', { ascending: true })
+      .limit(7);
+
     let coachResponse;
     try {
       const weeklyHours = intake?.current_weekly_hours;
       const knownVolumeContext = weeklyHours
         ? `The athlete trains ${weeklyHours} hours/week (this is real data, use it).`
         : `The athlete has NOT specified weekly hours. Do NOT make up a number, focus on the change itself.`;
+      const askText = askChanges.map(c => `${c.label}: ${c.detail}`).join('; ');
+      const notifyText = (notifyChanges && notifyChanges.length > 0)
+        ? ` I also updated: ${notifyChanges.map(c => `${c.label}: ${c.detail}`).join('; ')}.`
+        : '';
       const messages = [{
         role: 'user',
-        content: `I just updated my settings. Specifically: ${summary.replace(/\*\*/g, '')}. ${knownVolumeContext}
+        content: `I just updated my settings. Plan-affecting changes: ${askText}.${notifyText} ${knownVolumeContext}
 
-In 2-3 sentences, explain SPECIFICALLY how the change I made affects my upcoming training (don't reference data I haven't given you, don't make up numbers). Then ask if I want to regenerate my plan. Speak in your methodology's voice.`,
+In 3-4 sentences, explain SPECIFICALLY how the plan-affecting changes alter my upcoming training. If relevant, name the specific upcoming workout(s) from my next-7-planned list that would change. If I also logged a PB or injury (above), briefly acknowledge it in the same message. End by asking if I want to regenerate my plan. Do NOT reference data I haven't given you. Do NOT make up numbers. Speak in your methodology's voice.`,
       }];
-      coachResponse = await callCoach('chat', { messages, intake, recentWorkouts: [], plannedWorkouts: [], profile: state.profile, clientToday: getClientToday(), clientTimezone: getClientTimezone() });
+      coachResponse = await callCoach('chat', {
+        messages, intake, recentWorkouts: [], plannedWorkouts: upcomingPlanned || [], profile: state.profile,
+        clientToday: getClientToday(), clientTimezone: getClientTimezone(),
+      });
     } catch (err) {
-      console.error('Coach chat for reactive msg failed:', err);
-      coachResponse = introLines.join('\n');
+      console.error('Coach chat for ask msg failed:', err);
+      coachResponse = introLines.filter(Boolean).join('\n');
     }
 
-    // Save the message with a special context_type so we can render the regenerate button
+    // Save the message with the existing context_type so renderMsg
+    // shows the "Regenerate plan now" / "Maybe later" buttons.
     await sb.from('coach_messages').insert({
       user_id: state.user.id,
       role: 'coach',
       content: coachResponse,
       context_type: 'settings_change_reactive',
     });
-
-    // Mark Coach tab as having unread message
     setCoachUnread(true);
-
     toast('Coach has a message about your changes');
   } catch (err) {
-    console.error('sendCoachReactiveMessage failed:', err);
+    console.error('sendCoachAskMessage failed:', err);
   }
 }
 
