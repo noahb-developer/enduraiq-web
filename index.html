@@ -4801,6 +4801,9 @@ const I18N = {
     'lang.settings.title': 'Language',
     'lang.settings.sub': 'Choose the language of the app. Coach also replies in this language.',
     'lang.settings.saved': 'Language updated',
+    'lang.settings.saved_refresh_hint': 'Language saved. Refresh the page to translate everything everywhere.',
+    'lang.status.active': 'Active',
+    'lang.status.tap_to_switch': 'Tap to switch',
 
     // Nav / pages
     'nav.dashboard': 'Dashboard',
@@ -4940,6 +4943,12 @@ const I18N = {
     // Pro upsell (compact)
     'pro.feature_gate.coach_chat.title': 'Coach chat is a Pro feature',
     'pro.feature_gate.coach_chat.desc': 'Upgrade to chat unlimited with your AI coach.',
+
+    // Trial welcome card (shown once on first dashboard visit for new signups)
+    'trial.welcome.title': 'Your 7-day Pro trial is live',
+    'trial.welcome.body': 'For the next {days} days you have full access to Stryxs Pro, unlimited plan generation, full-context AI coach chat, smart plan adjustments, and deep trend analysis. No credit card needed.',
+    'trial.welcome.after': 'After day 7, your account automatically switches to the Free tier. Your data stays, you just get usage limits on plan generation and coach chat. Upgrade anytime to keep Pro features.',
+    'trial.welcome.cta_coach': 'Start with Coach →',
   },
   fr: {
     // Common
@@ -4995,6 +5004,9 @@ const I18N = {
     'lang.settings.title': 'Langue',
     'lang.settings.sub': "Choisis la langue de l'application. Coach répond aussi dans cette langue.",
     'lang.settings.saved': 'Langue mise à jour',
+    'lang.settings.saved_refresh_hint': 'Langue enregistrée. Rafraîchis la page pour tout traduire partout.',
+    'lang.status.active': 'Active',
+    'lang.status.tap_to_switch': 'Toucher pour changer',
 
     // Nav / pages
     'nav.dashboard': 'Tableau de bord',
@@ -5134,6 +5146,12 @@ const I18N = {
     // Pro upsell
     'pro.feature_gate.coach_chat.title': 'Le chat Coach est une fonction Pro',
     'pro.feature_gate.coach_chat.desc': "Passe Pro pour discuter sans limite avec ton coach IA.",
+
+    // Trial welcome card
+    'trial.welcome.title': 'Ton essai Pro de 7 jours est actif',
+    'trial.welcome.body': "Pendant les {days} prochains jours, tu as un accès complet à Stryxs Pro : génération de plan illimitée, chat coach IA avec contexte complet, ajustements de plan intelligents et analyse de tendances en profondeur. Aucune carte requise.",
+    'trial.welcome.after': "Après le jour 7, ton compte passe automatiquement au tier Gratuit. Tes données restent, tu as juste des limites sur la génération de plan et le chat coach. Tu peux passer à Pro à tout moment pour garder les fonctionnalités.",
+    'trial.welcome.cta_coach': 'Commencer avec Coach →',
   },
 };
 
@@ -5338,7 +5356,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v48',
+      app_version: 'v52',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5593,20 +5611,20 @@ function renderTrialWelcomeCard() {
   const days = getTrialDaysLeft();
   return `
     <div id="trialWelcomeCard" style="padding: 18px 20px; background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(80, 130, 255, 0.04)); border: 1px solid rgba(0, 229, 160, 0.32); border-radius: 14px; margin-bottom: 16px; position: relative;">
-      <button onclick="dismissTrialWelcome()" aria-label="Dismiss" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
+      <button onclick="dismissTrialWelcome()" aria-label="${t('common.close')}" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 0; color: var(--text-mute); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1;">×</button>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
         <span style="font-size: 18px;">🎉</span>
-        <div style="font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">Your 7-day Pro trial is live</div>
+        <div style="font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;">${t('trial.welcome.title')}</div>
       </div>
       <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 12px;">
-        For the next ${days} days you have full access to Stryxs Pro, unlimited plan generation, full-context AI coach chat, smart plan adjustments, and deep trend analysis. No credit card needed.
+        ${t('trial.welcome.body', { days })}
       </div>
       <div style="font-size: 12px; color: var(--text-mute); line-height: 1.55; margin-bottom: 14px;">
-        After day 7, your account automatically switches to the Free tier. Your data stays, you just get usage limits on plan generation and coach chat. Upgrade anytime to keep Pro features.
+        ${t('trial.welcome.after')}
       </div>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <button class="btn" onclick="navigate('coach')" style="font-size: 12px; padding: 7px 14px;">Start with Coach →</button>
-        <button class="btn ghost" onclick="dismissTrialWelcome()" style="font-size: 12px; padding: 7px 14px;">Got it</button>
+        <button class="btn" onclick="navigate('coach')" style="font-size: 12px; padding: 7px 14px;">${t('trial.welcome.cta_coach')}</button>
+        <button class="btn ghost" onclick="dismissTrialWelcome()" style="font-size: 12px; padding: 7px 14px;">${t('common.got_it')}</button>
       </div>
     </div>`;
 }
@@ -6186,22 +6204,42 @@ async function pickLanguage(loc) {
 //   pairs as plain text ("GB", "FR") which looks broken next to a label.
 //   Using styled monogram badges instead, which are universal.
 // - align-items: center keeps the badge and label vertically aligned.
+// Bulletproof language picker: radio-style cards with explicit current/select
+// labels so there is zero ambiguity about which language is active. Each card
+// has an INDEPENDENT label that's also stored in our I18N table (so the
+// French card's label is "Français" regardless of current UI language — the
+// language NAME doesn't translate, only the helper text around it does).
+//
+// Console-logs the locale state on every render so we can diagnose any
+// "looks wrong" reports from screenshots.
 function renderLanguageButtons() {
-  const langs = [
-    { code: 'en', badge: 'EN', label: 'English' },
-    { code: 'fr', badge: 'FR', label: 'Français' },
-  ];
-  return langs.map(l => {
-    const active = state.locale === l.code;
+  const current = state.locale;
+  console.log('[Stryxs i18n] renderLanguageButtons called, state.locale =', current);
+
+  // Each row: a card with the language's NATIVE name on the left + an
+  // explicit "Active" or "Tap to switch" status on the right. Active gets
+  // a filled green dot; inactive gets an empty circle.
+  const row = (code, nativeName) => {
+    const active = current === code;
+    const dot = active
+      ? '<span style="width: 18px; height: 18px; border-radius: 50%; background: var(--accent); display: inline-block; flex-shrink: 0; box-shadow: inset 0 0 0 4px var(--bg);"></span>'
+      : '<span style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); display: inline-block; flex-shrink: 0; background: transparent; box-sizing: border-box;"></span>';
+    const status = active
+      ? `<span style="font-size: 12px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${t('lang.status.active')}</span>`
+      : `<span style="font-size: 12px; color: var(--text-mute); font-weight: 500;">${t('lang.status.tap_to_switch')}</span>`;
     return `
-      <button onclick="pickLanguageFromSettings('${l.code}')"
-              style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: ${active ? 'var(--accent)' : 'var(--bg-3)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 10px; color: ${active ? '#001b14' : 'var(--text)'}; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
-        <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 22px; border-radius: 6px; background: ${active ? 'rgba(0,27,20,0.18)' : 'var(--bg-2)'}; color: ${active ? '#001b14' : 'var(--text-dim)'}; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">${l.badge}</span>
-        <span style="flex: 1;">${l.label}</span>
-        ${active ? '<span style="font-size: 14px;">✓</span>' : ''}
+      <button type="button"
+              aria-pressed="${active}"
+              onclick="pickLanguageFromSettings('${code}')"
+              style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: ${active ? 'rgba(0, 229, 160, 0.08)' : 'var(--bg-3)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 12px; cursor: pointer; width: 100%; text-align: left; font-family: inherit; transition: all 0.15s;">
+        ${dot}
+        <span style="flex: 1; font-size: 15px; font-weight: 700; color: var(--text);">${nativeName}</span>
+        ${status}
       </button>
     `;
-  }).join('');
+  };
+
+  return row('en', 'English') + row('fr', 'Français');
 }
 
 // Called from Settings → Language buttons. Switches locale + retranslates
@@ -6211,12 +6249,14 @@ async function pickLanguageFromSettings(loc) {
   if (loc === state.locale) return; // already on this language, no-op
   await setLocale(loc);
   trackEvent('language_picked', { locale: loc, source: 'settings' });
-  // Swap the language buttons in place so the user SEES the change land
-  // (rerenderActivePage handles the rest of Settings, but the buttons need
-  // the new state.locale styling and active-check refresh).
+  // Swap the language buttons in place so the user SEES the change land.
+  // Then re-translate ALL data-i18n elements (already done by setLocale,
+  // but safe to repeat). Toast the confirmation + nudge to refresh for
+  // full effect (because many dynamic-rendered pages don't reflow until
+  // user navigates away and back).
   const row = document.getElementById('languageButtonsRow');
   if (row) row.innerHTML = renderLanguageButtons();
-  toast(t('lang.settings.saved'));
+  toast(t('lang.settings.saved_refresh_hint'), 4500);
 }
 
 // Toggle password input visibility. Swaps the input's type between password
@@ -7317,6 +7357,14 @@ function navigate(page) {
     updateStravaConnectCard();
     renderTodaysAnalyses();
   }
+
+  // Re-translate any data-i18n elements on the newly-active page. Render
+  // functions above are async + use innerHTML, so we run on the next tick
+  // to catch elements that were just inserted. This is what makes "switch
+  // language → navigate to other tabs" feel cohesive.
+  setTimeout(() => {
+    try { applyI18nToDom(); } catch (_) {}
+  }, 0);
 
   // Re-trigger landing animations when navigating back to landing (fixes mobile reload bug)
   if (page === 'landing') {

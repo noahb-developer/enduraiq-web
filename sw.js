@@ -2,7 +2,7 @@
 // Handles incoming Web Push messages and notification interactions.
 // Lives at /sw.js (must be served from the root for full-scope control).
 
-const CACHE_NAME = 'stryxs-sw-v1';
+const CACHE_NAME = 'stryxs-sw-v2';
 
 // Install + activate quickly — we don't precache anything since the
 // SPA reloads on each visit and we don't need offline support yet.
