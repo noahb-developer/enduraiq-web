@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17 (round 4 = beta-readiness sprint). Frontend v48, Coach edge function refreshed. Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language tab). All on main, Vercel deployed, Coach edge function deployed. **OPEN ITEM:** Noah needs to run `migrate_v6.sql` in Supabase Studio (adds `profiles.locale TEXT DEFAULT 'en'` column). i18n falls back to localStorage until that runs. See section 10.
+> Last updated: 2026-05-17 (round 4 = beta-readiness sprint, end of session). Frontend v48, Coach edge function refreshed, `migrate_v6.sql` RUN in Supabase Studio (profiles.locale column live). Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language tab). All on main, Vercel deployed, Coach edge function deployed, DB schema synced. Beta-ready. See section 10.
 
 ---
 
@@ -387,11 +387,10 @@ Settings. Two buttons (English / Français), active one styled with
 accent color + checkmark. `pickLanguageFromSettings(loc)` swaps live
 and toasts confirmation.
 
-**Open item:** `migrate_v6.sql` was created (adds
-`profiles.locale TEXT DEFAULT 'en'`) but Noah hasn't run it yet in
-Supabase Studio. Until then, locale only persists via localStorage —
-the profile write will silently fail (column missing). Layer A (Coach
-French) is unaffected; it reads language from the user's message text.
+**migrate_v6.sql:** RUN by Noah in Supabase Studio at end of session.
+`profiles.locale TEXT DEFAULT 'en'` column is live. Language picks now
+persist to the profile row, not just localStorage. No further DB work
+needed for i18n.
 
 **Deferred to future sessions** (infrastructure is in place, just need to
 drop strings into I18N + tag HTML):
