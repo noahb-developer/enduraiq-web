@@ -4871,7 +4871,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v43',
+      app_version: 'v44',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8200,6 +8200,237 @@ function renderWorkoutMeta(a) {
   `;
 }
 
+// ─── Workout feedback (RPE + how-it-felt chips + notes) ─────────
+// Renders an inline "How did that feel?" capture block at the bottom
+// of every workout view. Click expands the form, save persists to
+// the workout_feedback table, post-save shows a summary with Edit.
+//
+// Coach reads the most-recent 14 feedback rows in chat context, so
+// the user's subjective effort signal (separate from HR/pace data)
+// feeds into Coach's advice and per-workout commentary.
+
+const FELT_KEYS = ['easy', 'hard', 'strong', 'flat', 'sore', 'sick'];
+const FELT_EMOJI = { easy: '😌', hard: '😤', strong: '💪', flat: '😐', sore: '🦵', sick: '🤒' };
+
+function renderWorkoutFeedbackForm(workoutDbId) {
+  if (!workoutDbId) return '';
+  return `
+    <div class="workout-feedback" data-workout-id="${workoutDbId}" style="margin-top: 18px; padding: 14px 16px; background: rgba(0, 229, 160, 0.04); border: 1px solid rgba(0, 229, 160, 0.18); border-radius: 10px;">
+      <button type="button" class="feedback-trigger" onclick="openWorkoutFeedbackForm(this)" style="background: none; border: 0; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 6px;">
+        💬 How did that feel?
+        <span style="color: var(--text-mute); font-weight: 400;">→</span>
+      </button>
+      <div class="feedback-form-body" style="display: none; margin-top: 14px;"></div>
+    </div>
+  `;
+}
+
+// Lazy-fetch existing feedback when user taps "How did that feel?".
+// Avoids pre-fetching for every workout view that may never be expanded.
+async function openWorkoutFeedbackForm(triggerBtn) {
+  const wrap = triggerBtn.closest('.workout-feedback');
+  if (!wrap) return;
+  const body = wrap.querySelector('.feedback-form-body');
+  const workoutId = wrap.dataset.workoutId;
+  if (!workoutId || !state.user) return;
+
+  triggerBtn.disabled = true;
+  triggerBtn.style.opacity = '0.6';
+
+  let existing = null;
+  try {
+    const { data } = await sb.from('workout_feedback')
+      .select('rpe, notes, felt_easy, felt_hard, felt_strong, felt_flat, felt_sore, felt_sick')
+      .eq('user_id', state.user.id)
+      .eq('workout_id', workoutId)
+      .maybeSingle();
+    existing = data || null;
+  } catch (err) {
+    console.warn('[Stryxs] Could not fetch existing feedback:', err);
+  }
+
+  body.innerHTML = buildWorkoutFeedbackFormHtml(workoutId, existing);
+  body.style.display = '';
+  triggerBtn.style.display = 'none';
+}
+
+function buildWorkoutFeedbackFormHtml(workoutId, existing) {
+  const rpe = existing?.rpe || 0;
+  const rpeButtons = Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+    const active = rpe === n;
+    return `
+      <button type="button" data-rpe="${n}" onclick="selectFeedbackRpe(this, ${n})" style="flex: 1; min-width: 28px; padding: 9px 4px; background: ${active ? 'var(--accent)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 6px; color: ${active ? 'var(--bg)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 700; cursor: pointer;">${n}</button>
+    `;
+  }).join('');
+
+  const chipFor = (key, label) => {
+    const on = !!existing?.['felt_' + key];
+    return `
+      <button type="button" data-felt="${key}" data-on="${on ? '1' : '0'}" onclick="toggleFeedbackFeltChip(this)" style="padding: 7px 13px; background: ${on ? 'rgba(0, 229, 160, 0.18)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${on ? 'var(--accent)' : 'var(--border)'}; border-radius: 999px; color: ${on ? 'var(--accent)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1;">${FELT_EMOJI[key]} ${label}</button>
+    `;
+  };
+
+  return `
+    <div data-workout-id="${workoutId}">
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">Effort (RPE)</div>
+        <div style="display: flex; gap: 4px;">${rpeButtons}</div>
+        <div style="font-size: 10px; color: var(--text-mute); display: flex; justify-content: space-between; margin-top: 4px;">
+          <span>1 = very easy</span><span>10 = max effort</span>
+        </div>
+      </div>
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;">How did your body feel? <span style="text-transform: none; letter-spacing: 0; color: var(--text-mute); font-weight: 400;">(tap any)</span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          ${chipFor('easy', 'Easy')}
+          ${chipFor('hard', 'Hard')}
+          ${chipFor('strong', 'Strong')}
+          ${chipFor('flat', 'Flat')}
+          ${chipFor('sore', 'Sore')}
+          ${chipFor('sick', 'Sick')}
+        </div>
+      </div>
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">Notes <span style="text-transform: none; letter-spacing: 0; color: var(--text-mute); font-weight: 400;">(optional)</span></div>
+        <textarea data-notes placeholder="Anything to remember about this one?" rows="2" style="width: 100%; box-sizing: border-box; padding: 9px 11px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; resize: vertical; font-family: inherit;">${escapeHtml(existing?.notes || '')}</textarea>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="saveWorkoutFeedback(this)" style="flex: 1; font-size: 13px; padding: 10px 14px;">Save</button>
+        <button class="btn ghost" onclick="cancelWorkoutFeedback(this)" style="font-size: 13px; padding: 10px 14px;">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+function selectFeedbackRpe(btn, n) {
+  const row = btn.parentElement;
+  row.querySelectorAll('[data-rpe]').forEach(b => {
+    b.style.background = 'rgba(255,255,255,0.04)';
+    b.style.borderColor = 'var(--border)';
+    b.style.color = 'var(--text-dim)';
+  });
+  btn.style.background = 'var(--accent)';
+  btn.style.borderColor = 'var(--accent)';
+  btn.style.color = 'var(--bg)';
+}
+
+function toggleFeedbackFeltChip(btn) {
+  const on = btn.dataset.on === '1';
+  if (on) {
+    btn.dataset.on = '0';
+    btn.style.background = 'rgba(255,255,255,0.04)';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text-dim)';
+  } else {
+    btn.dataset.on = '1';
+    btn.style.background = 'rgba(0, 229, 160, 0.18)';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+  }
+}
+
+async function saveWorkoutFeedback(btn) {
+  if (!state.user) return;
+  const form = btn.closest('[data-workout-id]');
+  const workoutId = form?.dataset.workoutId;
+  if (!workoutId) return;
+
+  // Read RPE (selected button has accent border)
+  let rpe = null;
+  form.querySelectorAll('[data-rpe]').forEach(b => {
+    if (b.style.background.indexOf('229') !== -1 || b.style.borderColor.indexOf('229') !== -1) {
+      rpe = parseInt(b.dataset.rpe, 10);
+    }
+  });
+
+  // Read felt chips
+  const felts = {};
+  FELT_KEYS.forEach(k => {
+    const chip = form.querySelector(`[data-felt="${k}"]`);
+    felts['felt_' + k] = chip?.dataset.on === '1';
+  });
+
+  const notes = (form.querySelector('[data-notes]')?.value || '').trim() || null;
+
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = 'Saving...';
+
+  try {
+    // Check for existing row first since the table may not have a unique
+    // (user_id, workout_id) constraint set up. Update-or-insert pattern.
+    const { data: existingRow } = await sb.from('workout_feedback')
+      .select('id')
+      .eq('user_id', state.user.id)
+      .eq('workout_id', workoutId)
+      .maybeSingle();
+
+    const payload = { user_id: state.user.id, workout_id: workoutId, rpe, notes, ...felts };
+
+    if (existingRow?.id) {
+      const { error } = await sb.from('workout_feedback').update(payload).eq('id', existingRow.id);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from('workout_feedback').insert(payload);
+      if (error) throw error;
+    }
+
+    const wrap = btn.closest('.workout-feedback');
+    const body = wrap.querySelector('.feedback-form-body');
+    body.innerHTML = renderFeedbackSummary(workoutId, { rpe, notes, ...felts });
+
+    toast('Feedback saved');
+    try { trackEvent('workout_feedback_saved', { rpe, has_notes: !!notes, felts_set: FELT_KEYS.filter(k => felts['felt_' + k]).length }); } catch (_) {}
+  } catch (err) {
+    console.error('[Stryxs] Save feedback failed:', err);
+    toast('Could not save feedback. Try again.');
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+function renderFeedbackSummary(workoutId, fb) {
+  const feltLabels = FELT_KEYS.filter(k => fb['felt_' + k]);
+  return `
+    <div data-workout-id="${workoutId}" style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+      <strong style="color: var(--text);">Logged${fb.rpe ? ': RPE ' + fb.rpe + '/10' : ''}</strong>${feltLabels.length ? ' · ' + feltLabels.map(k => FELT_EMOJI[k] + ' ' + k).join(', ') : ''}
+      ${fb.notes ? `<div style="margin-top: 6px; padding: 8px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; font-size: 12px; font-style: italic; color: var(--text-dim);">"${escapeHtml(fb.notes)}"</div>` : ''}
+      <button onclick="reopenWorkoutFeedbackForm(this)" style="background: none; border: 0; color: var(--text-mute); font-size: 11px; cursor: pointer; padding: 6px 0 0; text-decoration: underline;">Edit</button>
+    </div>
+  `;
+}
+
+async function reopenWorkoutFeedbackForm(btn) {
+  const wrap = btn.closest('.workout-feedback');
+  if (!wrap) return;
+  const body = wrap.querySelector('.feedback-form-body');
+  const summaryEl = body.querySelector('[data-workout-id]');
+  const workoutId = summaryEl?.dataset.workoutId || wrap.dataset.workoutId;
+  if (!workoutId || !state.user) return;
+
+  const { data: existing } = await sb.from('workout_feedback')
+    .select('rpe, notes, felt_easy, felt_hard, felt_strong, felt_flat, felt_sore, felt_sick')
+    .eq('user_id', state.user.id)
+    .eq('workout_id', workoutId)
+    .maybeSingle();
+
+  body.innerHTML = buildWorkoutFeedbackFormHtml(workoutId, existing);
+}
+
+function cancelWorkoutFeedback(btn) {
+  const wrap = btn.closest('.workout-feedback');
+  if (!wrap) return;
+  const body = wrap.querySelector('.feedback-form-body');
+  const trigger = wrap.querySelector('.feedback-trigger');
+  body.style.display = 'none';
+  body.innerHTML = '';
+  if (trigger) {
+    trigger.style.display = '';
+    trigger.disabled = false;
+    trigger.style.opacity = '';
+  }
+}
+
 // Single tiny "Open on Strava" footer link. Replaces the prominent
 // inline "View on Strava" CTAs that used to push users out of the app.
 function renderStravaFooter(a) {
@@ -8312,6 +8543,7 @@ function renderSummaryWorkout(a) {
         ${renderHrZoneBars(a.zd)}
         ${a.sport === 'bike' ? renderPowerStats(a) : ''}
         ${renderSplitsTable(a.splits, a.sport)}
+        ${renderWorkoutFeedbackForm(a._dbId)}
         ${renderProUpsell(a.sport)}
         ${renderStravaFooter(a)}
       </div>
@@ -8489,6 +8721,7 @@ function renderRun(a) {
           </div>
         </div>` : '')}
 
+        ${renderWorkoutFeedbackForm(a._dbId)}
         ${renderProUpsell('run')}
         ${renderStravaFooter(a)}
       </div>
@@ -8555,6 +8788,7 @@ function renderBike(a) {
         </div>
         ` : ''}
 
+        ${renderWorkoutFeedbackForm(a._dbId)}
         ${renderProUpsell('bike')}
         ${renderStravaFooter(a)}
       </div>
@@ -8615,6 +8849,7 @@ function renderSwim(a) {
           <div class="coach-title">💡 Coach's Read</div>
           <div class="coach-text">${a.coach}</div>
         </div>
+        ${renderWorkoutFeedbackForm(a._dbId)}
       </div>
     </div>
   `;
@@ -13176,6 +13411,22 @@ async function sendChatMsg() {
       .order('created_at', { ascending: false })
       .limit(10);
 
+    // Pass recent workout_feedback so Coach has the athlete's subjective
+    // signal (RPE, how their body felt, notes) alongside the HR/pace data.
+    // Capped at 14 most-recent rows. Coach context formatter dedupes by
+    // workout. Non-blocking on failure, chat still works without feedback.
+    let recentFeedbackRaw = [];
+    try {
+      const { data: fb } = await sb.from('workout_feedback')
+        .select('rpe, notes, felt_easy, felt_hard, felt_strong, felt_flat, felt_sore, felt_sick, created_at, workout:workouts(workout_data, created_at)')
+        .eq('user_id', state.user.id)
+        .order('created_at', { ascending: false })
+        .limit(14);
+      recentFeedbackRaw = fb || [];
+    } catch (fbErr) {
+      console.warn('[Stryxs] Could not fetch recent workout feedback for chat context:', fbErr);
+    }
+
     const reply = await callCoach('chat', {
       messages,
       intake,
@@ -13183,6 +13434,7 @@ async function sendChatMsg() {
       plannedWorkouts: plannedWorkouts || [],
       profile: state.profile,
       activeInsights: activeInsightsRaw || [],
+      recentFeedback: recentFeedbackRaw,
       clientToday: getClientToday(),
       clientTimezone: getClientTimezone(),
     });
