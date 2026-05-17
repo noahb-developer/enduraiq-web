@@ -171,7 +171,7 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v40 — 944,878 bytes (post Coach quality pass; live in repo `noahb-developer/stryxs` as `index.html`)
+- **Frontend:** `index.html` v41 — 947,522 bytes (post Coach quality pass + Strava backfill button; live in repo `noahb-developer/stryxs` as `index.html`)
 - **Coach edge function:** 154,682 bytes (was 151,983 as coach_v8). Now has bucketed reactivity-message routing in frontend, severity-tuned analyzePatterns, workoutCommentary accepts activeInsights, dispatcher accepts both `allWorkouts`/`recentWorkouts` aliases. Effectively v9 but file is just `index.ts` in `coach/`.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
@@ -296,25 +296,18 @@ If any of those fail, fix before shipping.
 
 ### 🔜 PENDING for next session
 
-**1. Strava historical backfill** (queued, will be tackled right after this memory update)
-Existing workouts synced before 2026-05-17 don't have the new fields (polyline / description / perceived_exertion / suffer_score / gear / splits / power). Plan:
-- Add `backfill_details` action to strava edge function
-- Finds user's Strava workouts where `polyline` is null (proxy for "synced pre-3a")
-- For each (cap ~50/call to stay within Strava 100/15min rate limit): fetch detail endpoint, rebuild workout_data preserving classification + completed/skipped state, update
-- Frontend: button in Settings → Strava section, "Update older workouts with new data fields". Toast progress, prompt to click again if more remaining.
-
-**2. Pro upsell tuning**
+**1. Pro upsell tuning**
 Pass 3b put a Pro upsell card at the bottom of free-user workout views. Beta testers used to see drift / Coach's Read narrative for free; they don't now. Risk: feels like a regression. Watch beta feedback. If it lands poorly: tone down to inline "✨" badge, OR roll back the gate entirely and find a different Pro lever, OR A/B test post-launch.
 
-**3. workout_feedback UI** (still deferred from May 2026 backlog)
+**2. workout_feedback UI** (still deferred from May 2026 backlog)
 Table exists, no UI captures it. Coach doesn't read it. Adding it gives Coach a subjective-effort signal separate from HR/pace. ~30 min build per memory section 7.
 
-**4. Verify email branding** (still deferred)
+**3. Verify email branding** (still deferred)
 Noah still hasn't checked whether signup verify email is on Resend or Supabase default. Supabase Studio → Authentication → Emails → SMTP settings.
 
 ### What 2026-05-17 delivered — Coach quality deep-dive (full sprint)
 
-**Three areas attacked end-to-end:** Coach reactivity to settings changes, insights system, Strava data depth. Each area shipped in clean independent deploys. Noah opted out of manual testing — beta users will catch issues. Total: 4 commits to main (frontend v38, v39, v40 + memory) + 3 edge function deploys (coach, send-followups, strava).
+**Three areas attacked end-to-end + a follow-on backfill:** Coach reactivity to settings changes, insights system, Strava data depth, plus a Strava backfill action for historical workouts. Each ships in clean independent deploys. Noah opted out of manual testing — beta users will catch issues. Total: 5 commits to main (frontend v38, v39, v40, v41 + memory) + 4 edge function deploys (coach, send-followups, strava twice).
 
 #### Area 1 — Coach reactivity (frontend v38, commit `2198899`)
 `detectImportantSettingsChanges` already caught everything, but `sendCoachReactiveMessage` was one-size-fits-all (every change spawned the same "want me to regen?" chat call). Now routes by bucket:
@@ -353,7 +346,7 @@ Token cost: ~5K per active user per week ≈ $2/week at 100 active users. Well u
   - Pro: Coach's Read narrative, cardiac drift number + verdict, race projection (bike), normalized power
 - Diagnostic notices for no-HR / unsupported / streams-failed are quiet one-line callouts instead of the prior "go look at Strava" banners.
 
-**Caveat:** historical Strava activities in DB don't have the new fields. New activities going forward will. Backfill action is the next-up item.
+**Caveat resolved in same session:** historical Strava activities in DB didn't have the new fields after Pass 3b shipped. A `backfill_details` action was added to the strava edge function and a Settings button to invoke it (frontend v41, commit `9118681`). Users tap "✨ Refresh older workouts" in Settings → Strava and the server re-fetches up to 30 activities per call (1 detail + 1 streams API call each, stays under Strava's 100/15min limit), preserves classification + completed/skipped state, and updates in place. Toast reports updated/remaining counts; user taps again to continue if more remain.
 
 ### What 2026-05-17 reconsidered (not changed yet)
 - Strava `getZones` LTHR fallbacks (`lthr || 170` for run, `lthr || 165` for bike) live in the strava edge function copy of `analyzeRun`/`analyzeBike`. The frontend has its own copies of those functions. Drift detection / classification works regardless, but fallback LTHR is a guess for users without one. Not a regression, just noting.
