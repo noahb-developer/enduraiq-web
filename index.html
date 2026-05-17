@@ -4431,16 +4431,21 @@ body.on-auth .container {
   <div class="section-title">Analyze Workout</div>
   <p class="section-sub">Sync, upload, or review today's workouts.</p>
 
-  <!-- ═══ TWO COLLAPSIBLE TOGGLE BUTTONS ═══ -->
+  <!-- ═══ THREE COLLAPSIBLE TOGGLE BUTTONS ═══ -->
   <div class="analyze-toggles">
     <button class="analyze-toggle" id="toggleAutoSync" onclick="toggleAnalyzeSection('autoSync')">
       <span class="analyze-toggle-icon">🔗</span>
       <span class="analyze-toggle-label">Auto-sync</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
+    <button class="analyze-toggle" id="toggleLogManual" onclick="toggleAnalyzeSection('logManual')">
+      <span class="analyze-toggle-icon">✍️</span>
+      <span class="analyze-toggle-label">Log manually</span>
+      <span class="analyze-toggle-chev">▾</span>
+    </button>
     <button class="analyze-toggle" id="toggleUploadCsv" onclick="toggleAnalyzeSection('uploadCsv')">
       <span class="analyze-toggle-icon">📁</span>
-      <span class="analyze-toggle-label">Upload CSV</span>
+      <span class="analyze-toggle-label">Upload file</span>
       <span class="analyze-toggle-chev">▾</span>
     </button>
   </div>
@@ -4466,6 +4471,16 @@ body.on-auth .container {
       <input type="file" class="upload-input" id="fileInput" accept=".csv, .tcx, .gpx, .fit">
     </label>
     <p class="source-supports">Supports Garmin, COROS, Polar, Suunto, Apple Watch exports (.csv)</p>
+    <div style="margin-top: 14px; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.55;">
+      <strong style="color: var(--text);">Got a Garmin, Coros, or Apple Watch?</strong> Easiest path is to connect it to Strava once (Garmin Connect → Settings → Partner Apps, Coros app → Profile → Strava, Apple Health → Strava), then use Auto-sync above. Or log manually below if you prefer not to use Strava.
+    </div>
+  </div>
+
+  <!-- ═══ LOG MANUALLY PANEL (collapsed by default) ═══ -->
+  <div id="logManualPanel" class="analyze-panel" style="display: none;">
+    <div id="logManualContent">
+      <!-- populated dynamically by renderManualEntryForm -->
+    </div>
   </div>
 
   <!-- ═══ TODAY'S ANALYSES (always at top, below the toggles) ═══ -->
@@ -7251,8 +7266,8 @@ function toggleTodaysAnalysis(idx, cardEl) {
 
 // Toggle the auto-sync or upload-csv panel. Two-button toggle UX.
 function toggleAnalyzeSection(section) {
-  const panels = { autoSync: 'autoSyncPanel', uploadCsv: 'uploadCsvPanel' };
-  const buttons = { autoSync: 'toggleAutoSync', uploadCsv: 'toggleUploadCsv' };
+  const panels = { autoSync: 'autoSyncPanel', logManual: 'logManualPanel', uploadCsv: 'uploadCsvPanel' };
+  const buttons = { autoSync: 'toggleAutoSync', logManual: 'toggleLogManual', uploadCsv: 'toggleUploadCsv' };
   const targetPanel = document.getElementById(panels[section]);
   const targetBtn = document.getElementById(buttons[section]);
   if (!targetPanel || !targetBtn) return;
@@ -7275,6 +7290,10 @@ function toggleAnalyzeSection(section) {
     // For auto-sync: render proper content based on connection status
     if (section === 'autoSync') {
       renderAutoSyncPanel();
+    }
+    // For manual entry: render the form fresh each time so date defaults to today
+    if (section === 'logManual') {
+      renderManualEntryForm();
     }
   } else {
     targetPanel.style.display = 'none';
@@ -7373,6 +7392,255 @@ async function updateStravaConnectCard() {
     // If not connected, leave the original card as-is (it already shows Connect button)
   } catch (err) {
     console.error('updateStravaConnectCard failed:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// MANUAL WORKOUT ENTRY
+// For users on Garmin/Coros/Apple Watch who don't want to use Strava.
+// Form lives on the Analyze page alongside Auto-sync + Upload file.
+// Writes to the workouts table with source: 'manual'.
+// ═══════════════════════════════════════════════════════════
+
+// Temporary in-memory state for the form (cleared on submit/close)
+const manualEntryState = { sport: 'run', rpe: null, felt: new Set() };
+
+function renderManualEntryForm() {
+  const container = document.getElementById('logManualContent');
+  if (!container) return;
+  // Reset state every time the form opens
+  manualEntryState.sport = 'run';
+  manualEntryState.rpe = null;
+  manualEntryState.felt = new Set();
+
+  const units = getUserUnits();
+  const distUnit = units === 'imperial' ? 'mi' : 'km';
+  const todayStr = getClientToday(); // YYYY-MM-DD in local tz
+
+  const sportOptions = [
+    { key: 'run', label: 'Run', emoji: '🏃' },
+    { key: 'bike', label: 'Bike', emoji: '🚴' },
+    { key: 'swim', label: 'Swim', emoji: '🏊' },
+    { key: 'strength', label: 'Strength', emoji: '💪' },
+    { key: 'other', label: 'Other', emoji: '⚡' },
+  ];
+
+  container.innerHTML = `
+    <div style="padding: 14px; background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(80, 130, 255, 0.15); border-radius: 10px; margin-bottom: 16px;">
+      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+        <strong style="color: var(--text);">Log a workout by hand.</strong> Useful if you don't want to use Strava or just want to log something quick. Coach reads these like any other workout.
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <!-- Sport picker -->
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Sport</label>
+        <div id="manualSportChips" style="display: flex; gap: 6px; flex-wrap: wrap;">
+          ${sportOptions.map(s => `
+            <button type="button" data-sport="${s.key}" onclick="selectManualSport('${s.key}')" class="manual-sport-chip ${s.key === 'run' ? 'active' : ''}" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: 13px; cursor: pointer; transition: all 0.15s;">
+              <span>${s.emoji}</span><span>${s.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Date + Duration row -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Date</label>
+          <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Duration (min)</label>
+          <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+      </div>
+
+      <!-- Distance + Avg HR + Max HR row -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Distance (${distUnit})</label>
+          <input type="number" id="manualDistance" min="0" step="0.1" inputmode="decimal" placeholder="8.0" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Avg HR</label>
+          <input type="number" id="manualAvgHr" min="40" max="230" step="1" inputmode="numeric" placeholder="148" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Max HR</label>
+          <input type="number" id="manualMaxHr" min="40" max="230" step="1" inputmode="numeric" placeholder="172" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+        </div>
+      </div>
+
+      <!-- Perceived effort (RPE) -->
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Perceived effort (optional, 1-10)</label>
+        <div id="manualRpeRow" style="display: flex; gap: 4px; flex-wrap: wrap;">
+          ${[1,2,3,4,5,6,7,8,9,10].map(n => `
+            <button type="button" data-rpe="${n}" onclick="selectManualRpe(${n})" class="manual-rpe-chip" style="flex: 1; min-width: 32px; padding: 8px 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer;">${n}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- How it felt -->
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">How it felt (optional)</label>
+        <div id="manualFeltRow" style="display: flex; gap: 6px; flex-wrap: wrap;">
+          ${['easy','hard','strong','flat','sore','sick'].map(f => `
+            <button type="button" data-felt="${f}" onclick="toggleManualFeltChip('${f}')" class="manual-felt-chip" style="padding: 8px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; cursor: pointer; text-transform: capitalize;">${f}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Notes (optional)</label>
+        <textarea id="manualNotes" rows="2" placeholder="Legs felt heavy after Friday brick, easy progression run" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+      </div>
+
+      <!-- Submit -->
+      <div style="display: flex; gap: 10px; margin-top: 4px;">
+        <button class="btn" onclick="submitManualWorkout(this)" style="flex: 1;">Save workout</button>
+      </div>
+
+      <div id="manualEntryStatus" style="font-size: 12px; color: var(--text-mute); min-height: 16px;"></div>
+    </div>
+  `;
+
+  // Inline styles for active states (avoids needing new CSS classes in <style>)
+  if (!document.getElementById('manualEntryDynStyles')) {
+    const s = document.createElement('style');
+    s.id = 'manualEntryDynStyles';
+    s.textContent = `
+      .manual-sport-chip.active { background: var(--accent) !important; border-color: var(--accent) !important; color: #001b14 !important; }
+      .manual-rpe-chip.active { background: var(--accent) !important; border-color: var(--accent) !important; color: #001b14 !important; }
+      .manual-felt-chip.active { background: var(--accent) !important; border-color: var(--accent) !important; color: #001b14 !important; }
+    `;
+    document.head.appendChild(s);
+  }
+}
+
+function selectManualSport(sport) {
+  manualEntryState.sport = sport;
+  document.querySelectorAll('#manualSportChips .manual-sport-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.sport === sport);
+  });
+}
+
+function selectManualRpe(n) {
+  manualEntryState.rpe = n;
+  document.querySelectorAll('#manualRpeRow .manual-rpe-chip').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.rpe) === n);
+  });
+}
+
+function toggleManualFeltChip(f) {
+  if (manualEntryState.felt.has(f)) manualEntryState.felt.delete(f);
+  else manualEntryState.felt.add(f);
+  document.querySelectorAll('#manualFeltRow .manual-felt-chip').forEach(b => {
+    b.classList.toggle('active', manualEntryState.felt.has(b.dataset.felt));
+  });
+}
+
+async function submitManualWorkout(btn) {
+  const dateEl = document.getElementById('manualDate');
+  const durEl = document.getElementById('manualDuration');
+  const distEl = document.getElementById('manualDistance');
+  const avgHrEl = document.getElementById('manualAvgHr');
+  const maxHrEl = document.getElementById('manualMaxHr');
+  const notesEl = document.getElementById('manualNotes');
+  const statusEl = document.getElementById('manualEntryStatus');
+
+  const date = dateEl?.value;
+  const durationMin = parseFloat(durEl?.value);
+  const distanceRaw = parseFloat(distEl?.value);
+  const avgHr = parseInt(avgHrEl?.value) || null;
+  const maxHr = parseInt(maxHrEl?.value) || null;
+  const notes = (notesEl?.value || '').trim();
+
+  // Minimum required: sport (default 'run'), date, duration > 0
+  if (!date) { statusEl.textContent = 'Pick a date.'; statusEl.style.color = '#f87171'; return; }
+  if (!durationMin || durationMin <= 0) { statusEl.textContent = 'Duration is required (minutes).'; statusEl.style.color = '#f87171'; return; }
+
+  // Convert distance to km for storage (rest of app expects km)
+  let distanceKm = null;
+  if (Number.isFinite(distanceRaw) && distanceRaw > 0) {
+    distanceKm = getUserUnits() === 'imperial' ? distanceRaw * 1.609344 : distanceRaw;
+    distanceKm = Math.round(distanceKm * 100) / 100;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  statusEl.textContent = '';
+
+  try {
+    // Classify: if there's a planned workout for this date+sport, mark as 'plan'.
+    // Otherwise 'extra_training' (the athlete did something outside their plan).
+    let classification = 'extra_training';
+    try {
+      const { data: pw } = await sb.from('planned_workouts')
+        .select('id, sport')
+        .eq('user_id', state.user.id)
+        .eq('scheduled_date', date)
+        .limit(5);
+      if (pw && pw.length > 0) {
+        const sportMatch = pw.find(p => (p.sport || '').toLowerCase() === manualEntryState.sport);
+        if (sportMatch) classification = 'plan';
+      }
+    } catch (_) { /* non-blocking */ }
+
+    // Build the workout object — mirrors fields the rest of the app reads
+    const workout = {
+      sport: manualEntryState.sport,
+      date: date,
+      duration: durationMin, // minutes, rest of app handles minutes vs seconds
+      distance: distanceKm,  // km
+      avgHr: avgHr,
+      maxHr: maxHr,
+      description: notes || null,
+      source: 'manual',
+      activity_classification: classification,
+      _logged_at: new Date().toISOString(),
+    };
+
+    await saveWorkout(workout);
+
+    // If RPE or felt-chips set, also write a workout_feedback row.
+    // saveWorkout sets workout._dbId after the insert.
+    if (workout._dbId && (manualEntryState.rpe || manualEntryState.felt.size > 0 || notes)) {
+      try {
+        await sb.from('workout_feedback').insert({
+          user_id: state.user.id,
+          workout_id: workout._dbId,
+          rpe: manualEntryState.rpe || null,
+          notes: notes || null,
+          felt_easy: manualEntryState.felt.has('easy'),
+          felt_hard: manualEntryState.felt.has('hard'),
+          felt_strong: manualEntryState.felt.has('strong'),
+          felt_flat: manualEntryState.felt.has('flat'),
+          felt_sore: manualEntryState.felt.has('sore'),
+          felt_sick: manualEntryState.felt.has('sick'),
+        });
+      } catch (fbErr) {
+        console.warn('[Stryxs] manual entry: workout_feedback insert failed (non-fatal):', fbErr);
+      }
+    }
+
+    // Refresh in-memory workouts so dashboard/history pick this up immediately
+    await loadWorkouts();
+    trackEvent('manual_workout_logged', { sport: manualEntryState.sport, has_distance: distanceKm != null, has_hr: avgHr != null, classification });
+
+    statusEl.style.color = 'var(--accent)';
+    statusEl.textContent = '✓ Saved. Refresh to see it on the dashboard.';
+    toast('Workout saved');
+
+    // Reset the form for the next entry (keep panel open, the user might log another)
+    setTimeout(() => { renderManualEntryForm(); }, 800);
+  } catch (err) {
+    console.error('[Stryxs] manual workout save failed:', err);
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Save failed: ' + (err.message || 'unknown');
+    if (btn) { btn.disabled = false; btn.textContent = 'Save workout'; }
   }
 }
 
