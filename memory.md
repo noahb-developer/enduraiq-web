@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17, end of Coach quality deep-dive + Strava historical backfill. Frontend v41, Coach edge function refreshed, send-followups has weekly insights branch, Strava sync captures full detail + has new backfill_details action. See section 10.
+> Last updated: 2026-05-17 (round 2), end of Noah's 15-item polish punch list. Frontend v44, Coach edge function now reads workout_feedback in chat context, send-followups also prunes 90-day-old messages, Pro pill in nav, brand wordmark + logo standardized, Settings padding fixed, Account deletion rename, etc. See section 10.
 
 ---
 
@@ -171,7 +171,7 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v41 — 947,522 bytes (post Coach quality pass + Strava backfill button; live in repo `noahb-developer/stryxs` as `index.html`)
+- **Frontend:** `index.html` v44 — 967,901 bytes (post 15-item polish pass: Settings/modal padding, brand wordmark + logo standardization, Pro pill in nav, beefed-up Subscription tab with usage bars, Account-deletion rename, navigation fixes, workout_feedback inline form; live in repo `noahb-developer/stryxs` as `index.html`)
 - **Coach edge function:** 154,682 bytes (was 151,983 as coach_v8). Now has bucketed reactivity-message routing in frontend, severity-tuned analyzePatterns, workoutCommentary accepts activeInsights, dispatcher accepts both `allWorkouts`/`recentWorkouts` aliases. Effectively v9 but file is just `index.ts` in `coach/`.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
@@ -296,14 +296,67 @@ If any of those fail, fix before shipping.
 
 ### 🔜 PENDING for next session
 
-**1. Pro upsell tuning**
-Pass 3b put a Pro upsell card at the bottom of free-user workout views. Beta testers used to see drift / Coach's Read narrative for free; they don't now. Risk: feels like a regression. Watch beta feedback. If it lands poorly: tone down to inline "✨" badge, OR roll back the gate entirely and find a different Pro lever, OR A/B test post-launch.
+**1. Pro upsell tuning** (waits on beta feedback)
+Pass 3b put a Pro upsell card at the bottom of free-user workout views, and Round-2 polish gated Coach's Read / drift / projections behind Pro. Beta testers used to see those for free. Risk: feels like a regression. If beta feedback says so: tone down to inline "✨" badge, OR roll back the gate entirely and find a different Pro lever, OR A/B test post-launch. No action until signal.
 
-**2. workout_feedback UI** (still deferred from May 2026 backlog)
-Table exists, no UI captures it. Coach doesn't read it. Adding it gives Coach a subjective-effort signal separate from HR/pace. ~30 min build per memory section 7.
+**2. Verify email branding** (still deferred — 30-second manual check Noah needs to do)
+Noah still hasn't checked whether signup verify email is on Resend or Supabase default. Path: Supabase Studio → Authentication → Emails → SMTP settings. If `smtp.resend.com` is there, already on Resend. Otherwise needs Resend SMTP added with the existing RESEND_API_KEY.
 
-**3. Verify email branding** (still deferred)
-Noah still hasn't checked whether signup verify email is on Resend or Supabase default. Supabase Studio → Authentication → Emails → SMTP settings.
+**3. (Maybe later) unique constraint on workout_feedback (user_id, workout_id)**
+Round-2 added the feedback UI with an update-or-insert pattern instead of upsert, because the table likely doesn't have a unique constraint. Two fast taps could in theory create duplicates. Not blocking, low-priority migration whenever convenient.
+
+**4. (Maybe later) workout_commentary read feedback**
+Round-2 wired chat() to receive workout_feedback. workoutCommentary doesn't currently — feedback isn't usually logged BEFORE commentary fires (commentary runs right after sync). If users start re-running commentary after logging RPE, worth adding. Not pressing.
+
+### What 2026-05-17 round-2 delivered — Noah's 15-item polish punch list
+
+After the morning's Coach-quality sprint shipped (Areas 1-3 + Strava backfill), Noah came back with a screenshot-driven punch list of polish items. All shipped in 4 clean deploys + 1 memory commit. Beta users will exercise. Resend email check is the only outstanding item from this list (manual user task).
+
+#### Deploy 1 — Settings polish + Pro signaling (frontend v42, commit `aeb4347`)
+- **Upload CSV arrow** in the Connect-Strava CTA was wrongly wired to Settings; now goes to the Upload page (`page-upload`).
+- **toggleSettingsSection** now `scrollIntoView`'s the just-opened section. Means "Connect Strava" / "Manage" buttons from elsewhere in the app actually land the user on the Strava block instead of dropping them at the top of Settings.
+- **Settings section inner padding** bumped from 4px top to 20px desktop / 18px mobile (content was hugging the divider).
+- **Modal-actions** footer padding bumped from 16px to 22px bottom (delete modal buttons felt crowded). Added mobile breakpoint at 16px / 20px.
+- **"Danger zone"** renamed **"Account deletion"** with a trash icon instead of warning sign. Same red treatment, professional tone.
+- **Subscription tab Pro view** rebuilt: ACTIVE pill, next-renewal date, member-since date, plus a new Usage-this-month block with progress bars for Coach chats / workout commentary / plan generations (wires up the previously-unused `get_my_usage` action). Bars colour-shift to yellow at 75% and red at 90%. New `renderProUsageBars()` helper called when subscription section opens.
+- **PRO pill in top nav** beside the avatar (subtle green chip). Shows "TRIAL" during trial, "PRO" once active, hidden for free. Collapses to an 8px dot at very small screens. Wired into `showApp()` via new `refreshNavProPill()`.
+
+#### Deploy 2 — Brand consistency (frontend v43, commit `10dd980`)
+- Landing page had a generic abstract green ring as its brand mark; app nav had the actual favicon SVG. Wordmark text used different fonts/styles. Felt like "multiple brands."
+- `.lv2-brand-mark` CSS rewritten: was a positioned div with green background + dark inner `::after` ring; now a bare wrapper hosting `<img src="/favicon.svg">` with the same accent-color glow animation. Removed `::after` rule.
+- 3 landing nav HTML occurrences updated to inject the actual logo.
+- App top-nav `.logo span` now uses Instrument Serif font (matching landing) with the same italic accent-color "s" treatment (`Stryx<em>s</em>`). Scoped to `.logo` so it doesn't bleed elsewhere. Mobile scales the wordmark at <=480px.
+- Legacy `landingNav <span>Stryxs</span>` updated to the new wordmark too.
+- `.lv2-compare-name` on the comparison card left as plain text (it's body content showing the brand name alongside competitors, not a brand display).
+
+#### Deploy 3 — 90-day chat message cleanup (send-followups edge, no version bump)
+- New `pruneOldChatMessages(sb, 90)` helper deletes coach_messages older than 90 days.
+- Runs on every daily fire of the existing 14:00 UTC `send-followups` cron (cheap single delete with a head-count first for logging).
+- Why 90 days: Coach only reads the most-recent 20 messages anyway, so older ones are dead DB weight + basic privacy hygiene. Frontend's "Show older" archive only sees what's in the table, so users gradually lose access to chats >90 days old.
+- Results object adds `message_cleanup: { threshold_days: 90, deleted: N, errors: 0 }` so the daily run logs it.
+
+#### Deploy 4 — workout_feedback UI + Coach chat reads it (Coach edge + frontend v44, commit `28719e3`)
+Closes the workout_feedback item that's been deferred since May 2026.
+
+Frontend (9 new helpers):
+- `renderWorkoutFeedbackForm(workoutDbId)` renders an inline "💬 How did that feel?" trigger at the bottom of every workout view (`renderRun`, `renderBike`, `renderSwim`, `renderSummaryWorkout`).
+- `openWorkoutFeedbackForm` lazy-fetches existing feedback (avoids per-workout pre-fetch overhead) and expands the form.
+- `buildWorkoutFeedbackFormHtml` renders an RPE 1-10 scale + 6 felt-chips (easy/hard/strong/flat/sore/sick) + optional notes textarea.
+- `selectFeedbackRpe`, `toggleFeedbackFeltChip` handle UI state.
+- `saveWorkoutFeedback` does an update-or-insert into `workout_feedback` (no unique constraint assumed). Toasts and tracks `workout_feedback_saved` analytics event.
+- `renderFeedbackSummary` shows post-save state with an Edit button.
+- `reopenWorkoutFeedbackForm`, `cancelWorkoutFeedback` round it out.
+
+Frontend chat wiring:
+- `sendChatMsg` now also fetches the user's last 14 workout_feedback rows (joined to workouts) and passes them as `recentFeedback` in the chat payload. Non-blocking on failure.
+
+Coach edge:
+- `chat()` signature extended with `recentFeedback` (default `[]`).
+- New `feedbackBlock` formatted into the context block between insights and the plan note. Each row reads like `2026-05-12 run: RPE 7/10 · felt strong + sore · note: "legs heavy after Friday brick"`. Coach explicitly told to *use* the feedback, not list it back.
+- Dispatcher forwards `payload.recentFeedback` to `chat()`.
+
+#### Items that turned out to already work
+- **Chat scroll to last-read / new message on open:** Already implemented in `renderCoachChat` via `localStorage` last-read tracking + first-unread scroll target + smart subsequent-render anchoring. Reviewed the code, no changes needed. The mechanism was added during Round 3 and works correctly.
 
 ### What 2026-05-17 delivered — Coach quality deep-dive (full sprint)
 
