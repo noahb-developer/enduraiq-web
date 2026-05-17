@@ -3976,32 +3976,32 @@ body.on-auth .container {
   <div class="nav-menu-items">
     <button class="nav-menu-item" data-page="dashboard" onclick="navigateAndCloseMenu('dashboard')">
       <span class="nav-menu-icon">📊</span>
-      <span class="nav-menu-label">Dashboard</span>
+      <span class="nav-menu-label" data-i18n="nav.dashboard">Dashboard</span>
     </button>
     <button class="nav-menu-item" data-page="coach" onclick="navigateAndCloseMenu('coach')">
       <span class="nav-menu-icon">🧠</span>
-      <span class="nav-menu-label">Coach</span>
+      <span class="nav-menu-label" data-i18n="nav.coach">Coach</span>
       <span class="nav-menu-badge" id="coachUnreadBadge" style="display: none;"></span>
     </button>
     <button class="nav-menu-item" data-page="plan" onclick="navigateAndCloseMenu('plan')">
       <span class="nav-menu-icon">📅</span>
-      <span class="nav-menu-label">Plan</span>
+      <span class="nav-menu-label" data-i18n="nav.plan">Plan</span>
     </button>
     <button class="nav-menu-item" data-page="race-planner" onclick="navigateAndCloseMenu('race-planner')">
       <span class="nav-menu-icon">🏁</span>
-      <span class="nav-menu-label">Race Plan</span>
+      <span class="nav-menu-label" data-i18n="nav.race_plan">Race Plan</span>
     </button>
     <button class="nav-menu-item" data-page="upload" onclick="navigateAndCloseMenu('upload')">
       <span class="nav-menu-icon">📤</span>
-      <span class="nav-menu-label">Analyze</span>
+      <span class="nav-menu-label" data-i18n="nav.analyze">Analyze</span>
     </button>
     <button class="nav-menu-item" data-page="history" onclick="navigateAndCloseMenu('history')">
       <span class="nav-menu-icon">📂</span>
-      <span class="nav-menu-label">History</span>
+      <span class="nav-menu-label" data-i18n="nav.history">History</span>
     </button>
     <button class="nav-menu-item" data-page="trends" onclick="navigateAndCloseMenu('trends')">
       <span class="nav-menu-icon">📈</span>
-      <span class="nav-menu-label">Trends</span>
+      <span class="nav-menu-label" data-i18n="nav.trends">Trends</span>
     </button>
   </div>
 </div>
@@ -4013,20 +4013,20 @@ body.on-auth .container {
   <div class="avatar-menu-divider"></div>
   <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('settings')">
     <span class="avatar-menu-icon">⚙</span>
-    <span>Settings</span>
+    <span data-i18n="nav.settings">Settings</span>
   </button>
   <button class="avatar-menu-item" id="avatarUpgradeItem" onclick="navigateAndCloseAvatarMenu('upgrade')" style="display: none;">
     <span class="avatar-menu-icon">⭐</span>
-    <span id="avatarUpgradeLabel">Upgrade to Pro</span>
+    <span id="avatarUpgradeLabel" data-i18n="nav.upgrade_to_pro">Upgrade to Pro</span>
   </button>
   <button class="avatar-menu-item" onclick="navigateAndCloseAvatarMenu('help')">
     <span class="avatar-menu-icon">💡</span>
-    <span>Help &amp; FAQ</span>
+    <span data-i18n="nav.help">Help &amp; FAQ</span>
   </button>
   <div class="avatar-menu-divider"></div>
   <button class="avatar-menu-item danger" onclick="closeAvatarMenu(); confirmLogout();">
     <span class="avatar-menu-icon">↪</span>
-    <span>Log out</span>
+    <span data-i18n="nav.logout">Log out</span>
   </button>
 </div>
 
@@ -4554,8 +4554,8 @@ body.on-auth .container {
 
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
-  <div class="section-title">Settings</div>
-  <p class="section-sub">Edit your profile, training zones, and preferences.</p>
+  <div class="section-title" data-i18n="settings.title">Settings</div>
+  <p class="section-sub" data-i18n="settings.sub">Edit your profile, training zones, and preferences.</p>
 
   <div id="settingsContent"></div>
 </div>
@@ -4803,13 +4803,17 @@ const I18N = {
     'lang.settings.saved': 'Language updated',
 
     // Nav / pages
-    'nav.dashboard': 'Today',
+    'nav.dashboard': 'Dashboard',
     'nav.coach': 'Coach',
     'nav.plan': 'Plan',
+    'nav.race_plan': 'Race plan',
     'nav.analyze': 'Analyze',
     'nav.history': 'History',
     'nav.trends': 'Trends',
     'nav.settings': 'Settings',
+    'nav.help': 'Help & FAQ',
+    'nav.logout': 'Log out',
+    'nav.upgrade_to_pro': 'Upgrade to Pro',
 
     // Dashboard
     'dash.recent_workouts': 'Recent workouts',
@@ -4870,6 +4874,7 @@ const I18N = {
 
     // Settings (section headers)
     'settings.title': 'Settings',
+    'settings.sub': 'Edit your profile, training zones, and preferences.',
     'settings.section.language': 'Language',
     'settings.section.profile': 'Profile',
     'settings.section.personal': 'Personal info',
@@ -4942,13 +4947,17 @@ const I18N = {
     'lang.settings.saved': 'Langue mise à jour',
 
     // Nav / pages
-    'nav.dashboard': "Aujourd'hui",
+    'nav.dashboard': 'Tableau de bord',
     'nav.coach': 'Coach',
     'nav.plan': 'Plan',
+    'nav.race_plan': 'Plan de course',
     'nav.analyze': 'Analyser',
     'nav.history': 'Historique',
     'nav.trends': 'Tendances',
     'nav.settings': 'Paramètres',
+    'nav.help': 'Aide & FAQ',
+    'nav.logout': 'Déconnexion',
+    'nav.upgrade_to_pro': 'Passer à Pro',
 
     // Dashboard
     'dash.recent_workouts': 'Séances récentes',
@@ -5009,6 +5018,7 @@ const I18N = {
 
     // Settings (section headers)
     'settings.title': 'Paramètres',
+    'settings.sub': 'Modifie ton profil, tes zones d’entraînement et tes préférences.',
     'settings.section.language': 'Langue',
     'settings.section.profile': 'Profil',
     'settings.section.personal': 'Infos personnelles',
@@ -5073,6 +5083,17 @@ function detectInitialLocale() {
 }
 
 // Set the active locale, persist locally + on profile, re-apply to DOM.
+// IMPORTANT: we deliberately DO NOT call rerenderActivePage() here. That
+// was the previous behavior and it broke the Settings Language section —
+// renderSettings rebuilds the whole page innerHTML and only the Profile
+// section starts with the `expanded` class, so the Language section
+// collapsed mid-click. Now we only:
+//   1. Update state.locale + localStorage + DB + <html lang>
+//   2. Run applyI18nToDom() so every [data-i18n] tag swaps text
+//   3. Caller (pickLanguageFromSettings, pickLanguage modal) handles
+//      anything visible that doesn't have a data-i18n tag
+// Pages that are NOT currently visible re-render in the new locale
+// automatically the next time the user navigates to them.
 async function setLocale(loc, opts) {
   if (loc !== 'en' && loc !== 'fr') return;
   state.locale = loc;
@@ -5086,23 +5107,6 @@ async function setLocale(loc, opts) {
       await sb.from('profiles').update({ locale: loc }).eq('id', state.user.id);
     } catch (e) { console.warn('[Stryxs] locale DB write failed (non-fatal):', e); }
   }
-  // Re-render the currently-active page so dynamic strings re-flow
-  try {
-    if (typeof rerenderActivePage === 'function') rerenderActivePage();
-  } catch (_) {}
-}
-
-function rerenderActivePage() {
-  const active = document.querySelector('.page.active');
-  const id = active?.id || '';
-  // Map page id → its render function, where one exists
-  if (id === 'page-dashboard' && typeof renderDashboard === 'function') renderDashboard();
-  else if (id === 'page-coach' && typeof renderCoach === 'function') renderCoach();
-  else if (id === 'page-settings' && typeof renderSettings === 'function') renderSettings();
-  else if (id === 'page-upload' && typeof renderTodaysAnalyses === 'function') renderTodaysAnalyses();
-  else if (id === 'page-history' && typeof renderHistory === 'function') renderHistory();
-  else if (id === 'page-trends' && typeof renderTrends === 'function') renderTrends();
-  else if (id === 'page-plan' && typeof renderPlan === 'function') renderPlan();
 }
 
 // Apply initial locale BEFORE first render so users get the right language immediately.
@@ -6002,28 +6006,34 @@ async function doSignup() {
   trackEvent('signup_completed', { source: 'password' });
   toast(`Welcome, ${name}!`);
   showApp();
+  // Show the language picker BEFORE rendering the dashboard so the dashboard
+  // renders in the chosen language. The picker is awaitable — it resolves
+  // when the user clicks a language (or skips). If they skip, we use the
+  // already-detected initial locale (browser default).
+  await showLanguagePickerIfFirstTime();
   navigate('dashboard');
-  // First-time language picker. Fresh signups never have profile.locale set yet
-  // (DB default is 'en' but we treat it as "not chosen"), so we ask once.
-  // The choice is saved to profiles.locale immediately + translates the UI live.
-  showLanguagePickerIfFirstTime();
 }
 
-// Show the language picker modal exactly once per user. Sets a localStorage
-// flag so we don't ask again — the Settings → Language section is the place
-// to change it after this.
+// Show the language picker modal exactly once per user. Returns a Promise
+// that resolves when the user picks (or immediately if the picker was
+// already shown for this user / no user is signed in). Awaiting lets the
+// signup flow render the dashboard AFTER the locale is chosen.
 function showLanguagePickerIfFirstTime() {
-  if (!state.user) return;
-  const flagKey = `stryxs_lang_picker_shown_${state.user.id}`;
-  let shown = false;
-  try { shown = localStorage.getItem(flagKey) === '1'; } catch (_) {}
-  if (shown) return;
-  showLanguagePickerModal();
-  try { localStorage.setItem(flagKey, '1'); } catch (_) {}
+  return new Promise((resolve) => {
+    if (!state.user) return resolve();
+    const flagKey = `stryxs_lang_picker_shown_${state.user.id}`;
+    let shown = false;
+    try { shown = localStorage.getItem(flagKey) === '1'; } catch (_) {}
+    if (shown) return resolve();
+    // Store the resolver so pickLanguage can resolve when clicked
+    window._langPickerResolve = resolve;
+    showLanguagePickerModal();
+    try { localStorage.setItem(flagKey, '1'); } catch (_) {}
+  });
 }
 
 // Renders the language picker as a centered modal. Two big buttons.
-// On select: saves to profile + localStorage + re-renders the active page.
+// On select: saves to profile + localStorage + applyI18nToDom.
 function showLanguagePickerModal() {
   // Remove any existing instance
   document.getElementById('langPickerModal')?.remove();
@@ -6057,6 +6067,13 @@ async function pickLanguage(loc) {
   await setLocale(loc);
   trackEvent('language_picked', { locale: loc, source: 'signup_modal' });
   document.getElementById('langPickerModal')?.remove();
+  // Resolve the awaiting signup flow so it can now render the dashboard
+  // in the chosen language.
+  if (typeof window._langPickerResolve === 'function') {
+    const r = window._langPickerResolve;
+    window._langPickerResolve = null;
+    r();
+  }
 }
 
 // Renders the two language buttons. Extracted so we can swap them live after
@@ -19169,8 +19186,8 @@ async function renderSettings() {
         <div class="settings-section-header-left">
           <div class="settings-section-icon">🌐</div>
           <div class="settings-section-text">
-            <div class="settings-section-title">${t('lang.settings.title')}</div>
-            <div class="settings-section-sub">${t('lang.settings.sub')}</div>
+            <div class="settings-section-title" data-i18n="lang.settings.title">${t('lang.settings.title')}</div>
+            <div class="settings-section-sub" data-i18n="lang.settings.sub">${t('lang.settings.sub')}</div>
           </div>
         </div>
         <div class="settings-section-chevron">›</div>
