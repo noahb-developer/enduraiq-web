@@ -4088,9 +4088,9 @@ body.on-auth .container {
       </div>
 
       <div class="lv2-meta">
-        <span><span class="lv2-dot"></span>Free forever tier</span>
+        <span><span class="lv2-dot"></span>7-day Pro trial, no card</span>
         <span><span class="lv2-dot"></span>Works with Strava + CSV from any watch</span>
-        <span><span class="lv2-dot"></span>No credit card</span>
+        <span><span class="lv2-dot"></span>Cancel anytime</span>
       </div>
     </section>
 
@@ -4237,7 +4237,7 @@ body.on-auth .container {
     <section class="lv2-section">
       <div class="lv2-cta-strip">
         <h2>Stop guessing.<br>Start <em>training</em>.</h2>
-        <p>Free forever tier covers the essentials. Upgrade for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
+        <p>Start with a 7-day Pro trial, no card required. After that, keep training on the free tier or stay on Pro for unlimited plan generation, adaptive coaching, and deep trend analysis.</p>
         <button class="lv2-btn-primary" onclick="navigate('signup')">
           Create your free account
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -4276,7 +4276,7 @@ body.on-auth .container {
 
     <div class="lv2-auth-card">
       <h2 class="lv2-auth-title">Create your <em>account</em></h2>
-      <p class="lv2-auth-sub">Free forever, no credit card required</p>
+      <p class="lv2-auth-sub">Start your 7-day Pro trial, no credit card required</p>
 
       <div class="lv2-field">
         <label>Name</label>
@@ -4980,6 +4980,30 @@ function getUserSubscriptionStatus() {
   if (p.subscriptionTier === 'pro' && (!p.proUntil || new Date(p.proUntil) > new Date())) return 'pro';
   if (p.subscriptionTier === 'pro_trial' && p.trialEndsAt && new Date(p.trialEndsAt) > new Date()) return 'trial';
   return 'free';
+}
+
+// Free-user Coach chat trial: let logged-in free users send N messages before the Pro wall.
+// Counts user-role messages in the past 30 days, mirrors the backend check in chat().
+const FREE_COACH_TRIAL_LIMIT = 3;
+async function getFreeCoachMessagesUsed() {
+  if (!state.user) return 0;
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { count, error } = await sb.from('coach_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', state.user.id)
+      .eq('role', 'user')
+      .gte('created_at', since);
+    if (error) return 0;
+    return count || 0;
+  } catch (_) { return 0; }
+}
+// Returns { allowed, remaining }. Pro/trial: always allowed, Infinity remaining.
+async function canSendCoachMsg() {
+  if (isUserPro()) return { allowed: true, remaining: Infinity, isFreeTrial: false };
+  const used = await getFreeCoachMessagesUsed();
+  const remaining = Math.max(0, FREE_COACH_TRIAL_LIMIT - used);
+  return { allowed: remaining > 0, remaining, isFreeTrial: true };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -8905,7 +8929,24 @@ async function renderDashboard() {
   const rangeLabel = state.dashRecentRange === 'week' ? 'this week' : state.dashRecentRange === 'month' ? 'this month' : 'all time';
 
   if (recentList.length === 0) {
-    rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts ${rangeLabel}</div><div class="empty-desc">${state.workouts.length > 0 ? 'Try a longer time range' : 'Connect Strava in Settings or upload a CSV from Analyze tab'}</div></div>`;
+    // Fresh-user empty state: give them three concrete next-steps right here
+    // instead of just telling them where to look. The Strava CTA matches the
+    // one on the Plan/History pages so it feels consistent.
+    if (state.workouts.length === 0) {
+      rec.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">Log your first workout to get going</div>
+          <div class="empty-desc" style="margin-bottom: 18px;">Coach needs at least one workout to give you real feedback. Pick whichever works for you.</div>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn" style="background: #FC4C02; border-color: #FC4C02; color: white;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">Connect Strava</button>
+            <button class="btn ghost" onclick="navigate('upload')">Log manually</button>
+            <button class="btn ghost" onclick="navigate('upload')">Upload watch file</button>
+          </div>
+        </div>`;
+    } else {
+      rec.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No workouts ${rangeLabel}</div><div class="empty-desc">Try a longer time range.</div></div>`;
+    }
     document.getElementById('recentCount').textContent = state.workouts.length === 0 ? 'No workouts yet' : `0 workouts ${rangeLabel}`;
   } else {
     const sportGroups = {};
@@ -12317,28 +12358,47 @@ async function completeIntake() {
     window.removeEventListener('beforeunload', beforeUnloadHandler);
   }, 180000); // 3 minutes hard limit
 
-  // Helper to update the loading message so user sees progress
-  const updateProgress = (msg) => {
+  // Helper to update the loading message + advance the progress bar so the
+  // user sees forward motion (anti-anxiety UX during the 20-90s build).
+  // `step` is 1-based (1..totalSteps). If omitted, just updates the message.
+  const TOTAL_STEPS = 5;
+  let currentStep = 1;
+  const updateProgress = (msg, step) => {
     if (masterTimeoutFired) return;
+    if (typeof step === 'number') currentStep = step;
     const loading = el?.querySelector('.loading');
     if (loading) {
-      loading.innerHTML = `<div class="spinner"></div>${msg}`;
+      const pct = Math.min(100, Math.round((currentStep / TOTAL_STEPS) * 100));
+      loading.innerHTML = `
+        <div class="spinner"></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0;">
+          <div style="font-size: 14px; color: var(--text);">${msg}</div>
+          <div style="height: 4px; background: var(--bg-3); border-radius: 999px; overflow: hidden;">
+            <div style="height: 100%; width: ${pct}%; background: var(--accent); border-radius: 999px; transition: width 0.5s ease;"></div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-mute);">Step ${currentStep} of ${TOTAL_STEPS} · usually 20-45s total</div>
+        </div>
+      `;
     }
     console.log('[Stryxs]', msg);
   };
+
+  // Pull the methodology from intake so the loading screen shows WHO is
+  // building the plan, not just "Stryxs". Big confidence boost vs a generic spinner.
+  const methodology = getMethodologyForGoal(intakeAnswers.goal_event);
 
   el.innerHTML = `
     <div class="coach-hero">
       <div class="coach-avatar">🧠</div>
       <div class="coach-intro">
         <h2>Building your plan…</h2>
-        <p>Stryxs is designing your periodized training plan based on the methodology that fits your goal. This takes 20-45 seconds.</p>
+        <p>Coach is designing your periodized plan using <strong style="color: var(--accent);">${methodology.brain}</strong>. This usually takes 20-45 seconds.</p>
         <p style="margin-top: 10px; padding: 10px 14px; background: rgba(255, 209, 102, 0.06); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 8px; font-size: 13px; color: var(--text-dim);">
           ⚠️ Don't close this window or navigate away, it interrupts the build.
         </p>
       </div>
     </div>
-    <div class="loading"><div class="spinner"></div>Saving your profile…</div>
+    <div class="loading" style="align-items: flex-start; gap: 14px;"><div class="spinner"></div><div style="font-size: 14px; color: var(--text);">Saving your profile…</div></div>
   `;
 
   // Convert weight/height to metric for storage if needed
@@ -12408,7 +12468,7 @@ async function completeIntake() {
     updated_at: new Date().toISOString(),
   };
 
-  updateProgress('Saving your profile…');
+  updateProgress('Saving your profile…', 1);
   // Strip fh_* and runtime-only fields before DB upsert (DB schema may not have them).
   // Backend reads the in-memory payload directly via callCoach, so it still gets these values.
   const dbPayload = { ...payload };
@@ -12526,7 +12586,7 @@ async function completeIntake() {
       console.log('[Stryxs] Built starter week:', starterDays?.length, 'days, missingLthr=', missingLthr);
     }
 
-    updateProgress('Designing your periodization arc…');
+    updateProgress(`Designing your periodization arc with ${methodology.name}…`, 2);
     let skeleton = null;
     let feasibilityWarnings = null;
     try {
@@ -12559,7 +12619,7 @@ async function completeIntake() {
     const skipPeriodizedPlan = missingLthr && isFrielPersona;
 
     if (skipPeriodizedPlan) {
-      updateProgress('Saving your plan structure…');
+      updateProgress('Saving your plan structure…', 3);
       // Save a stub training_plans row so renderPlan can find the skeleton
       const stubPlan = {
         phase: 'starter',
@@ -12588,7 +12648,7 @@ async function completeIntake() {
 
       // Save starter days
       if (starterDays && starterDays.length > 0) {
-        updateProgress('Setting up your starter week…');
+        updateProgress('Setting up your starter week…', 4);
         try {
           await saveStarterWeek(starterDays, state.user.id, stubRow?.id || null);
           console.log('[Stryxs] Starter week saved successfully');
@@ -12599,7 +12659,7 @@ async function completeIntake() {
       }
     } else {
       // Normal flow: LTHR already known (or not a Friel persona), generate periodized week 1 immediately
-      updateProgress('Building your week-1 plan…');
+      updateProgress(`Building your week-1 plan, ${methodology.name}-style…`, 3);
       console.log('[Stryxs] Calling generate_plan with payload:', payload);
       const plan = await callCoach('generate_plan', { intake: payload, weekNumber: 1, skeleton }, { timeoutMs: 90000 });
       console.log('[Stryxs] Plan received, workouts:', plan?.workouts?.length || 0);
@@ -12611,7 +12671,7 @@ async function completeIntake() {
 
       if (skeleton) plan.skeleton = skeleton;
 
-      updateProgress('Saving your plan to your calendar…');
+      updateProgress('Saving your plan to your calendar…', 4);
       const saveResult = await savePlanToDb(plan, state.user.id, planStartStr);
       console.log('[Stryxs] Periodized plan saved');
       if (masterTimeoutFired) return;
@@ -12637,7 +12697,7 @@ async function completeIntake() {
     }
 
     // Generate Coach's intro message explaining the plan
-    updateProgress('Writing your welcome message…');
+    updateProgress('Writing your welcome message…', 5);
     try {
       const totalWeeksForIntro = skeleton ? skeleton.length : null;
       const introMsg = await callCoach('plan_intro_message', {
@@ -12697,6 +12757,41 @@ async function completeIntake() {
   }
 }
 
+// Renders the chat input row (textarea+Send, or a hint+Upgrade) based on the gate state.
+// Extracted so we can re-render just this row after each free-user send without rebuilding the chat.
+function renderCoachInputRow(gate) {
+  if (gate.allowed) {
+    const trialHint = gate.isFreeTrial
+      ? `<div style="font-size: 11px; color: var(--text-mute); padding: 4px 6px 0; line-height: 1.4;">✨ Free Coach trial, ${gate.remaining} message${gate.remaining === 1 ? '' : 's'} left. Upgrade to Pro for unlimited chat.</div>`
+      : '';
+    return `
+      <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+        ${trialHint}
+        <div style="display: flex; gap: 8px; align-items: flex-end;">
+          <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
+          <button class="btn" onclick="sendChatMsg()">Send</button>
+        </div>
+      </div>
+    `;
+  }
+  // Free user hit the limit, show Pro wall
+  return `
+    <div style="flex: 1; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 18px;">🔒</span>
+      <span>You've used your ${FREE_COACH_TRIAL_LIMIT} free Coach messages. Upgrade to Pro for unlimited chat.</span>
+    </div>
+    <button class="btn" onclick="navigate('upgrade')" style="white-space: nowrap;">Upgrade</button>
+  `;
+}
+
+// Re-renders just the input row after a free-user send so the remaining count stays in sync.
+async function refreshCoachInputRow() {
+  const row = document.getElementById('coachInputRow');
+  if (!row) return;
+  const gate = await canSendCoachMsg();
+  row.innerHTML = renderCoachInputRow(gate);
+}
+
 async function renderCoachChat(el, intake) {
   // Load past messages, pull more so we can compute archived count
   const { data: history } = await sb.from('coach_messages')
@@ -12704,6 +12799,9 @@ async function renderCoachChat(el, intake) {
     .eq('user_id', state.user.id)
     .order('created_at', { ascending: true })
     .limit(200);
+
+  // Free-user Coach chat trial: 3 messages in past 30 days before Pro wall.
+  const coachGate = await canSendCoachMsg();
 
   // ═══ VISUAL ARCHIVE ═══
   // Only show the last 20 messages by default. Anything older is hidden behind a
@@ -12740,19 +12838,16 @@ async function renderCoachChat(el, intake) {
         ` : ''}
         ${(recentMessages.length > 0)
           ? recentMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id)).join('')
-          : renderMsg('coach', `Hey ${state.user.name.split(' ')[0]}. I built your plan based on what you told me, check the Plan tab to see the calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`)}
+          : renderMsg('coach', (() => {
+              // Persona-flavored fallback when no Coach messages exist yet.
+              // Normally planIntroMessage saves a real welcome, this is the safety net.
+              const firstName = state.user.name.split(' ')[0];
+              const m = getMethodologyForGoal(intake?.goal_event);
+              return `Hey ${firstName}, ${m.name} in spirit. I built your plan based on what you told me, check the Plan tab to see this week's calendar. Upload your workouts as you do them and I'll give you specific feedback. Ask me anything here.`;
+            })())}
       </div>
-      <div class="chat-input-row">
-        ${isUserPro() ? `
-          <textarea id="chatInput" placeholder="Ask Coach anything..." rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
-          <button class="btn" onclick="sendChatMsg()">Send</button>
-        ` : `
-          <div style="flex: 1; padding: 12px 14px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text-mute); font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 18px;">🔒</span>
-            <span>Coach chat is a Pro feature. Upgrade to ask anything.</span>
-          </div>
-          <button class="btn" onclick="navigate('upgrade')" style="white-space: nowrap;">Upgrade</button>
-        `}
+      <div class="chat-input-row" id="coachInputRow">
+        ${renderCoachInputRow(coachGate)}
       </div>
     </div>
 
@@ -13261,9 +13356,10 @@ function handleChatInputKeydown(event) {
 }
 
 async function sendChatMsg() {
-  // Defense in depth, Coach chat is Pro-only. UI hides input but block here too.
-  if (!isUserPro()) {
-    toast('Coach chat is a Pro feature. Upgrade to chat with Coach.', 5000);
+  // Defense in depth, free users get FREE_COACH_TRIAL_LIMIT messages, then Pro wall.
+  const gate = await canSendCoachMsg();
+  if (!gate.allowed) {
+    toast(`You've used your ${FREE_COACH_TRIAL_LIMIT} free Coach messages. Upgrade to keep chatting.`, 5000);
     navigate('upgrade');
     return;
   }
@@ -13529,6 +13625,12 @@ async function sendChatMsg() {
     console.error(err);
   }
 
+  // Refresh the input row for free users so the remaining-count hint stays accurate.
+  // If they just used their last free message, this swaps the textarea for the Pro wall.
+  if (gate.isFreeTrial) {
+    await refreshCoachInputRow();
+    return;
+  }
   input.disabled = false;
   input.focus();
 }
@@ -13536,6 +13638,24 @@ async function sendChatMsg() {
 function formatGoal(g) {
   const map = { marathon: 'Marathon', half_marathon: 'Half Marathon', '10k': '10K', '5k': '5K', olympic_tri: 'Olympic Triathlon', '70_3': '70.3 / Half Ironman', ironman: 'Ironman', general: 'General Fitness' };
   return map[g] || g;
+}
+
+// Display name + brain for the methodology Coach will use, based on goal_event.
+// Mirrors pickPersona() in the coach edge function. Used to personalize loading
+// states so users see WHO is building their plan, not just a spinner.
+function getMethodologyForGoal(goalEvent) {
+  const map = {
+    ironman:        { name: 'Friel',              brain: "Joe Friel's Triathlete's Training Bible" },
+    '70_3':         { name: 'Friel + Sutton',     brain: "Joe Friel + Brett Sutton (half-Ironman)" },
+    olympic_tri:    { name: 'Friel',              brain: "Joe Friel multisport (short-course)" },
+    sprint_tri:     { name: 'Friel',              brain: "Joe Friel multisport (short-course)" },
+    marathon:       { name: 'Pfitzinger + Daniels', brain: "Pete Pfitzinger + Jack Daniels (marathon)" },
+    half_marathon:  { name: 'Daniels + Pfitzinger', brain: "Jack Daniels + Pete Pfitzinger (half marathon)" },
+    '10k':          { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
+    '5k':           { name: 'Daniels VDOT',       brain: "Jack Daniels VDOT (short-distance run)" },
+    general:        { name: 'Attia + Seiler',     brain: "Peter Attia + Stephen Seiler (health & fitness)" },
+  };
+  return map[goalEvent] || { name: 'Stryxs Coach', brain: 'endurance methodology' };
 }
 
 function formatWeight(kg, unitPref) {
