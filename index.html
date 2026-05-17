@@ -4827,7 +4827,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v40',
+      app_version: 'v41',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -18285,13 +18285,16 @@ async function renderConnections() {
           <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="syncStravaNow(this)">
             🔄 Sync now
           </button>
+          <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="backfillStravaDetails(this)" title="Re-fetches older activities to add map, splits, RPE, gear, and power data that wasn't captured on initial sync.">
+            ✨ Refresh older workouts
+          </button>
           <button class="btn ghost" style="font-size: 13px; padding: 8px 14px; color: #f87171; border-color: rgba(239, 68, 68, 0.25);" onclick="disconnectStrava(this)">
             Disconnect
           </button>
         </div>
 
         <div style="margin-top: 14px; padding: 12px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.55;">
-          ℹ️ New activities sync automatically when you finish them. For deeper analysis (cardiac drift, zones), upload a CSV file on the Upload page.
+          ℹ️ New activities sync automatically when you finish them. Use "Refresh older workouts" once if you connected before May 2026 to backfill GPS routes, splits, power, RPE, and gear on past activities.
         </div>
       `;
     } else {
@@ -18383,6 +18386,61 @@ async function syncStravaNow(btn) {
     toast('Sync failed: ' + err.message);
     btn.disabled = false;
     btn.textContent = '🔄 Sync now';
+  }
+}
+
+// Backfill older Strava workouts with the detail-endpoint fields that
+// weren't captured pre-2026-05-17 (polyline, RPE, suffer score, gear,
+// per-km splits, power). Server processes up to 30 per call to stay
+// under Strava's rate limit; if more remain we offer to continue.
+async function backfillStravaDetails(btn) {
+  if (!state.user) return;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Refreshing...';
+
+  try {
+    const result = await callStrava('backfill_details', { limit: 30 });
+
+    // Server returns: { processed, updated, errors, remaining, total_needed_before }
+    if (!result || result.total_needed_before === 0) {
+      toast('All Strava workouts are already up to date');
+    } else {
+      const summary = `Updated ${result.updated} of ${result.processed} workout${result.processed === 1 ? '' : 's'}`;
+      const remainder = result.remaining > 0
+        ? `. ${result.remaining} more to go, click again to continue.`
+        : '.';
+      const errorNote = result.errors > 0 ? ` (${result.errors} failed)` : '';
+      toast(summary + remainder + errorNote);
+
+      // Refresh state so the dashboard/history pick up the enriched data
+      try { await loadWorkouts(); } catch (e) { console.warn('[Stryxs] loadWorkouts post-backfill failed:', e); }
+
+      // If on a page that renders workouts, refresh it
+      setTimeout(() => {
+        if (typeof renderDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) {
+          renderDashboard().catch(() => {});
+        }
+        if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
+          renderTodaysAnalyses().catch(() => {});
+        }
+      }, 600);
+
+      try {
+        trackEvent('strava_backfill_run', {
+          processed: result.processed,
+          updated: result.updated,
+          errors: result.errors,
+          remaining: result.remaining,
+        });
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.error('Backfill failed:', err);
+    toast('Refresh failed: ' + (err.message || 'try again'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
