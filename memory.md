@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17 (round 3), end of audit + Layer A (Coach speaks user's language). Frontend v45 (PRO pill reverted, looked bad), Coach edge function now responds in the athlete's language. Beta-readiness audit done with three blockers identified (cost, non-Strava users, French language). Next session = manual workout entry form + Layer B i18n + audit fixes (signup copy, Coach trial messages, plan-gen loading state, empty states, Coach intro warmth). See section 10.
+> Last updated: 2026-05-17 (round 4 = beta-readiness sprint). Frontend v48, Coach edge function refreshed. Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language tab). All on main, Vercel deployed, Coach edge function deployed. **OPEN ITEM:** Noah needs to run `migrate_v6.sql` in Supabase Studio (adds `profiles.locale TEXT DEFAULT 'en'` column). i18n falls back to localStorage until that runs. See section 10.
 
 ---
 
@@ -171,9 +171,8 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v45 — 965,890 bytes (v44 had nav PRO pill which Noah said "looked super bad", reverted in v45; everything else from the polish pass kept). Subscription-tab Pro view stays (ACTIVE pill, member-since, usage bars). Top nav reverted to plain avatar.
-- **Coach edge function:** Now includes a LANGUAGE block at the end of buildSystemPrompt — Coach responds in the athlete's language (French, Spanish, etc.), keeping methodology voice intact. JSON enum keys stay English, human-readable values translate. Default English if unclear.
-- **Coach edge function:** 154,682 bytes (was 151,983 as coach_v8). Now has bucketed reactivity-message routing in frontend, severity-tuned analyzePatterns, workoutCommentary accepts activeInsights, dispatcher accepts both `allWorkouts`/`recentWorkouts` aliases. Effectively v9 but file is just `index.ts` in `coach/`.
+- **Frontend:** `index.html` v48 — 1,012,251 bytes. Phases 1+2+3 from round-4 shipped. Manual entry form on Analyze page; free-tier Coach trial (3 msgs/30d) with counter UI; persona-aware plan-gen loading state; persona-named Coach intro greeting; "Free forever" copy purged. i18n infrastructure live with ~120 EN/FR strings translated; signup language picker modal; Settings → Language section pinned above Profile.
+- **Coach edge function:** 161,538 bytes. Adds `checkFreeUserCoachLimit` (3 user-role msgs / 30d for free users, uses `>` not `>=` because frontend inserts before calling). Warmer 1-2 sentence persona-named greeting at the top of `planIntroMessage` user prompt + same on post-LTHR variant. LANGUAGE block from round-3 still intact.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
 - **strava edge function:** 49,977 bytes (was ~44 KB). Now requests `watts`/`latlng`/`temp` streams, captures polyline + description + perceived_exertion + suffer_score + gear + splits_metric + avgPower + maxPower + normalizedPower into workout_data. Bulk sync fetches detail endpoint per new activity (webhook already did).
@@ -295,7 +294,116 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 PENDING for next session — beta-readiness work
+### What 2026-05-17 round 4 delivered (Phase 1 + 2 + 3, full beta-readiness sprint)
+
+All three phases from the round-3 punch list shipped, in this order. Each
+phase committed + pushed to main + relevant edge function deployed in the
+same turn (Noah set a "be autonomous with deployments" preference, saved as
+feedback memory).
+
+#### Phase 1 — Five audit fixes (frontend v46 + coach edge deploy)
+- **3a.** "Free forever" copy → "7-day Pro trial, no card" across 3 sites
+  (landing meta, landing CTA strip, signup auth-sub).
+- **3b.** Free users get 3 Coach messages / 30 days before Pro wall.
+  Frontend gate (`canSendCoachMsg`, `getFreeCoachMessagesUsed`,
+  `renderCoachInputRow`, `refreshCoachInputRow`) + counter UI ("3 messages
+  left" hint). Backend `checkFreeUserCoachLimit` in coach edge enforces
+  same rule (check uses `>` not `>=` because frontend inserts the user
+  message BEFORE calling chat — without that, the 3rd allowed msg would
+  be wrongly rejected). New constant `LIMITS.free_coach_trial_messages = 3`.
+- **3c.** Plan-gen loading: new `getMethodologyForGoal()` helper returns
+  `{name, brain}` (e.g. Friel, Pfitzinger + Daniels). Loading hero now
+  shows methodology brain name; 5-step progress bar advances; each
+  `updateProgress(msg, step)` advances the bar.
+- **3d.** Empty dashboard recent-workouts: 3 CTAs (Connect Strava / Log
+  manually / Upload watch file) replace the static text-only hint.
+- **3e.** Coach intro prompt: added explicit "OPEN WITH A 1-2 SENTENCE
+  PERSONAL GREETING in your methodology's voice" instruction at top of
+  `planIntroMessage` user prompt + same for post-LTHR-entry variant.
+  Frontend chat fallback message (zero-message edge case) now uses
+  `getMethodologyForGoal()` to say "Hey Alex, Friel in spirit. I built…"
+
+#### Phase 2 — Manual workout entry form (frontend v47)
+Third toggle "Log manually" on the Analyze page (alongside Auto-sync +
+Upload file). Form fields: sport chips, date (defaults today), duration
+(min, required), distance (unit-aware km/mi), avg HR, max HR, RPE 1-10,
+felt easy/hard/strong/flat/sore/sick chips, notes textarea.
+
+Helpers: `renderManualEntryForm`, `selectManualSport`, `selectManualRpe`,
+`toggleManualFeltChip`, `submitManualWorkout`. State held in
+`manualEntryState` object, reset on each open.
+
+Save flow:
+- Insert into `workouts` table via existing `saveWorkout()` with
+  `source: 'manual'`.
+- Classification auto-detected: if a `planned_workouts` row exists for
+  the same date+sport, mark as `'plan'`, else `'extra_training'`.
+- If RPE/felt/notes set, also insert a `workout_feedback` row (so Coach
+  reads the subjective signal next chat).
+- Triggers `loadWorkouts()` refresh so the dashboard picks it up.
+- Tracks `manual_workout_logged` analytics event.
+
+Also added a small "Got a Garmin/Coros/Apple Watch?" hint in the Upload
+File panel pointing users at the Strava-bridge path OR the manual form.
+
+#### Phase 3 — French i18n + signup picker + Settings → Language (frontend v48)
+Layer B from the round-3 audit, plus the language-picker UX Noah asked for.
+
+**i18n infrastructure** (vanilla JS, no library):
+- `I18N` table with `en` + `fr` for ~120 keys (common buttons, landing,
+  auth, language picker, nav, dashboard, coach, analyze, manual, settings,
+  pro upsell).
+- `t(key, params)` helper, falls back en > key, substitutes `{token}`.
+- `applyI18nToDom(root)` walks `[data-i18n]` (textContent) and
+  `[data-i18n-attr="placeholder:key"]` (attrs).
+- `detectInitialLocale()`: localStorage > navigator.language > 'en'.
+- `setLocale(loc, {skipDbWrite})`: persists to `profiles.locale`,
+  localStorage, sets `<html lang>`, re-renders active page via
+  `rerenderActivePage()`.
+- `state.locale` set to detected value before first render.
+- `loadProfile` reads `data.locale`, applies if it differs from current.
+
+**Translated surfaces (v48):**
+- Landing page: hero subtitle, both CTAs, meta strip, CTA strip
+- Signup: title, subtitle, all field labels, placeholders, button,
+  "have account" link
+- Login: title, subtitle, email/password labels, button, "no account" link
+- Coach chat: hero title + subtitle, input placeholder, Send button,
+  free-trial hint + exhausted message
+- Dashboard empty recent-workouts: title, subtitle, 3 CTAs
+- Manual entry form: all labels, sport chip labels, felt chip labels,
+  notes placeholder, submit button, status messages, error messages
+- Analyze toggle labels (Auto-sync / Log manually / Upload file)
+- Settings → Language section header + sub
+
+**Signup language picker** (`showLanguagePickerModal`,
+`showLanguagePickerIfFirstTime`): fires once per user after first signup,
+gated by `stryxs_lang_picker_shown_${user.id}` localStorage flag. Two
+big buttons (🇬🇧 English / 🇫🇷 Français). `pickLanguage(loc)` calls
+`setLocale` + tracks `language_picked` event + closes modal.
+
+**Settings → Language section**: pinned ABOVE Profile section in
+Settings. Two buttons (English / Français), active one styled with
+accent color + checkmark. `pickLanguageFromSettings(loc)` swaps live
+and toasts confirmation.
+
+**Open item:** `migrate_v6.sql` was created (adds
+`profiles.locale TEXT DEFAULT 'en'`) but Noah hasn't run it yet in
+Supabase Studio. Until then, locale only persists via localStorage —
+the profile write will silently fail (column missing). Layer A (Coach
+French) is unaffected; it reads language from the user's message text.
+
+**Deferred to future sessions** (infrastructure is in place, just need to
+drop strings into I18N + tag HTML):
+- Intake questions (huge surface, ~50 strings)
+- Plan tab body content
+- Trends/insights detail copy
+- Race planner
+- Long-form modal copy (feasibility warnings, trial welcome card, etc.)
+- Emails (send-followups templates)
+- terms.html, privacy.html
+
+### 🔜 PENDING for next session — older audit items + Phase 3 expansion
 
 Noah is gathering beta users. Three blockers came up at end of 2026-05-17 round-3 session, plus an audit identified some first-run-UX issues. Tackle in this order:
 
