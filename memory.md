@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17 (round 2), end of Noah's 15-item polish punch list. Frontend v44, Coach edge function now reads workout_feedback in chat context, send-followups also prunes 90-day-old messages, Pro pill in nav, brand wordmark + logo standardized, Settings padding fixed, Account deletion rename, etc. See section 10.
+> Last updated: 2026-05-17 (round 3), end of audit + Layer A (Coach speaks user's language). Frontend v45 (PRO pill reverted, looked bad), Coach edge function now responds in the athlete's language. Beta-readiness audit done with three blockers identified (cost, non-Strava users, French language). Next session = manual workout entry form + Layer B i18n + audit fixes (signup copy, Coach trial messages, plan-gen loading state, empty states, Coach intro warmth). See section 10.
 
 ---
 
@@ -171,7 +171,8 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v44 — 967,901 bytes (post 15-item polish pass: Settings/modal padding, brand wordmark + logo standardization, Pro pill in nav, beefed-up Subscription tab with usage bars, Account-deletion rename, navigation fixes, workout_feedback inline form; live in repo `noahb-developer/stryxs` as `index.html`)
+- **Frontend:** `index.html` v45 — 965,890 bytes (v44 had nav PRO pill which Noah said "looked super bad", reverted in v45; everything else from the polish pass kept). Subscription-tab Pro view stays (ACTIVE pill, member-since, usage bars). Top nav reverted to plain avatar.
+- **Coach edge function:** Now includes a LANGUAGE block at the end of buildSystemPrompt — Coach responds in the athlete's language (French, Spanish, etc.), keeping methodology voice intact. JSON enum keys stay English, human-readable values translate. Default English if unclear.
 - **Coach edge function:** 154,682 bytes (was 151,983 as coach_v8). Now has bucketed reactivity-message routing in frontend, severity-tuned analyzePatterns, workoutCommentary accepts activeInsights, dispatcher accepts both `allWorkouts`/`recentWorkouts` aliases. Effectively v9 but file is just `index.ts` in `coach/`.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
@@ -294,7 +295,51 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 PENDING for next session
+### 🔜 PENDING for next session — beta-readiness work
+
+Noah is gathering beta users. Three blockers came up at end of 2026-05-17 round-3 session, plus an audit identified some first-run-UX issues. Tackle in this order:
+
+#### 1. Manual workout entry form (~4-6 hours, frontend + maybe Coach)
+**Why:** Several of Noah's beta users use Coros / Garmin / Apple Watch and don't want to use Strava. The file picker on the Analyze page accepts .csv/.tcx/.gpx/.fit but the actual parser may be CSV-only. Garmin Connect / Coros app / Apple Watch all export to .fit, not .csv. Best v1 fix: manual workout entry form.
+
+**Build:**
+- Form on the Analyze page (alongside Auto-sync + Upload CSV toggles): "Log manually"
+- Fields: sport (run/bike/swim/strength/other), date, duration (min), distance (km/mi), avg HR, max HR, notes, optional perceived effort (the same workout_feedback chips we already built)
+- Save into `workouts` table with `source: 'manual'`, classification 'plan' or 'extra_training' based on whether a planned workout exists for that date+sport
+- Frontend renders these in history / today / trends like any other workout
+- Coach reads them like any other workout (already does — chat context just looks at workouts table)
+- Bonus: also write a short doc page or in-app blurb: "Have a Garmin/Coros/Apple Watch? Connect it to Strava once (link to Garmin Connect → Strava settings, etc.), works automatically after that. Or log workouts manually below."
+
+#### 2. Layer B — French i18n for ~150 critical UI strings (~8 hours, frontend only)
+**Why:** Most of Noah's beta users speak French. Layer A (Coach French) shipped today, but the buttons around the chat still say "Generate plan" / "Save changes" etc.
+
+**Build:**
+- Add `profile.locale` field (or detect from `navigator.language` if not set)
+- Add a Settings dropdown: Language → English / Français
+- Build a lightweight `t(key)` function with `en.json` + `fr.json` lookup tables at the top of `<script>` (no external i18n library — keep it vanilla)
+- Translate the ~100-150 strings on: landing page hero/CTAs, signup/login, intake questions, dashboard greeting + cards, Coach tab shell, Settings labels, Plan tab, key buttons, Pro upsell, empty states
+- Defer: emails, help/FAQ, terms.html, privacy.html (those are full pages, do later)
+- Test: switch language, every screen renders without layout breaking (French text is ~30% longer than English on average)
+
+#### 3. Audit fixes — first-run UX (~4 hours, frontend mostly)
+From the 2026-05-17 round-3 audit, here are the friction points worth fixing before beta:
+
+**3a. "Free forever, no credit card required" on signup is misleading.** Free tier is effectively read-only (no Coach chat, no plan gen). New user creates account expecting AI coach, hits Pro wall immediately, bounces. Change to "Start free trial — no credit card required" (matches the actual auto-trial flow).
+
+**3b. Coach chat trial: let logged-in free users send 3 Coach messages before Pro wall.** Noah agreed to this in the audit Q&A. Implementation: count user's coach_messages where role='user' in the past 30 days. If <= 3 AND user is free, allow the chat call. Frontend: replace the hard Pro-only gate with the same counter logic. Backend: same check in chat() before checkUsageLimit. Cost: ~$0.02 per free user, big psychological unlock for conversion.
+
+**3c. Plan generation wait (20-90s) needs a confidence-building loading state.** Right now it's silent. Show "Building your week 1 (this takes ~30s)…" with the persona name appearing as soon as pickPersona runs. Progress dots or pulse animation. Anti-anxiety UX.
+
+**3d. Empty dashboard friendlier copy.** User finishes intake + plan gen, sees Today card + plan but Recent Workouts panel says "No workouts yet". Add a row of CTAs: "Sync Strava" / "Log a workout manually" / "Upload a watch file". The Connect Strava CTA already exists elsewhere; bring it here.
+
+**3e. Coach intro message warmer + persona-flavored.** First Coach message is currently generic: "Hey [Name]. I built your plan based on what you told me…" For a brand-new user this is their FIRST AI conversation in the product. A 1-2 sentence persona-flavored greeting that names the methodology ("Hey Alex, Joe Friel here in spirit. I built you a base-building week…") would meaningfully raise perceived quality. Modify `plan_intro_message` in coach edge function.
+
+#### 4. Cost-of-beta-users (handle as it happens, no code)
+The hard cap is $5/user/month (already enforced). Real usage averages 30-50% of cap = $1-3/user/month. For 10 beta users that's $10-30/month total — within tolerance. Use the existing manual Pro grant in Supabase Studio (set `subscription_tier='pro'` + `pro_until=future-date`). Monitor `api_usage` weekly; if a specific user is heavy, throttle them individually.
+
+If it becomes an issue: add a `subscription_tier='beta'` variant that grants Pro features but caps at 150 chats / 8 plan_gens / 75 commentary per month (half the Pro limits). Don't build pre-emptively.
+
+#### 5. (Carry-over) Pro upsell tuning, workout_feedback unique constraint, etc.
 
 **1. Pro upsell tuning** (waits on beta feedback)
 Pass 3b put a Pro upsell card at the bottom of free-user workout views, and Round-2 polish gated Coach's Read / drift / projections behind Pro. Beta testers used to see those for free. Risk: feels like a regression. If beta feedback says so: tone down to inline "✨" badge, OR roll back the gate entirely and find a different Pro lever, OR A/B test post-launch. No action until signal.
@@ -307,6 +352,39 @@ Round-2 added the feedback UI with an update-or-insert pattern instead of upsert
 
 **4. (Maybe later) workout_commentary read feedback**
 Round-2 wired chat() to receive workout_feedback. workoutCommentary doesn't currently — feedback isn't usually logged BEFORE commentary fires (commentary runs right after sync). If users start re-running commentary after logging RPE, worth adding. Not pressing.
+
+### What 2026-05-17 round-3 delivered — audit + Layer A (Coach French)
+
+After the polish punch list shipped (round 2), Noah said the new nav PRO pill "looked super bad", asked me to revert it, and asked for an honest first-run UX audit + thoughts on whether to start marketing.
+
+**Reverted (frontend v45, commit `0565516`):**
+- Removed `.nav-pro-pill` CSS, the `<span class="nav-pro-pill">` in nav HTML, the `refreshNavProPill()` function, and the call to it in `showApp()`. Top nav back to plain avatar. Pro signaling stays strong in Settings → Subscription tab (which Noah said looked good).
+
+**Audit findings — first-run UX (full list documented in section "🔜 PENDING for next session"):**
+1. "Free forever" signup copy is misleading (free tier is read-only)
+2. Coach chat is locked for free users with zero "try it" affordance
+3. Strava-or-nothing flow (file picker accepts .fit but probably parses only CSV)
+4. Plan-gen 20-90s wait has no loading state
+5. Empty dashboard for fresh users is bare
+6. Coach intro message is generic, not persona-flavored
+7. No language detection or selector
+
+**Three real blockers Noah raised for beta:**
+1. Cost of giving Pro to beta users (verdict: manageable, ~$1-3/user/month average, use manual Pro grant)
+2. Non-Strava users (Coros/Garmin/Apple Watch) — needs a manual entry form or .fit parser
+3. French language — Coach can speak French (shipped), but UI is English-only
+
+**Layer A shipped this session (Coach speaks user's language):**
+- Coach edge function `buildSystemPrompt` now ends with a LANGUAGE block:
+  - "Respond in the language the athlete writes to you in." French → French, Spanish → Spanish, etc.
+  - Methodology voice stays intact across languages
+  - JSON enum keys stay English (pattern_type, severity, etc. — frontend reads them programmatically)
+  - JSON human-readable values translate (title, finding, recommendation)
+  - Free-text output (chat, workout commentary, plan intro, settings ack) translates end-to-end
+  - Default English if unclear
+- Verified: deployed to `coach` edge function
+
+**Context-budget note from end of session:** Noah explicitly asked me to flag if I was running out of context. I was at ~70% used after the full day (Areas 1-3 + Strava backfill + round 2 polish + audit + this). Confidence was OK for Layer A (tiny change) but risky for the bigger items (manual entry form, full i18n, audit fixes). Handed off cleanly. Next session starts fresh with this memory as the briefing.
 
 ### What 2026-05-17 round-2 delivered — Noah's 15-item polish punch list
 
