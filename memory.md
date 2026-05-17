@@ -2,7 +2,9 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17 (round 4 = beta-readiness sprint, end of session). Frontend v48, Coach edge function refreshed, `migrate_v6.sql` RUN in Supabase Studio (profiles.locale column live). Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language tab). All on main, Vercel deployed, Coach edge function deployed, DB schema synced. Beta-ready. See section 10.
+> Last updated: 2026-05-17 (rounds 4 + 5 = full beta-readiness sprint + i18n polish, paused for the day). **Frontend v52**, Coach edge function v3 (with locale awareness), `migrate_v6.sql` RUN, profiles.locale column live. Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language section), plus 3 post-Phase polish rounds addressing user-reported visual + behavioral bugs.
+>
+> **Resuming TOMORROW in same session.** Next-session priority list at the top of section 10.
 
 ---
 
@@ -171,8 +173,9 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v48 — 1,012,251 bytes. Phases 1+2+3 from round-4 shipped. Manual entry form on Analyze page; free-tier Coach trial (3 msgs/30d) with counter UI; persona-aware plan-gen loading state; persona-named Coach intro greeting; "Free forever" copy purged. i18n infrastructure live with ~120 EN/FR strings translated; signup language picker modal; Settings → Language section pinned above Profile.
-- **Coach edge function:** 161,538 bytes. Adds `checkFreeUserCoachLimit` (3 user-role msgs / 30d for free users, uses `>` not `>=` because frontend inserts before calling). Warmer 1-2 sentence persona-named greeting at the top of `planIntroMessage` user prompt + same on post-LTHR variant. LANGUAGE block from round-3 still intact.
+- **Frontend:** `index.html` v52 — 1,028,877 bytes. All Phase 1+2+3 work plus 3 polish rounds. i18n infrastructure now mature: ~200 strings translated, applyI18nToDom() fires on every navigate(), Coach edge gets userLocale on every call.
+- **Service worker:** `sw.js` v2 (was v1) — bumped CACHE_NAME to invalidate any stale-cached frontend code from prior sessions.
+- **Coach edge function:** 164,461 bytes. Full locale-aware behavior: dispatcher attaches `payload.userLocale` to `intake._locale`, `buildSystemPrompt` LANGUAGE block locks output to explicit locale (no more inferring from message language for FR users typing one-word English replies). `workoutCommentary` softens for `source==='manual'` (skip cardiac drift / zone discipline critique, focus on athlete's reported RPE/notes). Plus everything from rounds 3-4: free-user coach trial gate (3 msg / 30 days), warmer persona-named intro greeting.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
 - **strava edge function:** 49,977 bytes (was ~44 KB). Now requests `watts`/`latlng`/`temp` streams, captures polyline + description + perceived_exertion + suffer_score + gear + splits_metric + avgPower + maxPower + normalizedPower into workout_data. Bulk sync fetches detail endpoint per new activity (webhook already did).
@@ -293,6 +296,99 @@ If any of those fail, fix before shipping.
 ---
 
 ## 10. What we just did (so context lives across sessions)
+
+### 🔜 PICKING UP TOMORROW — what's still pending
+
+User explicitly said: continue in this same session tomorrow. Last note from Noah at end of session: "i [will] continue this tomorrow in this same session ok make sure everything is good before i leave."
+
+**i18n completeness — the big remaining work.** Current coverage ~200 strings; app has ~600-800 total user-visible strings. Infrastructure is solid (data-i18n tags + applyI18nToDom on navigate + Coach gets locale on every call). What's still English:
+- **Toast notifications** — most `toast('...')` calls still pass hardcoded English. Grep for `toast(` and convert to `toast(t('...'))`.
+- **Buttons INSIDE settings sections** — "Save changes", "Disconnect", "Manage", "Generate plan", etc. Section HEADERS are tagged but inner content isn't.
+- **Intake/onboarding flow** — none of the questions, options, or chat-style prompts are translated. Large surface (~50-80 strings).
+- **Plan tab body** — calendar internal labels (Rest day, Easy run, Long ride, etc.), week strip labels, "Generate next week" button, plan management area.
+- **Trends/insights cards** — patterns rendered from Coach are already in user's locale (Coach gets userLocale), but the SHELL around them ("Recent patterns", "No insights yet", filter chips) is English.
+- **History list items** — workout type labels, date headers, source badges.
+- **Modal text bodies** — Pro upsell card body (just the heading is tagged), feasibility warnings, skip-workout confirmation, delete-account flow, share-plan modal.
+- **Coach feedback widget** — "How did this feel?", RPE labels, felt chips on the WORKOUT view (not the manual entry form, which IS translated).
+- **The race planner** — entire surface area, large.
+- **Pro pricing page body** — just heading is translated.
+- **terms.html, privacy.html, help/FAQ content** — long form, defer.
+
+**Approach for tomorrow:**
+1. Grep all `toast(['"]` and convert to `t()` calls. Add the FR translations.
+2. Grep all `>Save<`, `>Cancel<`, `>Save changes<`, `>Delete<` etc. — bulk-tag with `data-i18n` references to `common.*` keys.
+3. Walk through the intake flow page by page, tag each question.
+4. Plan tab body pass.
+5. Modal bodies.
+6. Last: race planner.
+
+**Verification path Noah follows:** sets language to French, navigates through every screen, screenshots anything still in English. Then we knock those out batch by batch.
+
+**Settings I changed for him this session (don't undo):**
+- `~/.claude/settings.json` set to `{"permissions":{"defaultMode":"bypassPermissions"}}` so he never sees permission prompts again in any session.
+- Two memory files in `~/.claude/projects/C--Users-noahb-stryxs/memory/`:
+  - `feedback_autonomy.md` — push/deploy without asking
+  - `feedback_chat_noise.md` — don't echo "is now visible in preview panel" hooks back to him
+
+### What 2026-05-17 round 5 delivered (post-Phase i18n polish, 3 deployment rounds)
+
+After the round-4 Phase 1+2+3 ship, Noah reported a series of specific issues he saw in the deployed app. Each fixed in a separate commit + deploy. All on main, Vercel auto-deployed each time.
+
+#### Round 5a — Visual + layout fixes (frontend v49, coach edge refresh)
+Noah's screenshots showed: Language section first (too prominent), language buttons used emoji flags that rendered as plain "GB"/"FR" text on Windows with bad vertical alignment, Account Deletion icon (`🗑`) was invisible on Windows, Analyze page "Or upload CSV manually →" link was a no-op (called `navigate('upload')` while already on upload page), manual entry form needed adapting per sport.
+
+Fixes shipped:
+- **Settings → Language**: moved from top to under Connections. Dropped emoji flags. New monogram badges (EN/FR styled). Click now swaps buttons in place (was rerenderActivePage which collapsed the section — the real bug behind "doesn't change anything").
+- **Account deletion icon**: `🗑` → `⚠️` (visible warning triangle, fits red theme)
+- **Auto-sync "Upload CSV manually →" link**: now calls `toggleAnalyzeSection('uploadCsv')` to open the panel on the same page
+- **Manual entry form**:
+  - "Strength" → "Gym" label (key stays 'strength' for back-compat)
+  - French "Course" → "Course à pied" (disambiguates from "course"=race in French)
+  - Variable fields per sport via new `renderManualVariableFields(sport, distUnit)`:
+    - Gym: distance hidden (n/a for strength)
+    - Other: new "What did you do?" text field (yoga, hiking, etc.)
+    - All HR labels say "(optional)"
+  - "Other" activity stored as `workout.activity_subtype` + prepended to description
+- **Coach edge `workoutCommentary`**: detects `workout.source === 'manual'` and softens prompt — don't critique pace/zone, focus on RPE/notes/felt-flags, be supportive (data is estimated)
+
+#### Round 5b — Language switch actually fixed (frontend v50)
+After 5a, Noah reported clicking buttons "did nothing". Root cause traced:
+- `setLocale` called `rerenderActivePage` which rebuilt full Settings innerHTML
+- Only Profile section starts with `expanded` class — Language section collapsed mid-click, buttons vanished
+Fix:
+- Removed `rerenderActivePage` call from `setLocale`
+- Tagged nav menu (Dashboard/Coach/Plan/Race plan/Analyze/History/Trends), avatar dropdown (Settings/Upgrade/Help/Log out), Settings page title + sub with `data-i18n`
+- Added `nav.race_plan / nav.help / nav.logout / nav.upgrade_to_pro / settings.sub` keys for en + fr
+- Signup picker now returns a Promise so doSignup awaits it BEFORE navigating to dashboard (so first paint is in chosen locale)
+
+#### Round 5c — Permissions + chat-noise preferences saved (user-level)
+Noah said: "i keep getting messages allowing you to do things, can you take them away for all future sessions" + "the preview panel link blocked message keeps appearing".
+
+- Wrote `~/.claude/settings.json` with `permissions.defaultMode: 'bypassPermissions'` — applies to ALL Claude Code sessions on his machine, every project. He should never see permission prompts again.
+- Saved `feedback_chat_noise.md` memory file telling me to NEVER echo "is now visible in Launch preview panel" back to him in user-facing replies. That message comes from a built-in Claude Code hook I can't disable via settings, but I can stop amplifying it.
+- Added pointer to the memory index `MEMORY.md`.
+
+#### Round 5d — Pass locale to Coach + expand translations (frontend v51, coach edge refresh)
+Noah said language switch only changes a few phrases, Coach replies in English when he types short messages, the whole app must change.
+
+- **callCoach()** now injects `state.locale` as `payload.userLocale` on every call (single chokepoint = every action gets it)
+- **Coach dispatcher** attaches `payload.userLocale` to `payload.intake._locale` so `buildSystemPrompt` sees it
+- **LANGUAGE block in buildSystemPrompt** now branches:
+  - `fr` → hard-locks Coach to French regardless of message language ("even if they write a single English word like 'ok' or 'thanks', reply in French")
+  - `en` → hard-locks to English
+  - null/unknown → legacy infer-from-message
+- Dashboard greeting now translates (time-of-day + sport-aware "nice work" + count-aware fallback)
+- All static page titles tagged: Analyze, History, Trends, Help, Plan, Pro (you're-Pro + upgrade)
+- All 14 Settings section headers + subtitles tagged with `data-i18n` (Profile/Personal/Goals/Benchmarks/Equipment/Subscription/Connections/HR/Help/Legal/Language/Notifications/Privacy/Account-deletion)
+
+#### Round 5e — Bulletproof picker + applyI18nToDom on navigate + trial card translated (frontend v52, sw v2)
+Noah reported "the top button stays English, the bottom one keeps flipping between English and French depending on what I'm on when I refresh". My read: most likely service-worker cache serving stale code (both labels were hardcoded, no `data-i18n` on them, no other code path could touch them). Defensively rewrote anyway.
+
+- **Service worker CACHE_NAME bumped v1 → v2** to invalidate any stale-cached frontend
+- **Bulletproof language picker UI**: radio-style cards with filled/empty dots, explicit "Active" / "Tap to switch" status text, native names "English"/"Français" (never translate), aria-pressed for accessibility, `console.log` on every render so we can diagnose if it ever recurs
+- **applyI18nToDom() now runs on every `navigate()`** via `setTimeout(0)` — this is the big one. Was the ROOT CAUSE of "doesn't translate the whole app": render functions used inline `t()` calls so the FIRST render was correct, but after locale switch any newly-navigated page paint was in old locale. Now every tab switch retranslates fresh.
+- **Trial welcome card translated** (title + body with {days} param + after-day-7 explainer + "Start with Coach" CTA)
+- app_version: v48 → v52
 
 ### What 2026-05-17 round 4 delivered (Phase 1 + 2 + 3, full beta-readiness sprint)
 
