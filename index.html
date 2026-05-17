@@ -279,6 +279,25 @@ body.on-landing #landingNav { display: none !important; }
   cursor: pointer; user-select: none;
   flex-shrink: 0;
 }
+/* Wordmark text shared with the landing-page brand. Uses Instrument
+   Serif and an italic accent-colored "s" for a single consistent brand
+   look across landing + logged-in app. */
+.logo span {
+  font-family: 'Instrument Serif', serif;
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--text);
+}
+.logo span em {
+  font-style: italic;
+  color: var(--accent);
+  font-family: 'Instrument Serif', serif;
+}
+@media (max-width: 480px) {
+  .logo span { font-size: 20px; }
+}
 
 .logo-mark {
   width: 32px; height: 32px;
@@ -2936,24 +2955,24 @@ select option {
 }
 .lv2-brand span { font-family: 'Instrument Serif', serif !important; }
 .lv2-brand em { font-style: italic; color: var(--lv2-acc); font-family: 'Instrument Serif', serif !important; }
+/* Landing brand mark — actual Stryxs logo (favicon.svg) with a soft
+   accent glow. Replaces the prior abstract ring placeholder so the
+   landing matches the in-app top-nav logo. */
 .lv2-brand-mark {
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  background: var(--lv2-acc);
+  width: 26px; height: 26px;
   position: relative;
-  box-shadow: 0 0 24px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3);
-  animation: lv2-brandPulse 3s ease-in-out infinite;
   flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(0, 229, 160, 0.45));
+  animation: lv2-brandPulse 3s ease-in-out infinite;
 }
-.lv2-brand-mark::after {
-  content: '';
-  position: absolute; inset: 4px;
-  border-radius: 50%;
-  background: var(--lv2-bg);
+.lv2-brand-mark img,
+.lv2-brand-mark svg {
+  width: 100%; height: 100%;
+  display: block;
 }
 @keyframes lv2-brandPulse {
-  0%, 100% { box-shadow: 0 0 24px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 0 36px var(--lv2-acc), inset 0 0 8px rgba(0, 0, 0, 0.3); }
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(0, 229, 160, 0.45)); }
+  50% { filter: drop-shadow(0 0 14px rgba(0, 229, 160, 0.7)); }
 }
 
 .lv2-nav-cta {
@@ -3000,8 +3019,7 @@ select option {
     font-size: 12px;
   }
   .lv2-brand { font-size: 19px; }
-  .lv2-brand-mark { width: 20px; height: 20px; }
-  .lv2-brand-mark::after { inset: 3px; }
+  .lv2-brand-mark { width: 22px; height: 22px; }
 }
 
 @media (max-width: 380px) {
@@ -3966,7 +3984,7 @@ body.on-auth .container {
     </button>
     <div class="logo" onclick="navigate('dashboard')">
       <div class="logo-mark"><img src="/favicon.svg" alt="Stryxs"></div>
-      <span>Stryxs</span>
+      <span>Stryx<em>s</em></span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
       <span class="nav-pro-pill" id="navProPill" style="display: none;" aria-label="Pro member">PRO</span>
@@ -4039,7 +4057,7 @@ body.on-auth .container {
   <div class="nav-inner">
     <div class="logo" onclick="navigate('landing')">
       <div class="logo-mark"><img src="/favicon.svg" alt="Stryxs"></div>
-      <span>Stryxs</span>
+      <span>Stryx<em>s</em></span>
     </div>
     <div style="display:flex; gap:8px;">
       <button class="btn ghost" style="padding: 8px 14px; font-size: 13px;" onclick="navigate('login')">Log in</button>
@@ -4060,7 +4078,7 @@ body.on-auth .container {
     <!-- Landing-specific nav (visible only when logged out) -->
     <nav class="lv2-nav" id="lv2Nav">
       <div class="lv2-brand">
-        <div class="lv2-brand-mark"></div>
+        <div class="lv2-brand-mark"><img src="/favicon.svg" alt="" /></div>
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
@@ -4271,7 +4289,7 @@ body.on-auth .container {
 
     <nav class="lv2-nav">
       <div class="lv2-brand" onclick="navigate('landing')">
-        <div class="lv2-brand-mark"></div>
+        <div class="lv2-brand-mark"><img src="/favicon.svg" alt="" /></div>
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
@@ -4329,7 +4347,7 @@ body.on-auth .container {
 
     <nav class="lv2-nav">
       <div class="lv2-brand" onclick="navigate('landing')">
-        <div class="lv2-brand-mark"></div>
+        <div class="lv2-brand-mark"><img src="/favicon.svg" alt="" /></div>
         <span>Stryx<em>s</em></span>
       </div>
       <div class="lv2-nav-cta">
@@ -4853,7 +4871,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v42',
+      app_version: 'v43',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
