@@ -4827,7 +4827,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v38',
+      app_version: 'v39',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -19258,8 +19258,24 @@ function initUpload() {
         commentaryEl.innerHTML = `<div class="coach-box" style="margin-top: 16px;"><div class="coach-title">💬 Coach's Commentary</div><div class="coach-text" id="commentaryText"><span style="opacity: 0.6;">Coach is reviewing your session...</span></div></div>`;
         output.appendChild(commentaryEl);
 
+        // Fetch active insights so Coach can tie this workout to flagged
+        // patterns when relevant. Capped at 5 (Coach uses top 3). Non-blocking,
+        // failure here just means no insights context.
+        let activeInsightsForCommentary = [];
+        try {
+          const { data: ins } = await sb.from('training_insights')
+            .select('pattern_type, severity, title, finding, recommendation')
+            .eq('user_id', state.user.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(5);
+          activeInsightsForCommentary = ins || [];
+        } catch (e) {
+          console.warn('[Stryxs] Could not fetch active insights for commentary:', e);
+        }
+
         // Race the commentary call against a 60 second timeout
-        const commentaryPromise = callCoach('workout_commentary', { workout: analysis, intake });
+        const commentaryPromise = callCoach('workout_commentary', { workout: analysis, intake, activeInsights: activeInsightsForCommentary });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Commentary timed out')), 60000)
         );
