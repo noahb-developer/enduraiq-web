@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17, end of Coach quality deep-dive (Areas 1-3 all shipped). Frontend v40, Coach edge function refreshed, send-followups has weekly insights branch, Strava sync now captures full detail. See section 10.
+> Last updated: 2026-05-17, end of Coach quality deep-dive + Strava historical backfill. Frontend v41, Coach edge function refreshed, send-followups has weekly insights branch, Strava sync captures full detail + has new backfill_details action. See section 10.
 
 ---
 
