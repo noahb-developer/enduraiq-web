@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-15, end of pre-launch sprint round 3 (Coach v8 / Frontend v37 / send-followups deployed). Round 3 was a full audit + fix pass. See section 10 for what changed.
+> Last updated: 2026-05-16, end of brief verify-and-plan session. Discord preview confirmed working. Coach quality deep-dive queued for 2026-05-17. See section 10.
 
 ---
 
@@ -293,22 +293,46 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 PENDING for next session (2026-05-16)
+### 🔜 PENDING for next session (2026-05-17) — COACH QUALITY DEEP-DIVE
 
-**1. Verify Discord/iMessage/Twitter previews show the new hero card.**
-- We pushed the og:image fix (commit `dcaecf5`) at end-of-session 2026-05-15. Discord was still showing the old green-logo preview because Discord caches for days. Noah was tired and stopped before confirming.
-- **First thing tomorrow**: paste `https://stryxs.com/?v=3` (cache-buster URL) into Discord. Should show the dark hero card with green "train." accent.
-- If still wrong, check `view-source:https://stryxs.com/` for `og:image` content. Should be `https://stryxs.com/og-image.png` (NOT `web-app-manifest-512x512.png`).
-- For Facebook/LinkedIn re-scrape: https://developers.facebook.com/tools/debug/
-- For Twitter/X re-scrape: https://cards-dev.twitter.com/validator
+**Noah's mandate (end-of-session 2026-05-16):** "The coaches are the most important thing. This is why people will pay for this app. If it messes up, doesn't do something, or overloads, we are cooked." Coach quality > everything else for the next session. Beta users will catch UI bugs; only Noah + Claude can audit Coach behavior depth.
 
-**2. Smoke test the deployed app** (Noah didn't get to this 2026-05-15):
-- Log in → dashboard loads with no console errors?
-- Open Coach chat → send test msg → reply works? (validates chat history newest-20 fix)
-- Settings → Manage subscription → opens Stripe portal? (validates Stripe edge function JWT auth)
-- Check the dashboard renders without `coach_insights` 404s in console (should be silent now)
+Three audit areas, in priority order:
 
-**3. Discord preview verified-good means we're truly shipped.** Move on to whatever's next (marketing, beta users, etc.).
+**1. Coach reactivity to mid-plan user changes**
+When a user changes intake AFTER a plan exists (adds "got a bike", new pool access, injury, new PB, available_days change, equipment change, etc.), Coach must:
+- Detect the change (today: `detectImportantSettingsChanges` in `index.html`, expanded in v36)
+- Make a judgment: does the plan need modifying or not?
+- Either modify the plan, OR proactively tell the user "noted, no change needed, here's why"
+- Today's likely gap: detection exists, but the "Coach decides + acts" loop after detection is unclear. Trace `detectImportantSettingsChanges` callers — does it just fire a chat message, or does it actually invoke `apply_chat_correction` / regenerate sections of the plan? Map the full flow.
+
+**2. Insights system end-to-end**
+- Backend: `analyzePatterns` writes to `training_insights` (was fixed in Coach v8 — verify it actually populates with real workout data).
+- UI surface: `renderInsightsMiniCard` shows them. Confirm the card is good — readable, actionable, not noisy.
+- **Coach context: does Coach READ insights when chatting / `workoutCommentary` / generating plans?** Or are insights orphaned in their own UI card with no influence on Coach output? This is the big question.
+- Severity tuning: Coach must NOT be harsh. `urgent` reserved for safety (overtraining flags, injury risk). Default to `actionable` or `info`. Audit `analyzePatterns` severity assignment logic.
+- Insights should influence plan modifications, not just display passively. Verify the loop.
+
+**3. Strava data — show in-app, never "go look at Strava"**
+- Audit every place frontend currently links OUT to Strava instead of displaying the data inline. Grep for `strava.com/activities`, "view on Strava", external link icons in workout views.
+- Workout detail view must surface every metric Strava gives us: HR zones + time in each, splits/laps, power (cycling), elevation gain/profile, cadence, perceived effort if logged on Strava side, weather if synced.
+- Coach context block: when Coach comments on a workout or builds the next one, it must have access to that rich Strava data — not just duration/distance.
+- **Value-prop framing:** if users have to click out to Strava for detail, they could just use Strava alone. The app must be the destination for workout review.
+
+**How to approach tomorrow:**
+- Start with `coach_v8.ts` reads: chat context block, `analyzePatterns`, `workoutCommentary`, `generatePlan`, settings-change handling, insights-into-context flow.
+- Then `index.html`: insights UI (`renderInsightsMiniCard` + surrounding), workout detail view, every Strava deep-link reference, `detectImportantSettingsChanges` flow.
+- Noah offered to do deep research in claude.ai chat for methodology questions ("how should a Friel-style coach react to athlete adding equipment mid-plan", etc.) — invoke that when judging what "good Coach reaction" actually looks like.
+- Likely outputs: changes to `coach_v8.ts` (chat context block, insights reading, severity logic) + frontend changes (rich workout detail view, removed Strava deep-links).
+
+**Deploy status end-of-session 2026-05-16:** No code changes this session. Frontend v37 and Coach v8 unchanged. Last commit `28346ce` (before memory update). Nothing to push to Vercel.
+
+### What 2026-05-16 confirmed (brief verify-and-plan session)
+- ✅ **Discord preview works.** Noah confirmed after pasting `https://stryxs.com/?social=1`. Hero card with green "train." accent renders.
+- ✅ **Production HTML has correct og:/twitter: meta tags** (verified via raw `Invoke-WebRequest` against stryxs.com — `WebFetch`'s markdown stripping had falsely reported them missing).
+- ✅ **og-image.png is 1200×630**, served as `image/png` from stryxs.com root.
+- ⏭️ **Smoke test items from 2026-05-15 explicitly delegated to beta users** by Noah (login / Coach chat reply / Stripe portal open / no coach_insights 404s). He won't manually click through; will rely on beta user reports.
+- 💬 Discussed but parked (no action taken): linking claude.ai chat ↔ Claude Code (Projects + paste workflow, both have web tools), multi-agent subagent setups (`.claude/agents/*.md`, manager-style delegation), and multi-business / transferable-scaffold strategy (user-level `~/.claude/CLAUDE.md` + one project folder per business). All deferred. May revisit once Stryxs has beta users and a real friction signal.
 
 ### What 2026-05-15 (Round 3) actually delivered
 
