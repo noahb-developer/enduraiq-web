@@ -4827,7 +4827,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v39',
+      app_version: 'v40',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7918,6 +7918,250 @@ function renderInsights(insights) {
   `;
 }
 
+// ═══════════════════════════════════════════════════════════
+// WORKOUT-DETAIL HELPERS (Pass 3b — show Strava data in-app)
+//
+// These render the rich workout sections that used to push users to
+// Strava: HR zone bars, splits/lap table, GPS route map, power stats,
+// perceived effort / suffer / gear / description, and a tiny Strava
+// link only at the bottom. All sections only render if the data is
+// actually present, so summary-only workouts degrade cleanly.
+// ═══════════════════════════════════════════════════════════
+
+// Decode a Google-encoded polyline (what Strava returns for map.summary_polyline)
+// into an array of [lat, lng] pairs. Standard algorithm.
+function decodePolyline(str) {
+  if (!str || typeof str !== 'string') return [];
+  let index = 0, lat = 0, lng = 0;
+  const coords = [];
+  while (index < str.length) {
+    let b, shift = 0, result = 0;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20 && index < str.length);
+    const dlat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += dlat;
+    shift = 0; result = 0;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20 && index < str.length);
+    const dlng = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += dlng;
+    coords.push([lat * 1e-5, lng * 1e-5]);
+  }
+  return coords;
+}
+
+// SVG-only route preview, no tile service / API key needed. Just the
+// route shape on a flat background. Cheap and reliable.
+function renderGpsMapPreview(polyline) {
+  if (!polyline) return '';
+  const coords = decodePolyline(polyline);
+  if (coords.length < 2) return '';
+
+  let minLat = coords[0][0], maxLat = coords[0][0];
+  let minLng = coords[0][1], maxLng = coords[0][1];
+  for (const [lat, lng] of coords) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
+  const padLat = (maxLat - minLat) * 0.05 || 0.001;
+  const padLng = (maxLng - minLng) * 0.05 || 0.001;
+  minLat -= padLat; maxLat += padLat; minLng -= padLng; maxLng += padLng;
+
+  const W = 320, H = 180;
+  const sx = W / (maxLng - minLng);
+  const sy = H / (maxLat - minLat);
+  const scale = Math.min(sx, sy);
+  const offsetX = (W - (maxLng - minLng) * scale) / 2;
+  const offsetY = (H - (maxLat - minLat) * scale) / 2;
+
+  const points = coords.map(([lat, lng]) => {
+    const x = (lng - minLng) * scale + offsetX;
+    const y = H - ((lat - minLat) * scale + offsetY);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const d = `M ${points.join(' L ')}`;
+  const startPt = points[0].split(',');
+  const endPt = points[points.length - 1].split(',');
+
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; margin-top: 14px;">
+      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Route</div>
+      <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="display: block;">
+        <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="${startPt[0]}" cy="${startPt[1]}" r="4" fill="var(--accent)" />
+        <circle cx="${endPt[0]}" cy="${endPt[1]}" r="4" fill="#fff" stroke="var(--accent)" stroke-width="2" />
+      </svg>
+    </div>
+  `;
+}
+
+// Horizontal stacked bars for time-in-zone distribution. Reads the
+// analyzer's `zd` field (set by analyzeRun/analyzeBike via stream
+// enrichment). Free-tier feature.
+function renderHrZoneBars(zd) {
+  if (!zd) return '';
+  const zones = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'];
+  const colors = { Z1: '#5cb85c', Z2: '#5bc0de', Z3: '#f0ad4e', Z4: '#d9534f', Z5: '#9b59b6' };
+  const labels = { Z1: 'Recovery', Z2: 'Easy / Endurance', Z3: 'Tempo / SS', Z4: 'Threshold', Z5: 'VO2max+' };
+
+  const bars = zones.map(z => {
+    const pct = (zd[z] && typeof zd[z].pct === 'number') ? zd[z].pct : 0;
+    return `
+      <div style="margin-bottom: 6px;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 3px;">
+          <span><strong style="color: var(--text);">${z}</strong> · ${labels[z]}</span>
+          <span style="color: var(--text);">${pct}%</span>
+        </div>
+        <div style="height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden;">
+          <div style="height: 100%; width: ${pct}%; background: ${colors[z]}; border-radius: 4px;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Time in Heart Rate Zones</div>
+      ${bars}
+    </div>
+  `;
+}
+
+// Per-km split table (runs) or per-lap (other). Capped at 20 rows for
+// long workouts to avoid scroll bloat. Free-tier feature.
+function renderSplitsTable(splits, sport) {
+  if (!splits || splits.length === 0) return '';
+  const rows = splits.slice(0, 20).map(s => {
+    const paceOrTime = s.pace || (s.elapsedSec ? Math.floor(s.elapsedSec / 60) + ':' + String(s.elapsedSec % 60).padStart(2, '0') : '-');
+    return `
+      <div style="color: var(--text-dim); padding: 4px 0;">${s.km}</div>
+      <div style="color: var(--text); padding: 4px 0;">${paceOrTime}</div>
+      <div style="color: var(--text); padding: 4px 0;">${s.avgHr ? s.avgHr + ' bpm' : '—'}</div>
+    `;
+  }).join('');
+  const truncated = splits.length > 20 ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">+${splits.length - 20} more splits</div>` : '';
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">${sport === 'run' ? 'Per-km Splits' : 'Splits'}</div>
+      <div style="display: grid; grid-template-columns: 40px 1fr 1fr; gap: 0 12px; font-size: 12px;">
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">KM</div>
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">${sport === 'run' ? 'Pace' : 'Time'}</div>
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>
+        ${rows}
+      </div>
+      ${truncated}
+    </div>
+  `;
+}
+
+// Power stats for cyclists. Avg + max are free; normalized power is Pro.
+function renderPowerStats(a) {
+  if (!a || typeof a.avgPower !== 'number' || a.avgPower <= 0) return '';
+  const isPro = isUserPro();
+  const npBlock = (typeof a.normalizedPower === 'number' && a.normalizedPower > 0)
+    ? (isPro
+      ? `
+        <div style="min-width: 80px;">
+          <div style="font-size: 22px; color: var(--text); font-weight: 700;">${a.normalizedPower}<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">w</span></div>
+          <div style="font-size: 11px; color: var(--text-mute);">Normalized Power</div>
+        </div>`
+      : `
+        <div style="min-width: 80px; padding: 8px 12px; background: rgba(255, 209, 102, 0.06); border: 1px dashed rgba(255, 209, 102, 0.3); border-radius: 8px;">
+          <div style="font-size: 12px; color: rgba(255, 209, 102, 0.95); font-weight: 600;">⭐ NP</div>
+          <div style="font-size: 10px; color: var(--text-mute);">Pro feature</div>
+        </div>`)
+    : '';
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">Power</div>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center;">
+        <div style="min-width: 60px;">
+          <div style="font-size: 22px; color: var(--text); font-weight: 700;">${a.avgPower}<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">w</span></div>
+          <div style="font-size: 11px; color: var(--text-mute);">avg</div>
+        </div>
+        ${typeof a.maxPower === 'number' && a.maxPower > 0 ? `
+        <div style="min-width: 60px;">
+          <div style="font-size: 22px; color: var(--text); font-weight: 700;">${a.maxPower}<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">w</span></div>
+          <div style="font-size: 11px; color: var(--text-mute);">max</div>
+        </div>` : ''}
+        ${npBlock}
+      </div>
+    </div>
+  `;
+}
+
+// Chips for perceived effort / suffer score / gear / photo count, plus
+// the user's Strava-entered description if any.
+function renderWorkoutMeta(a) {
+  if (!a) return '';
+  const bits = [];
+  if (typeof a.perceived_exertion === 'number' && a.perceived_exertion > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">RPE ${a.perceived_exertion}/10</span>`);
+  }
+  if (typeof a.suffer_score === 'number' && a.suffer_score > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(252, 76, 2, 0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">Suffer ${a.suffer_score}</span>`);
+  }
+  if (a.gear_name) {
+    const icon = a.sport === 'run' ? '👟' : a.sport === 'bike' ? '🚴' : '🎽';
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">${icon} ${escapeHtml(a.gear_name)}</span>`);
+  }
+  if (typeof a.total_photo_count === 'number' && a.total_photo_count > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">📷 ${a.total_photo_count}</span>`);
+  }
+  if (typeof a.avgTemp === 'number') {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">🌡 ${Math.round(a.avgTemp)}°C</span>`);
+  }
+  const descHtml = a.description
+    ? `<div style="background: rgba(0, 229, 160, 0.04); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; border-radius: 0 8px 8px 0;">${escapeHtml(a.description)}</div>`
+    : '';
+  if (bits.length === 0 && !descHtml) return '';
+  return `
+    ${bits.length > 0 ? `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px;">${bits.join('')}</div>` : ''}
+    ${descHtml}
+  `;
+}
+
+// Single tiny "Open on Strava" footer link. Replaces the prominent
+// inline "View on Strava" CTAs that used to push users out of the app.
+function renderStravaFooter(a) {
+  if (!a || !a.strava_url) return '';
+  return `
+    <div style="text-align: center; margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.04);">
+      <a href="${a.strava_url}" target="_blank" rel="noopener" style="font-size: 11px; color: var(--text-mute); text-decoration: none; opacity: 0.65;">Open on Strava ↗</a>
+    </div>
+  `;
+}
+
+// Pro-upsell card shown at the bottom of free-user workout views.
+// Single CTA instead of inline "this is a Pro feature" badges littered
+// through the workout, which felt nagging.
+function renderProUpsell(context) {
+  if (isUserPro()) return '';
+  const msg = context === 'run'
+    ? 'Coach’s Read narrative, cardiac drift analysis, and race projections are Pro.'
+    : context === 'bike'
+      ? 'Coach’s Read narrative, drift analysis, normalized power, and ride projections are Pro.'
+      : 'Coach’s Read narrative and deeper analysis are Pro.';
+  return `
+    <div style="margin-top: 18px; padding: 14px; background: linear-gradient(135deg, rgba(255, 209, 102, 0.06), rgba(0, 229, 160, 0.04)); border: 1px solid rgba(255, 209, 102, 0.2); border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+      <div style="font-size: 22px;">⭐</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px;">Unlock more analysis</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.45;">${msg}</div>
+      </div>
+      <button class="btn" style="font-size: 12px; padding: 6px 14px; flex-shrink: 0;" onclick="navigate('upgrade')">Upgrade</button>
+    </div>
+  `;
+}
+
 function renderAnalysis(a) {
   // If this is a summary-only workout (Strava sync), use the simpler view
   if (a.summary_only || (!a.zd && !a.sets && !a.laps)) {
@@ -7929,7 +8173,13 @@ function renderAnalysis(a) {
   return renderSummaryWorkout(a);
 }
 
-// Simple summary view for Strava-synced workouts (no per-lap data)
+// Summary view for Strava-synced workouts.
+//
+// Pass 3b: we now show as much in-app data as possible (HR zone bars,
+// splits, GPS map, power, perceived effort, gear, description) and
+// reduce the "View on Strava" CTAs down to a single tiny footer link.
+// Deep-analysis-failed states get a quiet diagnostic line, not a banner
+// pointing back at Strava.
 function renderSummaryWorkout(a) {
   const sportLabels = { run: 'Run', bike: 'Bike', swim: 'Swim', strength: 'Gym', other: 'Other' };
   const sportLabel = sportLabels[a.sport] || a.sport;
@@ -7941,7 +8191,31 @@ function renderSummaryWorkout(a) {
       Strava
     </span>` : '';
 
-  const stravaLink = a.strava_url ? `<a href="${a.strava_url}" target="_blank" rel="noopener" style="color: #FC4C02; font-size: 12px; text-decoration: none;">View on Strava ↗</a>` : '';
+  // Diagnostic notice ONLY when stream-based deep analysis is impossible.
+  // We don't push the user to Strava here, just tell them why depth is
+  // missing and (for Pro) offer a re-analyze button.
+  const isStrava = a.source === 'strava';
+  const dbId = a._dbId;
+  let diagnostic = '';
+  if (isStrava && a._no_hr_data) {
+    diagnostic = `
+      <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
+        <strong style="color: var(--text);">No heart rate data on this activity.</strong> Wear a HR monitor next time to unlock zone analysis and cardiac drift.
+      </div>`;
+  } else if (isStrava && a._unsupported) {
+    diagnostic = `
+      <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
+        Deep analysis (cardiac drift, zones) is available for runs and rides. Coach still counts this for weekly volume.
+      </div>`;
+  } else if (isStrava && (a._streams_failed || a._too_short || a.summary_only)) {
+    const reanalyzeBtn = dbId && isUserPro()
+      ? `<button class="btn" id="reanalyzeBtn-${dbId}" onclick="reanalyzeStravaWorkout('${dbId}')" style="font-size: 12px; padding: 6px 12px;">🔄 Re-analyze with HR data</button>`
+      : '';
+    diagnostic = `
+      <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
+        Deep analysis didn't complete on this sync. ${reanalyzeBtn}
+      </div>`;
+  }
 
   return `
     <div class="analysis-card">
@@ -7959,71 +8233,16 @@ function renderSummaryWorkout(a) {
           ${a.calories ? `<span>🔥 ${a.calories} cal</span>` : ''}
         </div>
         ${dateStr ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">${dateStr}</div>` : ''}
+        ${renderWorkoutMeta(a)}
       </div>
       <div class="analysis-body">
-        ${(() => {
-          // Choose the right message based on what actually went wrong (or didn't).
-          // Each branch tells the user something useful instead of the old generic CSV instruction.
-          const isStrava = a.source === 'strava';
-          const dbId = a._dbId; // present on workouts loaded from DB
-          if (isStrava && a._no_hr_data) {
-            return `
-              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
-                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
-                  <strong style="color: var(--text);">📊 Basic summary only</strong>
-                </div>
-                <div style="font-size: 13px; color: var(--text-dim);">
-                  This activity was recorded without heart rate data, so deep analysis (zone distribution, cardiac drift) isn't possible.
-                  Wear a heart rate monitor on future workouts to unlock the full analysis. ${stravaLink}
-                </div>
-              </div>`;
-          }
-          if (isStrava && a._unsupported) {
-            return `
-              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
-                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
-                  <strong style="color: var(--text);">📊 Activity logged</strong>
-                </div>
-                <div style="font-size: 13px; color: var(--text-dim);">
-                  Deep analysis (cardiac drift, zone distribution) is currently only available for runs and rides.
-                  Coach still uses this activity for trend tracking and weekly volume. ${stravaLink}
-                </div>
-              </div>`;
-          }
-          if (isStrava && (a._streams_failed || a._too_short || a.summary_only)) {
-            return `
-              <div style="padding: 18px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.2); border-radius: 10px; line-height: 1.6;">
-                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 10px;">
-                  <strong style="color: var(--text);">📊 Deep analysis available</strong>
-                </div>
-                <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 14px;">
-                  This workout was synced before deep analysis was available, or initial analysis didn't complete.
-                  Tap below to fetch heart rate data and unlock zones, drift, and Coach's read.
-                </div>
-                ${dbId ? (isUserPro() ? `
-                  <button class="btn" id="reanalyzeBtn-${dbId}" onclick="reanalyzeStravaWorkout('${dbId}')" style="font-size: 13px; padding: 8px 16px;">
-                    🔄 Re-analyze with heart rate data
-                  </button>
-                  <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute);">${stravaLink}</div>
-                ` : `
-                  <button class="btn" onclick="navigate('upgrade')" style="font-size: 13px; padding: 8px 16px;">
-                    ⭐ Upgrade to unlock deep analysis
-                  </button>
-                  <div style="margin-top: 10px; font-size: 11px; color: var(--text-mute);">Deep analysis (drift, zones, Coach's Read) is a Pro feature. ${stravaLink}</div>
-                `) : `<div style="font-size: 12px; color: var(--text-mute);">${stravaLink}</div>`}
-              </div>`;
-          }
-          // Default fallback (CSV uploads with no analysis, edge cases)
-          return `
-            <div style="padding: 18px; background: rgba(255, 209, 102, 0.04); border: 1px solid rgba(255, 209, 102, 0.15); border-radius: 10px; line-height: 1.6;">
-              <div style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px;">
-                <strong style="color: var(--text);">ℹ️ Summary view</strong>
-              </div>
-              <div style="font-size: 13px; color: var(--text-dim);">
-                For deeper analysis (cardiac drift, zone distribution, intensity targets), upload a CSV file from your watch on the Upload page.
-              </div>
-            </div>`;
-        })()}
+        ${diagnostic}
+        ${renderGpsMapPreview(a.polyline)}
+        ${renderHrZoneBars(a.zd)}
+        ${a.sport === 'bike' ? renderPowerStats(a) : ''}
+        ${renderSplitsTable(a.splits, a.sport)}
+        ${renderProUpsell(a.sport)}
+        ${renderStravaFooter(a)}
       </div>
     </div>
   `;
@@ -8130,6 +8349,7 @@ async function reanalyzeStravaWorkout(dbId) {
 }
 
 function renderRun(a) {
+  const isPro = isUserPro();
   return `
     <div class="analysis-card">
       <div class="analysis-hero">
@@ -8142,8 +8362,11 @@ function renderRun(a) {
           ${a.lapCount ? `<span>🏁 ${a.lapCount} laps</span>` : ''}
         </div>
         <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
+        ${renderWorkoutMeta(a)}
       </div>
       <div class="analysis-body">
+        ${renderGpsMapPreview(a.polyline)}
+
         <div class="chart-section">
           <div class="chart-label">Heart Rate Zones</div>
           <div class="donut-wrap">
@@ -8158,6 +8381,9 @@ function renderRun(a) {
           ${renderInsights(a.insights)}
         </div>` : ''}
 
+        ${renderSplitsTable(a.splits, 'run')}
+
+        ${isPro ? `
         <div class="chart-section">
           <div class="chart-label">Cardiac Drift</div>
           <div class="metrics">
@@ -8180,12 +8406,27 @@ function renderRun(a) {
           <div class="coach-title">💡 Coach's Read</div>
           <div class="coach-text">${a.coach}</div>
         </div>
+        ` : (a.cadence ? `
+        <div class="chart-section">
+          <div class="chart-label">Cadence</div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Cadence</div>
+              <div class="metric-value">${a.cadence}<span style="font-size:12px; color: var(--text-dim);"> spm</span></div>
+              <div class="metric-sub">${a.cadence >= 175 ? 'Efficient' : a.cadence >= 170 ? 'Good, aim 175+' : 'Low'}</div>
+            </div>
+          </div>
+        </div>` : '')}
+
+        ${renderProUpsell('run')}
+        ${renderStravaFooter(a)}
       </div>
     </div>
   `;
 }
 
 function renderBike(a) {
+  const isPro = isUserPro();
   return `
     <div class="analysis-card">
       <div class="analysis-hero">
@@ -8198,8 +8439,11 @@ function renderBike(a) {
           ${a.avgSpeed ? `<span>⚡ ${formatSpeed(a.avgSpeed, 1)}</span>` : ''}
         </div>
         <div class="type-badge type-${a.typeClass}">${Math.round(a.pct)}% of LTHR (${a.lthr})</div>
+        ${renderWorkoutMeta(a)}
       </div>
       <div class="analysis-body">
+        ${renderGpsMapPreview(a.polyline)}
+
         <div class="chart-section">
           <div class="chart-label">Heart Rate Zones</div>
           <div class="donut-wrap">
@@ -8212,6 +8456,11 @@ function renderBike(a) {
           <div class="chart-label">Key Insights</div>
           ${renderInsights(a.insights)}
         </div>` : ''}
+
+        ${renderPowerStats(a)}
+        ${renderSplitsTable(a.splits, 'bike')}
+
+        ${isPro ? `
         <div class="chart-section">
           <div class="chart-label">Pacing & Projections</div>
           <div class="metrics">
@@ -8233,6 +8482,10 @@ function renderBike(a) {
           <div class="coach-title">💡 Coach's Read</div>
           <div class="coach-text">${a.coach}</div>
         </div>
+        ` : ''}
+
+        ${renderProUpsell('bike')}
+        ${renderStravaFooter(a)}
       </div>
     </div>
   `;
