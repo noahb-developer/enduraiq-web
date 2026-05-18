@@ -2,9 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-17 (rounds 4 + 5 = full beta-readiness sprint + i18n polish, paused for the day). **Frontend v52**, Coach edge function v3 (with locale awareness), `migrate_v6.sql` RUN, profiles.locale column live. Shipped Phase 1 (audit fixes), Phase 2 (manual workout entry form), Phase 3 (French i18n + signup picker + Settings language section), plus 3 post-Phase polish rounds addressing user-reported visual + behavioral bugs.
->
-> **Resuming TOMORROW in same session.** Next-session priority list at the top of section 10.
+> Last updated: 2026-05-18 (round 6 = nuclear i18n approach + Strava 403 awareness). **Frontend v54**, Service worker v4 (deletes all caches on activate + force-reload on navigations), `migrate_v6.sql` RUN, profiles.locale column live. Now ships a runtime DOM translation walker that translates ~200 hardcoded English phrases to French automatically without per-element tagging. **NEW BLOCKER:** Beta tester hit Strava 403 "Limit of connected athletes exceeded" — Noah needs to file a Strava API quota increase request at strava.com/settings/api (takes 2-7 days approval).
 
 ---
 
@@ -173,8 +171,8 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v52 — 1,028,877 bytes. All Phase 1+2+3 work plus 3 polish rounds. i18n infrastructure now mature: ~200 strings translated, applyI18nToDom() fires on every navigate(), Coach edge gets userLocale on every call.
-- **Service worker:** `sw.js` v2 (was v1) — bumped CACHE_NAME to invalidate any stale-cached frontend code from prior sessions.
+- **Frontend:** `index.html` v54 — 1,042,514 bytes. Adds a runtime DOM translation walker (`translateDOMWalker` + `PHRASE_TRANSLATIONS_FR` dictionary, ~200 phrases) that runs inside applyI18nToDom AFTER the data-i18n pass. Translates hardcoded English in the DOM to French automatically, no per-element tagging needed. Picker rebuilt with DOM API + ASCII-distinct ENGLISH/FRENCH labels + native qualifier + visible build-version diagnostic line at bottom.
+- **Service worker:** `sw.js` v4 — activate handler now deletes ALL old caches before claiming clients. New fetch handler intercepts top-level navigations + /index.html requests, forces `{cache: 'reload'}` so PWAs can never serve stale HTML after a deploy. Was the suspected root cause of Noah's "two English buttons" bug.
 - **Coach edge function:** 164,461 bytes. Full locale-aware behavior: dispatcher attaches `payload.userLocale` to `intake._locale`, `buildSystemPrompt` LANGUAGE block locks output to explicit locale (no more inferring from message language for FR users typing one-word English replies). `workoutCommentary` softens for `source==='manual'` (skip cardiac drift / zone discipline critique, focus on athlete's reported RPE/notes). Plus everything from rounds 3-4: free-user coach trial gate (3 msg / 30 days), warmer persona-named intro greeting.
 - **send-reminders:** 8,433 bytes, deployed, working
 - **send-followups:** 26,676 bytes (was 18,677). Added Sunday-only weekly insights branch + helper `refreshInsightsForUser`.
@@ -297,7 +295,22 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 PICKING UP TOMORROW — what's still pending
+### 🔜 NEXT SESSION PRIORITIES (round 7+)
+
+**1. STRAVA 403 — beta blocker.** Noah needs to file the Strava API quota increase request at strava.com/settings/api. Form is on his app's developer page. Until approved (~2-7 days), beta testers beyond user #1 must use Manual Entry (Analyze → Log manually). Remind him on next session start if he hasn't filed it.
+
+**2. Verify the language picker bug is GONE.** Round 6 took a nuclear approach — bumped SW to v4 (deletes ALL caches on activate, force-reloads navigations), rebuilt picker with DOM API + ASCII-distinct labels (ENGLISH/FRENCH primary + native qualifier), added runtime DOM translation walker. If Noah STILL sees buggy buttons after v54 deploy + PWA uninstall/reinstall, then the rendering itself has a hidden bug I can't see from code alone — at that point we'd need browser DevTools debugging with him.
+
+**3. Expand the runtime translation dictionary (PHRASE_TRANSLATIONS_FR).** Currently ~200 phrases. Noah will report missing translations as he uses the app — each is a one-line add to the dict. Common future adds:
+- Intake question text + option labels
+- Plan calendar internals (workout type labels, weekly summary)
+- Trends/insights card titles
+- All modal bodies (Pro upsell, feasibility warnings, share plan, delete account)
+- Toast messages (they call toast() with hardcoded strings; either tag or add to dict — but the walker only catches DOM text, not toast args, so toast calls still need t() conversion)
+
+**4. When Noah is ready for Spanish/Italian/etc.** add a parallel PHRASE_TRANSLATIONS_ES (or _IT) dictionary + extend the I18N table with 'es' / 'it' branches + extend translateDOMWalker() to switch on state.locale. The infrastructure is set up for this.
+
+### 🔜 OLDER PENDING — what's still pending
 
 User explicitly said: continue in this same session tomorrow. Last note from Noah at end of session: "i [will] continue this tomorrow in this same session ok make sure everything is good before i leave."
 

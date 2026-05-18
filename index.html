@@ -5186,6 +5186,325 @@ function applyI18nToDom(root) {
       if (attr && key) el.setAttribute(attr, t(key));
     });
   });
+  // ALSO run the runtime translation walker so hardcoded English strings
+  // (not tagged with data-i18n) get translated too. This is what makes
+  // "every word changes" actually work without tagging every element.
+  translateDOMWalker(r);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RUNTIME TRANSLATION WALKER
+// Walks the DOM and replaces hardcoded English text with translated
+// versions from PHRASE_TRANSLATIONS. Lets us translate the whole app
+// without per-element data-i18n tagging. Skips:
+//  - <script>, <style>, <code>, <pre> (don't translate code)
+//  - <input>, <textarea> (don't mess with user input)
+//  - Elements that already have data-i18n (handled separately)
+//  - Elements with .no-translate class (opt-out)
+//  - User-content elements (avatars, custom names) via parent class check
+// Idempotent: safe to call multiple times; only translates exact matches.
+// ═══════════════════════════════════════════════════════════
+
+// Map of English phrase → French translation. Keys are EXACT trimmed
+// textContent. Add new entries as you find untranslated English in the app.
+// When supporting more languages later, add a parallel object PHRASE_TRANSLATIONS_ES, etc.
+const PHRASE_TRANSLATIONS_FR = {
+  // Common buttons (appear EVERYWHERE)
+  'Save': 'Enregistrer',
+  'Save changes': 'Enregistrer les modifications',
+  'Cancel': 'Annuler',
+  'Continue': 'Continuer',
+  'Back': 'Retour',
+  'Next': 'Suivant',
+  'Delete': 'Supprimer',
+  'Edit': 'Modifier',
+  'Close': 'Fermer',
+  'Open': 'Ouvrir',
+  'Send': 'Envoyer',
+  'Upload': 'Importer',
+  'Download': 'Télécharger',
+  'Loading…': 'Chargement…',
+  'Loading...': 'Chargement...',
+  'Try again': 'Réessayer',
+  'Got it': "C'est compris",
+  'Got it!': "C'est compris !",
+  'Confirm': 'Confirmer',
+  'Yes': 'Oui',
+  'No': 'Non',
+  'OK': 'OK',
+  'Done': 'Terminé',
+  'Skip': 'Passer',
+  'Apply': 'Appliquer',
+  'Reset': 'Réinitialiser',
+  'Submit': 'Soumettre',
+  'Log out': 'Déconnexion',
+  'Sign out': 'Déconnexion',
+  'Log in': 'Connexion',
+  'Sign in': 'Connexion',
+  'Sign up': 'Inscription',
+  'Get started': 'Commencer',
+  'Get started →': 'Commencer →',
+  'Learn more': 'En savoir plus',
+  'Show more': 'Afficher plus',
+  'Show less': 'Afficher moins',
+  'View all': 'Tout voir',
+  'See all': 'Tout voir',
+  'Add': 'Ajouter',
+  'Remove': 'Retirer',
+  'Update': 'Mettre à jour',
+  'Refresh': 'Rafraîchir',
+  'Connect': 'Connecter',
+  'Disconnect': 'Déconnecter',
+  'Manage': 'Gérer',
+  'Manage connections': 'Gérer les connexions',
+  'Upgrade': 'Passer Pro',
+  'Upgrade to Pro': 'Passer à Pro',
+  'Upgrade →': 'Passer Pro →',
+
+  // Dashboard
+  'Recent workouts': 'Séances récentes',
+  'Today': "Aujourd'hui",
+  'This week': 'Cette semaine',
+  'This month': 'Ce mois-ci',
+  'All time': 'Depuis le début',
+  'No workouts yet': 'Aucune séance pour le moment',
+  'No workouts this week': 'Aucune séance cette semaine',
+  'No workouts this month': 'Aucune séance ce mois-ci',
+  'Welcome back': 'Bon retour',
+  'Run': 'Course',
+  'Bike': 'Vélo',
+  'Swim': 'Natation',
+  'Gym': 'Muscu',
+  'Strength': 'Muscu',
+  'Other': 'Autre',
+  'Rest day': 'Jour de repos',
+  'Rest': 'Repos',
+  'Easy run': 'Course facile',
+  'Long run': 'Sortie longue',
+  'Long ride': 'Sortie longue à vélo',
+  'Tempo run': 'Course tempo',
+  'Workout': 'Séance',
+  'Workouts': 'Séances',
+  'Recovery': 'Récupération',
+  'Recovery week': 'Semaine de récupération',
+  'Race day!': 'Jour de course !',
+  'Race day': 'Jour de course',
+
+  // Plan
+  'Your Training Plan': "Ton plan d'entraînement",
+  'Your training plan': "Ton plan d'entraînement",
+  'Plan': 'Plan',
+  'Generate next week': 'Générer la semaine prochaine',
+  'Generate next week →': 'Générer la semaine prochaine →',
+  'Reset plan': 'Réinitialiser le plan',
+  'Import plan': 'Importer un plan',
+  'Generate plan': 'Générer le plan',
+  'Generate new plan': 'Générer un nouveau plan',
+  'Build my plan': 'Construire mon plan',
+  'Plan Management': 'Gestion du plan',
+  'Current week': 'Semaine en cours',
+  'Next week': 'Semaine prochaine',
+  'Previous week': 'Semaine précédente',
+  'Today\'s workout': "Séance d'aujourd'hui",
+  "Today's workout": "Séance d'aujourd'hui",
+  'Skip workout': 'Passer la séance',
+  'Mark complete': 'Marquer comme terminée',
+  'Mark as complete': 'Marquer comme terminée',
+  'Share plan': 'Partager le plan',
+  'Share plan →': 'Partager le plan →',
+
+  // Settings
+  'Settings': 'Paramètres',
+  'Profile': 'Profil',
+  'Personal Info': 'Infos personnelles',
+  'Training Goals': "Objectifs d'entraînement",
+  'Race Benchmarks': 'Repères de course',
+  'Equipment': 'Matériel',
+  'Subscription': 'Abonnement',
+  'Connections': 'Connexions',
+  'Language': 'Langue',
+  'Notifications': 'Notifications',
+  'Privacy & data': 'Confidentialité & données',
+  'Heart Rate Zones': 'Zones de fréquence cardiaque',
+  'Help & tour': 'Aide & visite',
+  'Legal': 'Mentions légales',
+  'Account deletion': 'Suppression du compte',
+  'Display name': "Nom d'affichage",
+  'Name': 'Nom',
+  'Email': 'E-mail',
+  'Password': 'Mot de passe',
+  'Bio (optional)': 'Bio (optionnel)',
+  'Bio': 'Bio',
+  'Age': 'Âge',
+  'Weight': 'Poids',
+  'Height': 'Taille',
+  'Sex': 'Sexe',
+  'Male': 'Homme',
+  'Female': 'Femme',
+  'Units': 'Unités',
+  'Metric': 'Métrique',
+  'Imperial': 'Impérial',
+  'Goal event': 'Événement cible',
+  'Race date': 'Date de la course',
+  'Available days': 'Jours disponibles',
+  'Weekly hours': 'Heures par semaine',
+  'Experience level': "Niveau d'expérience",
+  'Beginner': 'Débutant',
+  'Intermediate': 'Intermédiaire',
+  'Advanced': 'Avancé',
+  'Elite': 'Élite',
+  'Injuries': 'Blessures',
+  'None': 'Aucune',
+
+  // Coach / chat
+  'Coach': 'Coach',
+  'Ask Coach anything…': 'Pose une question à Coach…',
+  'Ask Coach anything...': 'Pose une question à Coach…',
+  'Thinking...': 'Réflexion en cours...',
+  'Thinking…': 'Réflexion en cours…',
+  'Chat': 'Discussion',
+  'Send': 'Envoyer',
+  'Show older messages': 'Afficher les anciens messages',
+
+  // Analyze
+  'Analyze Workout': 'Analyser une séance',
+  'Auto-sync': 'Synchro auto',
+  'Log manually': 'Saisir à la main',
+  'Upload file': 'Importer un fichier',
+  'Upload CSV': 'Importer CSV',
+  'Drop your workout file here': 'Dépose ton fichier ici',
+  'or tap to choose a file': 'ou touche pour choisir un fichier',
+
+  // History / Trends
+  'Workout History': 'Historique des séances',
+  'Training Trends': "Tendances d'entraînement",
+  'No insights yet': 'Aucune analyse pour le moment',
+  'Recent patterns': 'Tendances récentes',
+
+  // Pro / billing
+  'Pro': 'Pro',
+  'Free': 'Gratuit',
+  'Free tier': 'Tier gratuit',
+  'Trial': 'Essai',
+  'Active': 'Actif',
+  "You're a Pro": 'Tu es Pro',
+  'Upgrade to Stryxs Pro': 'Passe à Stryxs Pro',
+  'Manage subscription': "Gérer l'abonnement",
+  'Cancel subscription': "Annuler l'abonnement",
+
+  // Status / state
+  'Connected': 'Connecté',
+  'Disconnected': 'Déconnecté',
+  'Saved': 'Enregistré',
+  'Saved!': 'Enregistré !',
+  'Saving…': 'Enregistrement…',
+  'Saving...': 'Enregistrement...',
+  'Sent': 'Envoyé',
+  'Sent!': 'Envoyé !',
+  'Error': 'Erreur',
+  'Success': 'Succès',
+  'Pending': 'En attente',
+  'Complete': 'Terminé',
+  'Completed': 'Terminée',
+  'In progress': 'En cours',
+
+  // Common phrases
+  'optional': 'optionnel',
+  '(optional)': '(optionnel)',
+  'Required': 'Requis',
+  '(Required)': '(Requis)',
+  'Yesterday': 'Hier',
+  'Tomorrow': 'Demain',
+  'today': "aujourd'hui",
+  'yesterday': 'hier',
+  'tomorrow': 'demain',
+  'Monday': 'Lundi',
+  'Tuesday': 'Mardi',
+  'Wednesday': 'Mercredi',
+  'Thursday': 'Jeudi',
+  'Friday': 'Vendredi',
+  'Saturday': 'Samedi',
+  'Sunday': 'Dimanche',
+  'min': 'min',
+  'hours': 'heures',
+  'hour': 'heure',
+  'minutes': 'minutes',
+  'minute': 'minute',
+  'seconds': 'secondes',
+  'second': 'seconde',
+
+  // Account deletion section
+  'Delete your account': 'Supprimer ton compte',
+  'Permanently delete your account and all data': 'Supprime ton compte et toutes tes données pour de bon',
+
+  // Notifications
+  'Get a reminder before each training session': 'Reçois un rappel avant chaque séance',
+  'Workout reminders': 'Rappels de séance',
+  'Reminder time': 'Heure du rappel',
+  'Time zone': 'Fuseau horaire',
+  'Enable notifications': 'Activer les notifications',
+  'Disable notifications': 'Désactiver les notifications',
+
+  // Connections
+  'Auto-sync workouts from Strava and other apps': "Synchro auto des séances depuis Strava et d'autres apps",
+  'Connect Strava': 'Connecter Strava',
+  'Disconnect Strava': 'Déconnecter Strava',
+
+  // Subscription
+  'Pro · all features unlocked': 'Pro · toutes les fonctionnalités débloquées',
+  'all features unlocked': 'toutes les fonctionnalités débloquées',
+  'Active subscription': 'Abonnement actif',
+  'Member since': 'Membre depuis',
+  'Renews on': 'Renouvelle le',
+  'Usage this month': 'Utilisation ce mois-ci',
+
+  // Empty states
+  'Nothing here yet': 'Rien à voir pour le moment',
+  'No data yet': 'Pas encore de données',
+  'Coming soon': 'Bientôt disponible',
+};
+
+// Translates static English phrases throughout the DOM to French.
+// Idempotent. Skips inputs, scripts, code, data-i18n elements, and
+// .no-translate opt-outs. Only matches exact trimmed textContent.
+function translateDOMWalker(root) {
+  if (state.locale !== 'fr') return; // only translate when on FR for now
+  const dict = PHRASE_TRANSLATIONS_FR;
+  const r = root || document.body;
+  if (!r) return;
+
+  const walker = document.createTreeWalker(r, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const parent = node.parentNode;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      const tag = parent.tagName;
+      if (!tag) return NodeFilter.FILTER_REJECT;
+      // Skip non-content elements
+      if (['SCRIPT', 'STYLE', 'CODE', 'PRE', 'NOSCRIPT', 'TEXTAREA', 'INPUT'].includes(tag)) return NodeFilter.FILTER_REJECT;
+      // Skip user-content + opt-outs
+      if (parent.closest('.no-translate, [data-i18n], [contenteditable="true"]')) return NodeFilter.FILTER_REJECT;
+      // Skip if no actual text
+      const raw = node.textContent;
+      if (!raw || !raw.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+
+  nodes.forEach(node => {
+    const raw = node.textContent;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    if (dict[trimmed]) {
+      // Preserve any leading/trailing whitespace
+      const leading = raw.match(/^\s*/)[0];
+      const trailing = raw.match(/\s*$/)[0];
+      node.textContent = leading + dict[trimmed] + trailing;
+    }
+  });
 }
 
 // Detect initial locale: profile.locale > localStorage > navigator > 'en'.
@@ -5356,7 +5675,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v53',
+      app_version: 'v54',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6216,7 +6535,7 @@ async function pickLanguage(loc) {
 // (Unicode escape) so the source file's encoding doesn't matter.
 function renderLanguageButtons() {
   const current = state.locale;
-  console.log('[Stryxs i18n v53] renderLanguageButtons called, state.locale =', current, 'I18N keys loaded:', Object.keys(I18N).length);
+  console.log('[Stryxs i18n v54] renderLanguageButtons called, state.locale =', current, 'I18N keys loaded:', Object.keys(I18N).length);
 
   // Use Unicode escape ç for cedilla so source-file encoding can't
   // possibly mangle the French word.
@@ -6286,7 +6605,7 @@ function renderLanguageButtons() {
   // verify the user is seeing the latest code (helps debug cache issues).
   const diag = document.createElement('div');
   diag.style.cssText = 'margin-top: 12px; padding: 8px 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; color: var(--text-mute); font-family: monospace;';
-  diag.textContent = 'build: v53 · state.locale: ' + current + ' · if both buttons look identical, your browser cached old code — do a hard refresh (Ctrl+Shift+R)';
+  diag.textContent = 'build: v54 · state.locale: ' + current + ' · if both buttons look identical, your browser cached old code — uninstall + reinstall the PWA';
   container.appendChild(diag);
 
   return container.innerHTML;
