@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v60',
+      app_version: 'v61',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -9247,25 +9247,26 @@ function renderSplitsBarChart(splits, sport) {
   const innerH = H - pad.top - pad.bottom;
   const barSlot = innerW / values.length;
 
-  // Color by quintile of relative position. For run (lower=better) we
-  // invert the gradient so faster splits read as green.
-  const colorAt = (ratio) => {
-    const r = sport === 'run' ? ratio : (1 - ratio);
-    if (r < 0.2) return '#00e5a0';
-    if (r < 0.45) return '#7ed957';
-    if (r < 0.6) return '#fbbf24';
-    if (r < 0.8) return '#f97316';
-    return '#ef4444';
+  // Bar height ratio. For both sports we want "taller bar = better" so
+  // the chart reads intuitively (longest bar = fastest split). For runs
+  // that means inverting since lower paceMin = faster.
+  const heightRatio = (val) => {
+    const r = (val - lo) / range;
+    return sport === 'run' ? (1 - r) : r;
   };
 
   const chartId = 'stryxsSplits_' + Math.random().toString(36).slice(2, 10);
   window._stryxsChartData[chartId] = {
     W, H, pad, innerW, innerH, len: values.length, step: barSlot,
-    ptsA: values.map((v, i) => ({
-      x: pad.left + i * barSlot + barSlot / 2,
-      y: pad.top + innerH - (((v.val - lo) / range) * innerH * 0.85 + innerH * 0.15),
-      v: v.val, i, km: v.km,
-    })),
+    ptsA: values.map((v, i) => {
+      const hr = heightRatio(v.val);
+      const h = Math.max(8, hr * innerH * 0.85 + innerH * 0.15);
+      return {
+        x: pad.left + i * barSlot + barSlot / 2,
+        y: pad.top + innerH - h,
+        v: v.val, i, km: v.km,
+      };
+    }),
     ptsB: null,
     fmtA: fmt,
     colorA: '#fff',
@@ -9276,19 +9277,22 @@ function renderSplitsBarChart(splits, sport) {
   setTimeout(() => _stryxsAttachChartHover(chartId), 0);
   setTimeout(() => _stryxsAttachChartHover(chartId), 80);
 
+  // Single accent color for all bars — we'll layer in HR-zone coloring
+  // once we have HR data to drive it. For now plain color keeps it clean.
+  const barColor = '#00e5a0';
+
   const bars = values.map((v, i) => {
-    const ratio = (v.val - lo) / range;
-    const c = colorAt(ratio);
-    const h = Math.max(8, ratio * innerH * 0.85 + innerH * 0.15);
+    const hr = heightRatio(v.val);
+    const h = Math.max(8, hr * innerH * 0.85 + innerH * 0.15);
     const y = pad.top + innerH - h;
     const x = pad.left + i * barSlot;
     const w = Math.max(2, barSlot - 4);
-    return `<rect x="${(x + 2).toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="${c}" rx="3" ry="3"><title>km ${v.km}: ${fmt(v.val)}</title></rect>`;
+    return `<rect x="${(x + 2).toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="${barColor}" opacity="0.92" rx="3" ry="3"><title>km ${v.km}: ${fmt(v.val)}</title></rect>`;
   }).join('');
 
-  const avgRatio = (avg - lo) / range;
-  const avgY = pad.top + innerH - (avgRatio * innerH * 0.85 + innerH * 0.15);
-  const avgLine = `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${avgY.toFixed(2)}" y2="${avgY.toFixed(2)}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4 3"/>`;
+  const avgHR = heightRatio(avg);
+  const avgY = pad.top + innerH - (avgHR * innerH * 0.85 + innerH * 0.15);
+  const avgLine = `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${avgY.toFixed(2)}" y2="${avgY.toFixed(2)}" stroke="rgba(255,255,255,0.55)" stroke-width="1" stroke-dasharray="4 3"/>`;
   const bestVal = sport === 'run' ? lo : hi;
   const worstVal = sport === 'run' ? hi : lo;
 
@@ -9734,7 +9738,7 @@ function renderStravaFooter(a) {
   if (!a || !a.strava_url) return '';
   return `
     <div style="text-align: center; margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.04);">
-      <a href="${a.strava_url}" target="_blank" rel="noopener" style="font-size: 11px; color: var(--text-mute); text-decoration: none; opacity: 0.65;">Open on Strava ↗</a>
+      <a href="${a.strava_url}" target="_blank" rel="noopener" style="font-size: 11px; color: #fc4c02; text-decoration: none; font-weight: 600; letter-spacing: 0.3px;">Open on Strava ↗</a>
     </div>
   `;
 }
@@ -9799,7 +9803,7 @@ function renderSummaryWorkout(a) {
   if (isStrava && a._no_hr_data) {
     diagnostic = `
       <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
-        <strong style="color: var(--text);">No heart rate data on this activity.</strong> Wear a HR monitor next time to unlock zone analysis and cardiac drift.
+        <strong style="color: var(--text);">No heart rate was recorded for this activity.</strong> Zone analysis and cardiac drift will appear when HR data is available.
       </div>`;
   } else if (isStrava && a._unsupported) {
     diagnostic = `
