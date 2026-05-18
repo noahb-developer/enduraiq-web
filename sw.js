@@ -2,7 +2,7 @@
 // Handles incoming Web Push messages and notification interactions.
 // Lives at /sw.js (must be served from the root for full-scope control).
 
-const CACHE_NAME = 'stryxs-sw-v2';
+const CACHE_NAME = 'stryxs-sw-v3';
 
 // Install + activate quickly — we don't precache anything since the
 // SPA reloads on each visit and we don't need offline support yet.
@@ -11,7 +11,27 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    // Nuke ALL old caches so users stuck on a stale index.html get the
+    // fresh one on their very next request.
+    const names = await caches.keys();
+    await Promise.all(names.map(n => caches.delete(n)));
+    await self.clients.claim();
+  })());
+});
+
+// Force-bypass the HTTP cache for index.html so we never serve stale code
+// after a deploy. Other assets (icons, etc.) can be cached normally by
+// the browser. The PWA install flow uses index.html for shell rendering
+// so making sure THAT is always fresh is what matters.
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Only intercept top-level navigations + explicit index.html requests
+  if (event.request.mode === 'navigate' ||
+      url.pathname === '/' ||
+      url.pathname === '/index.html') {
+    event.respondWith(fetch(event.request, { cache: 'reload' }).catch(() => fetch(event.request)));
+  }
 });
 
 // Push event — fired when our backend sends a Web Push to this device.
