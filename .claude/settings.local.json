@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:/Users/noahb/enduraiq-functions/supabase/functions/\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a/index.html','utf-8'\\);let bad=0;[...c.matchAll\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\)].forEach\\(\\(m,i\\)=>{if\\(m[1].length<1000\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){bad++;console.log\\('Block '+i+': '+e.message\\)}}\\);console.log\\('Validated. Bad blocks:',bad\\);console.log\\('File size:',c.length,'bytes'\\)\")",
+      "Read(//c/Users/noahb/enduraiq-functions/**)",
+      "Bash(npx -y -p typescript@5 tsc --noEmit --target es2022 --module esnext --moduleResolution node --skipLibCheck --allowJs --noResolve \"supabase/functions/strava/index.ts\")",
+      "Bash(npx -y -p typescript@5 tsc --noEmit --target es2022 --module esnext --moduleResolution node --skipLibCheck --allowJs --noResolve \"supabase/functions/coach/index.ts\")",
+      "Bash(supabase functions *)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" add index.html)",
+      "Bash(git -C C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a commit -m ' *)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" push origin claude/sad-herschel-f24a2a)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" log --oneline --all -8)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" branch -vv)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" remote -v)",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" push origin claude/sad-herschel-f24a2a:main)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a/index.html','utf-8'\\);let bad=0;[...c.matchAll\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\)].forEach\\(\\(m,i\\)=>{if\\(m[1].length<1000\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){bad++;console.log\\('Block '+i+': '+e.message\\)}}\\);console.log\\('Bad blocks:',bad,'Size:',c.length\\)\")",
+      "Bash(git -C \"C:/Users/noahb/stryxs/stryxs/sad-herschel-f24a2a\" add -A)"
+    ]
+  }
+}
