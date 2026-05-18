@@ -5546,9 +5546,22 @@ async function setLocale(loc, opts) {
   }
 }
 
-// Apply initial locale BEFORE first render so users get the right language immediately.
-state.locale = detectInitialLocale();
-try { document.documentElement.setAttribute('lang', state.locale); } catch (_) {}
+// ═══════════════════════════════════════════════════════════
+// LANGUAGE UI TEMPORARILY DISABLED (2026-05-18)
+// Force locale to English regardless of any saved preference. The
+// translation infrastructure (I18N, t(), applyI18nToDom, translateDOMWalker,
+// data-i18n tags, PHRASE_TRANSLATIONS_FR) is all still in place — just
+// dormant. To re-enable: restore the original detectInitialLocale() call
+// AND unhide the signup picker + Settings Language section (search for
+// LANG_UI_DISABLED to find the gates).
+// Why: shipping over 6 rounds couldn't fix a presentation bug Noah was
+// seeing in his PWA, almost certainly a stuck cache we couldn't diagnose
+// remotely. Better to show English-only than half-translated chaos to
+// French testers. Revisit when we can screen-share DevTools.
+// ═══════════════════════════════════════════════════════════
+const LANG_UI_DISABLED = true;
+state.locale = 'en';
+try { document.documentElement.setAttribute('lang', 'en'); } catch (_) {}
 
 function toast(msg, durationMs = 2800) {
   const t = document.getElementById('toast');
@@ -6455,8 +6468,10 @@ async function doSignup() {
 // that resolves when the user picks (or immediately if the picker was
 // already shown for this user / no user is signed in). Awaiting lets the
 // signup flow render the dashboard AFTER the locale is chosen.
+// LANG_UI_DISABLED: returns immediately so signup doesn't prompt for language.
 function showLanguagePickerIfFirstTime() {
   return new Promise((resolve) => {
+    if (LANG_UI_DISABLED) return resolve();
     if (!state.user) return resolve();
     const flagKey = `stryxs_lang_picker_shown_${state.user.id}`;
     let shown = false;
@@ -19705,7 +19720,10 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- Language Section (sits under Connections, less critical than HR/Goals) -->
+    <!-- Language Section (LANG_UI_DISABLED — hidden until language switcher is re-enabled).
+         All the markup + i18n functions are kept in the codebase so we can flip it back
+         on by removing the surrounding template-literal comment block. -->
+    ${LANG_UI_DISABLED ? '' : `
     <div class="settings-section" id="section-language">
       <div class="settings-section-header" onclick="toggleSettingsSection('language')">
         <div class="settings-section-header-left">
@@ -19725,6 +19743,7 @@ async function renderSettings() {
         </div>
       </div>
     </div>
+    `}
 
     <!-- HR Zones Section -->
     <div class="settings-section" id="section-hr">
