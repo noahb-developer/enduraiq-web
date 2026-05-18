@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v59',
+      app_version: 'v60',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -9190,6 +9190,15 @@ function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, col
 // bars become noisy. Tap or hover to see the specific split.
 function renderSplitsBarChart(splits, sport) {
   if (!Array.isArray(splits) || splits.length < 2) return '';
+  // Compute the "real" speed/pace per split using actual distance when
+  // available. The last split is almost always a partial km — using
+  // 3600/elapsedSec without correcting gives wildly inflated speeds
+  // (e.g. a 480m / 27s final stretch = 64 m/s if you assume 1km).
+  const speedKmh = (s) => {
+    const distM = (typeof s.distanceM === 'number' && s.distanceM > 0) ? s.distanceM : 1000;
+    if (!s.elapsedSec || s.elapsedSec <= 0) return 0;
+    return (distM / s.elapsedSec) * 3.6;
+  };
   let values, label, fmt, color;
   if (sport === 'run') {
     const valid = splits.filter(s => typeof s.paceMin === 'number' && s.paceMin > 0);
@@ -9199,9 +9208,15 @@ function renderSplitsBarChart(splits, sport) {
     fmt = v => _stryxsFmtPace(v, 'km');
     color = '#00e5a0';
   } else {
-    const valid = splits.filter(s => typeof s.elapsedSec === 'number' && s.elapsedSec > 0);
+    // Bike: use distance-normalized speed. Drop outliers (>80 km/h is
+    // implausibly high for a real ride split, almost always a data
+    // artifact from a tiny partial split or GPS glitch).
+    const valid = splits
+      .filter(s => typeof s.elapsedSec === 'number' && s.elapsedSec > 0)
+      .map(s => ({ km: s.km, val: speedKmh(s) }))
+      .filter(x => x.val > 0 && x.val < 80);
     if (valid.length < 2) return '';
-    values = valid.map(s => ({ km: s.km, val: 3600 / s.elapsedSec }));
+    values = valid;
     label = 'Speed per split';
     fmt = v => v.toFixed(1) + ' km/h';
     color = '#fbbf24';
@@ -9285,8 +9300,8 @@ function renderSplitsBarChart(splits, sport) {
       </div>
       <div id="${chartId}_wrap" style="position: relative;">
         <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
-          ${avgLine}
           ${bars}
+          ${avgLine}
           <g class="stryxs-cursor" style="opacity: 0; pointer-events: none;">
             <line class="cursorLine" x1="0" x2="0" y1="${pad.top}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.55)" stroke-width="1" vector-effect="non-scaling-stroke"/>
             <circle class="dotA" cx="0" cy="0" r="4" fill="#fff" stroke="#0a0e1a" stroke-width="1.5"/>
