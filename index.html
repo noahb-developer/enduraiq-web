@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v58',
+      app_version: 'v59',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7675,6 +7675,8 @@ function toggleTodaysAnalysis(idx, cardEl) {
     detail.style.display = 'block';
     if (chev) chev.style.transform = 'rotate(180deg)';
     cardEl.style.borderColor = 'var(--accent-border)';
+    // Auto-refresh missing-data workouts in the background (throttled per session)
+    maybeAutoRefreshWorkout(workout);
   } catch (err) {
     console.error('[Stryxs] Failed to render today\'s analysis:', err);
     detail.innerHTML = '<div style="padding: 14px; color: var(--text-dim); font-size: 13px;">Could not render analysis. Try the History tab for a full view.</div>';
@@ -8879,185 +8881,419 @@ function mountStryxsMap(mapId) {
   }
 }
 
-// Inline SVG sparkline-style time-series chart for a downsampled series.
-// `series` is an array of numbers (e.g. 60 points). `label` is the chart
-// title. `unit` is the value suffix (bpm, rpm, km/h, w). Color is the
-// stroke. Returns empty string if series is missing or too short.
-function renderTimeSeriesChart(series, label, unit, color) {
-  if (!Array.isArray(series) || series.length < 4) return '';
-  const W = 600, H = 110;
-  const pad = { top: 10, right: 10, bottom: 18, left: 32 };
+// ═══════════════════════════════════════════════════════════
+// STRYXS CHART TOOLKIT — smooth SVG charts with interactive
+// crosshair + tooltip on hover/touch. Mobile-friendly.
+// ═══════════════════════════════════════════════════════════
+//
+// Three public renderers preserve the legacy signatures:
+//   - renderTimeSeriesChart(series, label, unit, color)
+//   - renderDualLineChart(sA, sB, lA, lB, uA, uB, cA, cB, title)
+//   - renderSplitsBarChart(splits, sport)
+//
+// Internally they all funnel through renderStryxsLineChart (line/area
+// with Catmull-Rom smoothing) or render bars when split count is small.
+// Each chart wires a crosshair + tooltip in _stryxsAttachChartHover so
+// the user can drag/tap to see exact values at any point.
+window._stryxsChartData = window._stryxsChartData || {};
+
+// Catmull-Rom-to-Bezier smoothing. Returns an SVG path string. Tension
+// ~0.2 gives gentle curves without overshoot at peaks/valleys.
+function _stryxsSmoothPath(pts) {
+  if (!pts || pts.length === 0) return '';
+  if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
+  if (pts.length === 2) return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+  const t = 0.2;
+  let d = `M ${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? 0 : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1];
+    const cp1x = p1.x + (p2.x - p0.x) * t;
+    const cp1y = p1.y + (p2.y - p0.y) * t;
+    const cp2x = p2.x - (p3.x - p1.x) * t;
+    const cp2y = p2.y - (p3.y - p1.y) * t;
+    d += ` C ${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+// Format a pace value (minutes-per-km as a decimal) as M:SS/km
+function _stryxsFmtPace(v, unitTail) {
+  if (!Number.isFinite(v) || v <= 0) return '—';
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')}/${unitTail || 'km'}`;
+}
+
+// Pick the right formatter for a unit string. Recognizes paces (min/km),
+// otherwise defaults to "{rounded}{unit}".
+function _stryxsPickFormatter(unit) {
+  if (!unit) return v => Math.round(v * 10) / 10 + '';
+  if (String(unit).includes('min/')) {
+    const tail = String(unit).split('/')[1] || 'km';
+    return v => _stryxsFmtPace(v, tail);
+  }
+  return v => Math.round(v * 10) / 10 + ' ' + unit;
+}
+
+// Core line/area chart with optional second series. Returns HTML string.
+// All cosmetic and behavioral knobs live in opts. Sized so the host can
+// pin width via CSS; we set a viewBox so it scales to any container width
+// while keeping the same logical canvas (600 x H).
+function renderStryxsLineChart(opts) {
+  const validA = (opts.seriesA || []).map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
+  const cleanA = validA.filter(v => v != null && v > 0);
+  if (cleanA.length < 4) return '';
+  let loA = Math.min(...cleanA), hiA = Math.max(...cleanA);
+  if (loA === hiA) hiA = loA + 1;
+  const rA = hiA - loA;
+  loA -= rA * 0.05; hiA += rA * 0.05;
+
+  let validB = null, cleanB = null, loB = 0, hiB = 1;
+  if (opts.seriesB) {
+    validB = opts.seriesB.map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
+    cleanB = validB.filter(v => v != null && v > 0);
+    if (cleanB.length >= 4) {
+      loB = Math.min(...cleanB); hiB = Math.max(...cleanB);
+      if (loB === hiB) hiB = loB + 1;
+      const rB = hiB - loB;
+      loB -= rB * 0.05; hiB += rB * 0.05;
+    } else { validB = null; cleanB = null; }
+  }
+
+  const len = validB ? Math.min(validA.length, validB.length) : validA.length;
+  const W = 600;
+  const H = opts.height || 150;
+  const pad = { top: 14, right: 12, bottom: 22, left: 12 };
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
-  const values = series.map(Number).filter(n => Number.isFinite(n));
-  if (values.length < 4) return '';
-  let lo = Math.min(...values);
-  let hi = Math.max(...values);
-  if (lo === hi) hi = lo + 1; // avoid divide by zero
-  // 5% headroom top/bottom for breathing room
-  const range = hi - lo;
-  lo -= range * 0.05;
-  hi += range * 0.05;
-  const step = innerW / (values.length - 1);
-  const pts = values.map((v, i) => {
-    const x = pad.left + i * step;
-    const y = pad.top + innerH - ((v - lo) / (hi - lo)) * innerH;
-    return x.toFixed(1) + ',' + y.toFixed(1);
-  });
-  const d = 'M ' + pts.join(' L ');
-  // Fill area under the line for visual weight
-  const fillD = d + ' L ' + (pad.left + innerW).toFixed(1) + ',' + (pad.top + innerH).toFixed(1) + ' L ' + pad.left.toFixed(1) + ',' + (pad.top + innerH).toFixed(1) + ' Z';
-  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length * 10) / 10;
+  const step = innerW / Math.max(1, len - 1);
+
+  const ptsA = [];
+  for (let i = 0; i < len; i++) {
+    const v = validA[i];
+    if (v != null && v > 0) {
+      ptsA.push({
+        x: pad.left + i * step,
+        y: pad.top + innerH - ((v - loA) / (hiA - loA)) * innerH,
+        v, i
+      });
+    }
+  }
+  let ptsB = null;
+  if (validB) {
+    ptsB = [];
+    for (let i = 0; i < len; i++) {
+      const v = validB[i];
+      if (v != null && v > 0) {
+        ptsB.push({
+          x: pad.left + i * step,
+          y: pad.top + innerH - ((v - loB) / (hiB - loB)) * innerH,
+          v, i
+        });
+      }
+    }
+  }
+  if (ptsA.length < 4) return '';
+
+  const pathA = _stryxsSmoothPath(ptsA);
+  const pathB = ptsB ? _stryxsSmoothPath(ptsB) : '';
+  const showFill = opts.showFill !== false && !validB;
+  const fillD = showFill && ptsA.length > 0
+    ? pathA + ` L ${ptsA[ptsA.length - 1].x.toFixed(2)},${(pad.top + innerH).toFixed(2)} L ${ptsA[0].x.toFixed(2)},${(pad.top + innerH).toFixed(2)} Z`
+    : '';
+
+  // Subtle horizontal grid — gives the eye a baseline without dominating
+  const grid = [0.25, 0.5, 0.75].map(t => {
+    const y = pad.top + innerH * t;
+    return `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="3 4"/>`;
+  }).join('');
+
+  const fmtA = opts.formatterA || _stryxsPickFormatter(opts.unitA);
+  const fmtB = opts.formatterB || _stryxsPickFormatter(opts.unitB);
+  const avgA = cleanA.reduce((s, v) => s + v, 0) / cleanA.length;
+  const minA = Math.min(...cleanA);
+  const maxA = Math.max(...cleanA);
+  const avgB = cleanB ? cleanB.reduce((s, v) => s + v, 0) / cleanB.length : 0;
+
+  const chartId = 'stryxsChart_' + Math.random().toString(36).slice(2, 10);
+  const gradId = chartId + '_grad';
+
+  window._stryxsChartData[chartId] = {
+    W, H, pad, innerW, innerH, len, step,
+    ptsA, ptsB,
+    fmtA, fmtB,
+    colorA: opts.colorA, colorB: opts.colorB,
+    labelA: opts.labelA, labelB: opts.labelB,
+    hasB: !!ptsB,
+    isSplits: false,
+  };
+  setTimeout(() => _stryxsAttachChartHover(chartId), 0);
+  setTimeout(() => _stryxsAttachChartHover(chartId), 80);
+
+  const headerSub = validB
+    ? `<div style="display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap;">
+         <div style="color: ${opts.colorA};">● ${opts.labelA} <span style="color: var(--text-dim);">avg ${fmtA(avgA)}</span></div>
+         <div style="color: ${opts.colorB};">● ${opts.labelB} <span style="color: var(--text-dim);">avg ${fmtB(avgB)}</span></div>
+       </div>`
+    : `<div style="font-size: 11px; color: var(--text-dim);">avg ${fmtA(avgA)} · min ${fmtA(minA)} · max ${fmtA(maxA)}</div>`;
+
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label}</div>
-        <div style="font-size: 11px; color: var(--text-dim);">avg ${avg}${unit ? ' ' + unit : ''} · max ${Math.round(hi)} · min ${Math.round(lo)}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${opts.title}</div>
+        ${headerSub}
       </div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
-        <defs>
-          <linearGradient id="grad_${color.replace('#','')}" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
-            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path d="${fillD}" fill="url(#grad_${color.replace('#','')})" stroke="none"/>
-        <path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
-      </svg>
+      <div id="${chartId}_wrap" style="position: relative;">
+        <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
+          <defs>
+            <linearGradient id="${gradId}" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="${opts.colorA}" stop-opacity="0.32"/>
+              <stop offset="100%" stop-color="${opts.colorA}" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          ${grid}
+          ${showFill ? `<path d="${fillD}" fill="url(#${gradId})" stroke="none"/>` : ''}
+          <path d="${pathA}" fill="none" stroke="${opts.colorA}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+          ${pathB ? `<path d="${pathB}" fill="none" stroke="${opts.colorB}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.95"/>` : ''}
+          <g class="stryxs-cursor" style="opacity: 0; pointer-events: none;">
+            <line class="cursorLine" x1="0" x2="0" y1="${pad.top}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.45)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+            <circle class="dotA" cx="0" cy="0" r="4.5" fill="${opts.colorA}" stroke="#0a0e1a" stroke-width="2"/>
+            ${ptsB ? `<circle class="dotB" cx="0" cy="0" r="4.5" fill="${opts.colorB}" stroke="#0a0e1a" stroke-width="2"/>` : ''}
+          </g>
+        </svg>
+        <div class="stryxs-tooltip" style="position: absolute; pointer-events: none; opacity: 0; padding: 6px 10px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.55; white-space: nowrap; color: var(--text); transform: translate(-50%, -120%); transition: opacity 0.12s; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
+      </div>
     </div>
   `;
 }
 
-// Per-split bar chart. For runs: pace per km (lower is better, bars colored
-// green→yellow→red by relative pace). For bikes: speed per km (higher is
-// better, color inverted). Includes an average line.
+// Attach interactive crosshair + tooltip to a rendered chart. Idempotent —
+// safe to call multiple times. Works for both mouse and touch.
+function _stryxsAttachChartHover(chartId) {
+  const svg = document.getElementById(chartId);
+  if (!svg || svg.dataset.bound === '1') return;
+  const data = window._stryxsChartData[chartId];
+  if (!data) return;
+  svg.dataset.bound = '1';
+  const wrap = document.getElementById(chartId + '_wrap');
+  if (!wrap) return;
+  const cursor = svg.querySelector('.stryxs-cursor');
+  const cursorLine = cursor && cursor.querySelector('.cursorLine');
+  const dotA = svg.querySelector('.dotA');
+  const dotB = svg.querySelector('.dotB');
+  const tip = wrap.querySelector('.stryxs-tooltip');
+  if (!cursor || !tip) return;
+
+  let touchTimer = null;
+  const findNearest = (pts, target) => {
+    if (!pts || pts.length === 0) return null;
+    let lo = 0, hi = pts.length - 1;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (pts[m].i < target) lo = m + 1; else hi = m;
+    }
+    let best = pts[lo];
+    if (lo > 0 && Math.abs(pts[lo - 1].i - target) < Math.abs(best.i - target)) best = pts[lo - 1];
+    return best;
+  };
+
+  function update(clientX) {
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const px = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const vbx = (px / rect.width) * data.W;
+    const rawIdx = (vbx - data.pad.left) / data.step;
+    const idx = Math.max(0, Math.min(data.len - 1, Math.round(rawIdx)));
+    const pA = findNearest(data.ptsA, idx);
+    const pB = findNearest(data.ptsB, idx);
+    if (!pA) return;
+
+    cursor.setAttribute('transform', `translate(${pA.x.toFixed(2)},0)`);
+    if (cursorLine) { cursorLine.setAttribute('x1', '0'); cursorLine.setAttribute('x2', '0'); }
+    if (dotA) { dotA.setAttribute('cx', '0'); dotA.setAttribute('cy', pA.y.toFixed(2)); }
+    if (dotB) {
+      if (pB) {
+        dotB.setAttribute('cx', '0');
+        dotB.setAttribute('cy', pB.y.toFixed(2));
+        dotB.style.opacity = '1';
+      } else { dotB.style.opacity = '0'; }
+    }
+    cursor.style.opacity = '1';
+
+    // Tooltip content
+    let html;
+    if (data.isSplits) {
+      html = `<strong>km ${pA.km}</strong> · ${data.fmtA(pA.v)}`;
+    } else {
+      const parts = [`<span style="color: ${data.colorA};">●</span> <strong>${data.labelA}:</strong> ${data.fmtA(pA.v)}`];
+      if (pB && data.hasB) parts.push(`<span style="color: ${data.colorB};">●</span> <strong>${data.labelB}:</strong> ${data.fmtB(pB.v)}`);
+      html = parts.join('<br>');
+    }
+    tip.innerHTML = html;
+    const tipX = (pA.x / data.W) * rect.width;
+    const tipY = (pA.y / data.H) * rect.height;
+    tip.style.left = tipX + 'px';
+    tip.style.top = tipY + 'px';
+    tip.style.opacity = '1';
+    // Keep tooltip on-screen near edges
+    const tipWidth = tip.offsetWidth || 100;
+    let anchorX = '-50%';
+    if (tipX - tipWidth / 2 < 6) anchorX = '0%';
+    else if (tipX + tipWidth / 2 > rect.width - 6) anchorX = '-100%';
+    tip.style.transform = `translate(${anchorX}, -120%)`;
+  }
+  function hide() {
+    cursor.style.opacity = '0';
+    tip.style.opacity = '0';
+  }
+  svg.addEventListener('mousemove', e => update(e.clientX));
+  svg.addEventListener('mouseleave', hide);
+  svg.addEventListener('touchstart', e => {
+    if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+    if (e.touches[0]) update(e.touches[0].clientX);
+  }, { passive: true });
+  svg.addEventListener('touchmove', e => {
+    if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+    if (e.touches[0]) update(e.touches[0].clientX);
+  }, { passive: true });
+  svg.addEventListener('touchend', () => {
+    if (touchTimer) clearTimeout(touchTimer);
+    touchTimer = setTimeout(hide, 2200);
+  }, { passive: true });
+}
+
+// Public: legacy signature. Time-series line/area with interactive hover.
+function renderTimeSeriesChart(series, label, unit, color) {
+  return renderStryxsLineChart({
+    title: label,
+    seriesA: series,
+    labelA: label,
+    unitA: unit,
+    colorA: color,
+  });
+}
+
+// Public: legacy signature. Two normalized lines on one canvas, interactive.
+function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, colorA, colorB, title) {
+  return renderStryxsLineChart({
+    title,
+    seriesA, labelA, unitA, colorA,
+    seriesB, labelB, unitB, colorB,
+  });
+}
+
+// Public: per-split visualization. Bars for ≤25 splits (color-graded by
+// relative pace/speed), interactive line chart for longer workouts where
+// bars become noisy. Tap or hover to see the specific split.
 function renderSplitsBarChart(splits, sport) {
   if (!Array.isArray(splits) || splits.length < 2) return '';
-  let values, label, unit, formatter, bestLabel, worstLabel;
+  let values, label, fmt, color;
   if (sport === 'run') {
     const valid = splits.filter(s => typeof s.paceMin === 'number' && s.paceMin > 0);
     if (valid.length < 2) return '';
-    values = valid.map(s => ({ km: s.km, val: s.paceMin, raw: s.pace }));
-    label = 'Pace per km';
-    unit = 'min/km';
-    formatter = v => {
-      const m = Math.floor(v);
-      const sec = Math.round((v - m) * 60);
-      return `${m}:${String(sec).padStart(2, '0')}`;
-    };
-    bestLabel = 'fastest';
-    worstLabel = 'slowest';
+    values = valid.map(s => ({ km: s.km, val: s.paceMin }));
+    label = 'Pace per split';
+    fmt = v => _stryxsFmtPace(v, 'km');
+    color = '#00e5a0';
   } else {
-    // Bike: derive km/h from elapsedSec over 1km
     const valid = splits.filter(s => typeof s.elapsedSec === 'number' && s.elapsedSec > 0);
     if (valid.length < 2) return '';
-    values = valid.map(s => ({ km: s.km, val: 3600 / s.elapsedSec, raw: (3600 / s.elapsedSec).toFixed(1) + ' km/h' }));
-    label = 'Speed per km';
-    unit = 'km/h';
-    formatter = v => v.toFixed(1) + ' km/h';
-    bestLabel = 'fastest';
-    worstLabel = 'slowest';
+    values = valid.map(s => ({ km: s.km, val: 3600 / s.elapsedSec }));
+    label = 'Speed per split';
+    fmt = v => v.toFixed(1) + ' km/h';
+    color = '#fbbf24';
   }
+
+  // Long workout → line/area chart (bars at 60+ splits are illegible)
+  if (values.length > 25) {
+    return renderStryxsLineChart({
+      title: label,
+      seriesA: values.map(v => v.val),
+      labelA: sport === 'run' ? 'Pace' : 'Speed',
+      unitA: sport === 'run' ? 'min/km' : 'km/h',
+      colorA: color,
+      formatterA: fmt,
+      height: 170,
+    });
+  }
+
+  // ≤25 splits → rounded color-graded bars with interactive crosshair
   const vals = values.map(v => v.val);
   const lo = Math.min(...vals);
   const hi = Math.max(...vals);
   const range = (hi - lo) || 1;
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
-  const W = 600, H = 140;
-  const pad = { top: 16, right: 10, bottom: 22, left: 10 };
+  const W = 600, H = 170;
+  const pad = { top: 16, right: 12, bottom: 26, left: 12 };
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
   const barSlot = innerW / values.length;
+
+  // Color by quintile of relative position. For run (lower=better) we
+  // invert the gradient so faster splits read as green.
+  const colorAt = (ratio) => {
+    const r = sport === 'run' ? ratio : (1 - ratio);
+    if (r < 0.2) return '#00e5a0';
+    if (r < 0.45) return '#7ed957';
+    if (r < 0.6) return '#fbbf24';
+    if (r < 0.8) return '#f97316';
+    return '#ef4444';
+  };
+
+  const chartId = 'stryxsSplits_' + Math.random().toString(36).slice(2, 10);
+  window._stryxsChartData[chartId] = {
+    W, H, pad, innerW, innerH, len: values.length, step: barSlot,
+    ptsA: values.map((v, i) => ({
+      x: pad.left + i * barSlot + barSlot / 2,
+      y: pad.top + innerH - (((v.val - lo) / range) * innerH * 0.85 + innerH * 0.15),
+      v: v.val, i, km: v.km,
+    })),
+    ptsB: null,
+    fmtA: fmt,
+    colorA: '#fff',
+    labelA: 'km',
+    hasB: false,
+    isSplits: true,
+  };
+  setTimeout(() => _stryxsAttachChartHover(chartId), 0);
+  setTimeout(() => _stryxsAttachChartHover(chartId), 80);
+
   const bars = values.map((v, i) => {
-    const x = pad.left + i * barSlot;
     const ratio = (v.val - lo) / range;
-    let color;
-    if (sport === 'run') {
-      color = ratio < 0.33 ? '#00e5a0' : ratio < 0.66 ? '#fbbf24' : '#ef4444';
-    } else {
-      color = ratio > 0.66 ? '#00e5a0' : ratio > 0.33 ? '#fbbf24' : '#ef4444';
-    }
-    const h = Math.max(4, ratio * innerH * 0.85 + innerH * 0.15);
+    const c = colorAt(ratio);
+    const h = Math.max(8, ratio * innerH * 0.85 + innerH * 0.15);
     const y = pad.top + innerH - h;
-    return `<rect x="${(x + 1.5).toFixed(1)}" y="${y.toFixed(1)}" width="${(barSlot - 3).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" opacity="0.9" rx="2"><title>km ${v.km}: ${v.raw || formatter(v.val)}</title></rect>`;
+    const x = pad.left + i * barSlot;
+    const w = Math.max(2, barSlot - 4);
+    return `<rect x="${(x + 2).toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="${c}" rx="3" ry="3"><title>km ${v.km}: ${fmt(v.val)}</title></rect>`;
   }).join('');
+
   const avgRatio = (avg - lo) / range;
   const avgY = pad.top + innerH - (avgRatio * innerH * 0.85 + innerH * 0.15);
-  const avgLine = `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${avgY.toFixed(1)}" y2="${avgY.toFixed(1)}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4 3"/>`;
-  const best = sport === 'run' ? lo : hi;
-  const worst = sport === 'run' ? hi : lo;
+  const avgLine = `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${avgY.toFixed(2)}" y2="${avgY.toFixed(2)}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4 3"/>`;
+  const bestVal = sport === 'run' ? lo : hi;
+  const worstVal = sport === 'run' ? hi : lo;
+
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label} (per split)</div>
-        <div style="font-size: 11px; color: var(--text-dim);">avg ${formatter(avg)} · ${bestLabel} ${formatter(best)} · ${worstLabel} ${formatter(worst)}</div>
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label}</div>
+        <div style="font-size: 11px; color: var(--text-dim);">avg ${fmt(avg)} · best ${fmt(bestVal)} · worst ${fmt(worstVal)}</div>
       </div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
-        ${bars}
-        ${avgLine}
-      </svg>
-    </div>
-  `;
-}
-
-// Two-line overlay chart with independent y-axis scales. Useful for
-// comparing pace vs cadence (run), or speed vs cadence (bike), the way
-// Strava's activity page does. Each series is normalized to its own
-// range so both fit cleanly on one canvas.
-function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, colorA, colorB, title) {
-  if (!Array.isArray(seriesA) || !Array.isArray(seriesB)) return '';
-  const len = Math.min(seriesA.length, seriesB.length);
-  if (len < 4) return '';
-  const sA = seriesA.slice(0, len).map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
-  const sB = seriesB.slice(0, len).map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
-  const validA = sA.filter(v => v != null && v > 0);
-  const validB = sB.filter(v => v != null && v > 0);
-  if (validA.length < 4 || validB.length < 4) return '';
-  let loA = Math.min(...validA), hiA = Math.max(...validA);
-  let loB = Math.min(...validB), hiB = Math.max(...validB);
-  if (loA === hiA) hiA = loA + 1;
-  if (loB === hiB) hiB = loB + 1;
-  const rA = hiA - loA, rB = hiB - loB;
-  loA -= rA * 0.05; hiA += rA * 0.05;
-  loB -= rB * 0.05; hiB += rB * 0.05;
-  const W = 600, H = 130;
-  const pad = { top: 10, right: 10, bottom: 18, left: 10 };
-  const innerW = W - pad.left - pad.right;
-  const innerH = H - pad.top - pad.bottom;
-  const step = innerW / (len - 1);
-  const buildPath = (vals, lo, hi) => {
-    const pts = [];
-    let started = false;
-    let out = '';
-    for (let i = 0; i < vals.length; i++) {
-      const v = vals[i];
-      if (v == null || v <= 0) { started = false; continue; }
-      const x = pad.left + i * step;
-      const y = pad.top + innerH - ((v - lo) / (hi - lo)) * innerH;
-      out += (started ? ' L ' : 'M ') + x.toFixed(1) + ',' + y.toFixed(1);
-      started = true;
-    }
-    return out;
-  };
-  const pathA = buildPath(sA, loA, hiA);
-  const pathB = buildPath(sB, loB, hiB);
-  const fmtAvg = (vals, unit) => {
-    const a = vals.reduce((s, v) => s + v, 0) / vals.length;
-    return Math.round(a * 10) / 10 + (unit ? ' ' + unit : '');
-  };
-  return `
-    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${title}</div>
-        <div style="display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap;">
-          <div style="color: ${colorA};">● ${labelA} <span style="color: var(--text-dim);">avg ${fmtAvg(validA, unitA)}</span></div>
-          <div style="color: ${colorB};">● ${labelB} <span style="color: var(--text-dim);">avg ${fmtAvg(validB, unitB)}</span></div>
-        </div>
+      <div id="${chartId}_wrap" style="position: relative;">
+        <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
+          ${avgLine}
+          ${bars}
+          <g class="stryxs-cursor" style="opacity: 0; pointer-events: none;">
+            <line class="cursorLine" x1="0" x2="0" y1="${pad.top}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.55)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+            <circle class="dotA" cx="0" cy="0" r="4" fill="#fff" stroke="#0a0e1a" stroke-width="1.5"/>
+          </g>
+        </svg>
+        <div class="stryxs-tooltip" style="position: absolute; pointer-events: none; opacity: 0; padding: 6px 10px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.55; white-space: nowrap; color: var(--text); transform: translate(-50%, -120%); transition: opacity 0.12s; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
       </div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
-        <path d="${pathA}" fill="none" stroke="${colorA}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
-        <path d="${pathB}" fill="none" stroke="${colorB}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
-      </svg>
     </div>
   `;
 }
@@ -9610,6 +9846,42 @@ window._reanalyzingWorkouts = window._reanalyzingWorkouts || {};
 // Public alias — "refresh this workout's data" is the new framing, available
 // to everyone (re-pulling your own data isn't a premium feature).
 window.refreshStravaWorkout = function(dbId) { return reanalyzeStravaWorkout(dbId); };
+
+// Auto-refresh hook: when the user opens a Strava workout that's missing
+// splits/streams, silently re-pull from Strava with the latest enrichment
+// code. Throttled per-session-per-workout via sessionStorage so we don't
+// burn the Strava API quota (2 calls per refresh, 100/15min cap).
+//
+// Skip conditions:
+//   - not a Strava workout (manual entries, CSVs)
+//   - no _dbId (workout not yet saved)
+//   - already attempted this session
+//   - data is already complete (no missing pieces)
+//   - currently refreshing (lock in window._reanalyzingWorkouts)
+function maybeAutoRefreshWorkout(w) {
+  try {
+    if (!w || w.source !== 'strava' || !w._dbId) return;
+    const flagKey = 'stryxs_auto_refreshed_' + w._dbId;
+    if (sessionStorage.getItem(flagKey)) return;
+    const hasSplits = Array.isArray(w.splits) && w.splits.length > 0;
+    const hasStreams = (Array.isArray(w.hrSeries) && w.hrSeries.length > 0)
+      || (Array.isArray(w.paceSeries) && w.paceSeries.length > 0)
+      || (Array.isArray(w.speedSeries) && w.speedSeries.length > 0);
+    if (hasSplits && hasStreams) return; // already rich
+    if (window._reanalyzingWorkouts && window._reanalyzingWorkouts[w._dbId]) return;
+    // Mark BEFORE firing so re-renders don't queue duplicates
+    sessionStorage.setItem(flagKey, '1');
+    console.log('[Stryxs] auto-refreshing workout', w._dbId, '(missing splits/streams)');
+    // Fire-and-forget. reanalyzeStravaWorkout handles toasts, re-renders,
+    // and its own internal locks. We swallow errors here — if it fails,
+    // the user can still hit the inline "Refresh" button manually.
+    setTimeout(() => {
+      try { reanalyzeStravaWorkout(w._dbId).catch(() => {}); }
+      catch (_) {}
+    }, 600); // small delay so the initial render settles first
+  } catch (_) { /* never break the render */ }
+}
+window.maybeAutoRefreshWorkout = maybeAutoRefreshWorkout;
 
 async function reanalyzeStravaWorkout(dbId) {
   // Block double-clicks per workout
@@ -10864,6 +11136,10 @@ async function viewHistoryDetail(idx) {
   }
 
   output.innerHTML = banner + renderAnalysis(w);
+
+  // Auto-refresh this workout if it's missing splits/streams (e.g. synced
+  // before the latest enrichment code). Silent, throttled per session.
+  maybeAutoRefreshWorkout(w);
 
   // Try to load saved Coach commentary for this workout
   if (state.user && w._dbId) {
@@ -13381,6 +13657,17 @@ async function callCoach(action, payload, options = {}) {
     if (!parsed?.success) {
       console.error('[Stryxs] Coach returned failure:', parsed);
       throw new Error(parsed?.error || 'Coach function failed');
+    }
+    // Refresh the Pro usage bars if they're currently visible — keeps the
+    // monthly counters live after every regen / chat / commentary call
+    // without making the user reopen the Subscription panel.
+    if (action !== 'get_my_usage' && action !== 'export_my_data' && action !== 'get_persona') {
+      try {
+        const sub = document.getElementById('section-subscription');
+        if (sub && sub.classList.contains('expanded') && typeof renderProUsageBars === 'function') {
+          renderProUsageBars();
+        }
+      } catch (_) { /* never break Coach for a UI refresh */ }
     }
     return parsed.result;
   } catch (err) {
