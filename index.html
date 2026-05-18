@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v55',
+      app_version: 'v56',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8767,6 +8767,49 @@ function renderGpsMapPreview(polyline) {
   `;
 }
 
+// Tile providers for the workout map. User can flip between dark (default,
+// matches the app's vibe) and color (street-style for orientation). Choice is
+// persisted in localStorage so it sticks across workouts and reloads.
+const STRYXS_TILE_PROVIDERS = {
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  },
+  color: {
+    url: 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  },
+};
+function getStryxsMapStyle() {
+  try { return localStorage.getItem('stryxs_map_style') || 'dark'; }
+  catch (_) { return 'dark'; }
+}
+function setStryxsMapStyle(style) {
+  if (style !== 'dark' && style !== 'color') return;
+  try { localStorage.setItem('stryxs_map_style', style); } catch (_) {}
+  // Live-swap tiles on every mounted map. We attached the leaflet map + tile
+  // layer onto the div as expando props so we can reach them without a
+  // separate registry.
+  document.querySelectorAll('[data-stryxs-map-mounted="1"]').forEach(el => {
+    const map = el._stryxsLeafletMap;
+    const oldTile = el._stryxsTileLayer;
+    if (!map || !oldTile) return;
+    try {
+      map.removeLayer(oldTile);
+      const cfg = STRYXS_TILE_PROVIDERS[style];
+      const newTile = L.tileLayer(cfg.url, cfg).addTo(map);
+      el._stryxsTileLayer = newTile;
+    } catch (err) { console.warn('[Stryxs map] tile swap failed', err); }
+    const btn = el.querySelector('.stryxs-map-style-btn');
+    if (btn) btn.textContent = style === 'dark' ? '🌙 Dark' : '🗺 Color';
+  });
+}
+window.setStryxsMapStyle = setStryxsMapStyle;
+
 // Mounts a Leaflet map into the placeholder div if Leaflet is loaded and
 // the div is in the DOM. Idempotent: safe to call multiple times.
 function mountStryxsMap(mapId) {
@@ -8777,20 +8820,23 @@ function mountStryxsMap(mapId) {
   const coords = (window._stryxsPendingMaps || {})[mapId];
   if (!coords || coords.length < 2) return;
   el.dataset.mounted = '1';
+  // The placeholder div needs position:relative so the floating style button
+  // can absolute-position itself in the top-right corner.
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   try {
-    // OpenStreetMap "Carto Dark" tiles — fit our dark theme much better than
-    // standard OSM (which is bright). Falls back to OSM if Carto blocks us.
     const map = L.map(mapId, {
       zoomControl: true,
       attributionControl: true,
       scrollWheelZoom: false,
       dragging: true,
     });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map);
+    const style = getStryxsMapStyle();
+    const cfg = STRYXS_TILE_PROVIDERS[style] || STRYXS_TILE_PROVIDERS.dark;
+    const tile = L.tileLayer(cfg.url, cfg).addTo(map);
+    // Stash map + tile on the element so setStryxsMapStyle can swap later
+    el._stryxsLeafletMap = map;
+    el._stryxsTileLayer = tile;
+    el.dataset.stryxsMapMounted = '1';
     // Draw the polyline route
     const latlngs = coords.map(c => [c[0], c[1]]);
     const route = L.polyline(latlngs, {
@@ -8803,6 +8849,26 @@ function mountStryxsMap(mapId) {
     L.circleMarker(latlngs[0], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#00e5a0', fillOpacity: 1 }).addTo(map).bindTooltip('Start');
     L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }).addTo(map).bindTooltip('End');
     map.fitBounds(route.getBounds(), { padding: [12, 12] });
+    // Floating dark/color toggle button (top-right corner of the map div).
+    // Sits above Leaflet zoom controls; uses stopPropagation so map drag
+    // doesn't fire when the user clicks it.
+    const btn = document.createElement('button');
+    btn.className = 'stryxs-map-style-btn';
+    btn.type = 'button';
+    btn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(20, 24, 38, 0.85); color: #fff; border: 1px solid rgba(255,255,255,0.18); padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); letter-spacing: 0.3px;';
+    btn.textContent = style === 'dark' ? '🌙 Dark' : '🗺 Color';
+    btn.title = 'Toggle map style';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setStryxsMapStyle(getStryxsMapStyle() === 'dark' ? 'color' : 'dark');
+    });
+    // Block Leaflet from hijacking pointer/wheel events on the button
+    if (L.DomEvent) {
+      L.DomEvent.disableClickPropagation(btn);
+      L.DomEvent.disableScrollPropagation(btn);
+    }
+    el.appendChild(btn);
     // Clear from the pending bucket so we don't leak memory
     delete window._stryxsPendingMaps[mapId];
   } catch (err) {
@@ -8856,6 +8922,163 @@ function renderTimeSeriesChart(series, label, unit, color) {
         <path d="${fillD}" fill="url(#grad_${color.replace('#','')})" stroke="none"/>
         <path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
+    </div>
+  `;
+}
+
+// Per-split bar chart. For runs: pace per km (lower is better, bars colored
+// green→yellow→red by relative pace). For bikes: speed per km (higher is
+// better, color inverted). Includes an average line.
+function renderSplitsBarChart(splits, sport) {
+  if (!Array.isArray(splits) || splits.length < 2) return '';
+  let values, label, unit, formatter, bestLabel, worstLabel;
+  if (sport === 'run') {
+    const valid = splits.filter(s => typeof s.paceMin === 'number' && s.paceMin > 0);
+    if (valid.length < 2) return '';
+    values = valid.map(s => ({ km: s.km, val: s.paceMin, raw: s.pace }));
+    label = 'Pace per km';
+    unit = 'min/km';
+    formatter = v => {
+      const m = Math.floor(v);
+      const sec = Math.round((v - m) * 60);
+      return `${m}:${String(sec).padStart(2, '0')}`;
+    };
+    bestLabel = 'fastest';
+    worstLabel = 'slowest';
+  } else {
+    // Bike: derive km/h from elapsedSec over 1km
+    const valid = splits.filter(s => typeof s.elapsedSec === 'number' && s.elapsedSec > 0);
+    if (valid.length < 2) return '';
+    values = valid.map(s => ({ km: s.km, val: 3600 / s.elapsedSec, raw: (3600 / s.elapsedSec).toFixed(1) + ' km/h' }));
+    label = 'Speed per km';
+    unit = 'km/h';
+    formatter = v => v.toFixed(1) + ' km/h';
+    bestLabel = 'fastest';
+    worstLabel = 'slowest';
+  }
+  const vals = values.map(v => v.val);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const range = (hi - lo) || 1;
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+  const W = 600, H = 140;
+  const pad = { top: 16, right: 10, bottom: 22, left: 10 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+  const barSlot = innerW / values.length;
+  const bars = values.map((v, i) => {
+    const x = pad.left + i * barSlot;
+    const ratio = (v.val - lo) / range;
+    let color;
+    if (sport === 'run') {
+      color = ratio < 0.33 ? '#00e5a0' : ratio < 0.66 ? '#fbbf24' : '#ef4444';
+    } else {
+      color = ratio > 0.66 ? '#00e5a0' : ratio > 0.33 ? '#fbbf24' : '#ef4444';
+    }
+    const h = Math.max(4, ratio * innerH * 0.85 + innerH * 0.15);
+    const y = pad.top + innerH - h;
+    return `<rect x="${(x + 1.5).toFixed(1)}" y="${y.toFixed(1)}" width="${(barSlot - 3).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" opacity="0.9" rx="2"><title>km ${v.km}: ${v.raw || formatter(v.val)}</title></rect>`;
+  }).join('');
+  const avgRatio = (avg - lo) / range;
+  const avgY = pad.top + innerH - (avgRatio * innerH * 0.85 + innerH * 0.15);
+  const avgLine = `<line x1="${pad.left}" x2="${pad.left + innerW}" y1="${avgY.toFixed(1)}" y2="${avgY.toFixed(1)}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4 3"/>`;
+  const best = sport === 'run' ? lo : hi;
+  const worst = sport === 'run' ? hi : lo;
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label} (per split)</div>
+        <div style="font-size: 11px; color: var(--text-dim);">avg ${formatter(avg)} · ${bestLabel} ${formatter(best)} · ${worstLabel} ${formatter(worst)}</div>
+      </div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
+        ${bars}
+        ${avgLine}
+      </svg>
+    </div>
+  `;
+}
+
+// Two-line overlay chart with independent y-axis scales. Useful for
+// comparing pace vs cadence (run), or speed vs cadence (bike), the way
+// Strava's activity page does. Each series is normalized to its own
+// range so both fit cleanly on one canvas.
+function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, colorA, colorB, title) {
+  if (!Array.isArray(seriesA) || !Array.isArray(seriesB)) return '';
+  const len = Math.min(seriesA.length, seriesB.length);
+  if (len < 4) return '';
+  const sA = seriesA.slice(0, len).map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
+  const sB = seriesB.slice(0, len).map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
+  const validA = sA.filter(v => v != null && v > 0);
+  const validB = sB.filter(v => v != null && v > 0);
+  if (validA.length < 4 || validB.length < 4) return '';
+  let loA = Math.min(...validA), hiA = Math.max(...validA);
+  let loB = Math.min(...validB), hiB = Math.max(...validB);
+  if (loA === hiA) hiA = loA + 1;
+  if (loB === hiB) hiB = loB + 1;
+  const rA = hiA - loA, rB = hiB - loB;
+  loA -= rA * 0.05; hiA += rA * 0.05;
+  loB -= rB * 0.05; hiB += rB * 0.05;
+  const W = 600, H = 130;
+  const pad = { top: 10, right: 10, bottom: 18, left: 10 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+  const step = innerW / (len - 1);
+  const buildPath = (vals, lo, hi) => {
+    const pts = [];
+    let started = false;
+    let out = '';
+    for (let i = 0; i < vals.length; i++) {
+      const v = vals[i];
+      if (v == null || v <= 0) { started = false; continue; }
+      const x = pad.left + i * step;
+      const y = pad.top + innerH - ((v - lo) / (hi - lo)) * innerH;
+      out += (started ? ' L ' : 'M ') + x.toFixed(1) + ',' + y.toFixed(1);
+      started = true;
+    }
+    return out;
+  };
+  const pathA = buildPath(sA, loA, hiA);
+  const pathB = buildPath(sB, loB, hiB);
+  const fmtAvg = (vals, unit) => {
+    const a = vals.reduce((s, v) => s + v, 0) / vals.length;
+    return Math.round(a * 10) / 10 + (unit ? ' ' + unit : '');
+  };
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${title}</div>
+        <div style="display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap;">
+          <div style="color: ${colorA};">● ${labelA} <span style="color: var(--text-dim);">avg ${fmtAvg(validA, unitA)}</span></div>
+          <div style="color: ${colorB};">● ${labelB} <span style="color: var(--text-dim);">avg ${fmtAvg(validB, unitB)}</span></div>
+        </div>
+      </div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
+        <path d="${pathA}" fill="none" stroke="${colorA}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+        <path d="${pathB}" fill="none" stroke="${colorB}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+      </svg>
+    </div>
+  `;
+}
+
+// Tiny note shown when the workout is missing rich data (no GPS map, no
+// per-km splits, no per-second streams). Tells the user honestly that not
+// every session captures the full picture — Coach still counts the volume.
+function renderDataAvailabilityHint(a) {
+  if (!a) return '';
+  if (a.source === 'manual') return ''; // manual entries already have their own softening
+  const hasMap = !!a.polyline;
+  const hasSplits = Array.isArray(a.splits) && a.splits.length > 0;
+  const hasStreams = (Array.isArray(a.hrSeries) && a.hrSeries.length > 0)
+    || (Array.isArray(a.paceSeries) && a.paceSeries.length > 0)
+    || (Array.isArray(a.speedSeries) && a.speedSeries.length > 0);
+  const missing = [];
+  if (!hasMap) missing.push('route');
+  if (!hasSplits) missing.push('splits');
+  if (!hasStreams) missing.push('per-second charts');
+  if (missing.length === 0) return ''; // full data, no hint
+  return `
+    <div style="padding: 10px 14px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-top: 14px;">
+      No ${missing.join(' / ')} for this workout — some sessions just don't capture everything. Coach still counts it for your weekly volume.
     </div>
   `;
 }
@@ -8967,6 +9190,22 @@ function renderPowerStats(a) {
 function renderWorkoutMeta(a) {
   if (!a) return '';
   const bits = [];
+  if (typeof a.calories === 'number' && a.calories > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(252, 76, 2, 0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">🔥 ${a.calories} cal</span>`);
+  }
+  if (typeof a.kilojoules === 'number' && a.kilojoules > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(251, 191, 36, 0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">⚡ ${a.kilojoules} kJ</span>`);
+  }
+  if (typeof a.maxSpeed === 'number' && a.maxSpeed > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">⚡ max ${a.maxSpeed} km/h</span>`);
+  }
+  if (typeof a.maxCadence === 'number' && a.maxCadence > 0) {
+    const cadIcon = a.sport === 'bike' ? '🚴' : '👟';
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">${cadIcon} max ${a.maxCadence} ${a.sport === 'bike' ? 'rpm' : 'spm'}</span>`);
+  }
+  if (typeof a.pr_count === 'number' && a.pr_count > 0) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(0, 229, 160, 0.1); border-radius: 6px; font-size: 11px; color: var(--accent); font-weight: 600;">🏆 ${a.pr_count} PR${a.pr_count > 1 ? 's' : ''}</span>`);
+  }
   if (typeof a.perceived_exertion === 'number' && a.perceived_exertion > 0) {
     bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.08); border-radius: 6px; font-size: 11px; color: var(--text-dim);">RPE ${a.perceived_exertion}/10</span>`);
   }
@@ -8982,6 +9221,9 @@ function renderWorkoutMeta(a) {
   }
   if (typeof a.avgTemp === 'number') {
     bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">🌡 ${Math.round(a.avgTemp)}°C</span>`);
+  }
+  if (a.trainer) {
+    bits.push(`<span style="padding: 4px 10px; background: rgba(80,130,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-dim);">🏠 Indoor</span>`);
   }
   const descHtml = a.description
     ? `<div style="background: rgba(0, 229, 160, 0.04); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; border-radius: 0 8px 8px 0;">${escapeHtml(a.description)}</div>`
@@ -9325,7 +9567,6 @@ function renderSummaryWorkout(a) {
           ${a.avgPace ? `<span>⚡ ${formatPace(a.avgPace + '/km').replace(/\/km|\/mi/, '')}/${getUserUnits() === 'imperial' ? 'mi' : 'km'}</span>` : ''}
           ${a.elevationGain > 0 ? `<span>⛰ ${formatElevation(a.elevationGain)}</span>` : ''}
           ${a.cadence ? `<span>👟 ${a.cadence} spm</span>` : ''}
-          ${a.calories ? `<span>🔥 ${a.calories} cal</span>` : ''}
         </div>
         ${dateStr ? `<div style="font-size: 12px; color: var(--text-mute); margin-top: 8px;">${dateStr}</div>` : ''}
         ${renderWorkoutMeta(a)}
@@ -9336,6 +9577,8 @@ function renderSummaryWorkout(a) {
         ${renderHrZoneBars(a.zd)}
         ${a.sport === 'bike' ? renderPowerStats(a) : ''}
         ${renderSplitsTable(a.splits, a.sport)}
+        ${(a.sport === 'run' || a.sport === 'bike') ? renderSplitsBarChart(a.splits, a.sport) : ''}
+        ${renderDataAvailabilityHint(a)}
         ${renderWorkoutFeedbackForm(a._dbId)}
         ${renderProUpsell(a.sport)}
         ${renderStravaFooter(a)}
@@ -9478,15 +9721,18 @@ function renderRun(a) {
         </div>` : ''}
 
         ${renderSplitsTable(a.splits, 'run')}
+        ${renderSplitsBarChart(a.splits, 'run')}
 
-        <!-- Per-second time-series charts (downsampled to ~60 points by the
+        <!-- Per-second time-series charts (downsampled to ~80 points by the
              strava edge function and stored on the workout as hrSeries /
              paceSeries / cadenceSeries). Each is independent — only renders
              if the data is there. -->
         ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444')}
         ${renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0')}
         ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', 'spm', '#5082ff')}
+        ${renderDualLineChart(a.paceSeries, a.cadenceSeries, 'Pace', 'Cadence', 'min/km', 'spm', '#00e5a0', '#5082ff', 'Pace vs Cadence')}
         ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa')}
+        ${renderDataAvailabilityHint(a)}
 
         ${isPro ? `
         <div class="chart-section">
@@ -9565,13 +9811,17 @@ function renderBike(a) {
 
         ${renderPowerStats(a)}
         ${renderSplitsTable(a.splits, 'bike')}
+        ${renderSplitsBarChart(a.splits, 'bike')}
 
         <!-- Per-second time-series charts for cycling -->
         ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444')}
         ${renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0')}
         ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24')}
         ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', 'rpm', '#5082ff')}
+        ${renderDualLineChart(a.speedSeries, a.cadenceSeries, 'Speed', 'Cadence', 'km/h', 'rpm', '#00e5a0', '#5082ff', 'Speed vs Cadence')}
+        ${renderDualLineChart(a.powerSeries, a.hrSeries, 'Power', 'HR', 'w', 'bpm', '#fbbf24', '#ef4444', 'Power vs Heart Rate')}
         ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa')}
+        ${renderDataAvailabilityHint(a)}
 
         ${isPro ? `
         <div class="chart-section">
