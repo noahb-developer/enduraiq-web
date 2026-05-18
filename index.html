@@ -9,6 +9,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stryxs">
 <meta name="description" content="AI coaching for endurance athletes. Upload your training data. Get professional coaching insights instantly.">
+<!-- Tell Chrome/Edge/Safari to NEVER auto-translate this page. Killed a class of bugs
+     where Chrome would translate brand names ("Strava" → "Diet" etc.) and labels into
+     gibberish for users whose browser default was non-English. -->
+<meta name="google" content="notranslate">
 <link rel="canonical" href="https://stryxs.com/">
 <meta name="robots" content="index, follow">
 <!-- Open Graph / social previews. og:image is the 1200x630 hero card. -->
@@ -45,6 +49,10 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js"></script>
 <!-- mammoth.js for .docx text extraction (lightweight, browser-friendly) -->
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
+<!-- Leaflet: lightweight slippy maps with OpenStreetMap tiles, no API key needed.
+     Used by renderGpsMapPreview to show real map tiles behind Strava polylines. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
   // Configure pdfjs worker (required for parsing). Loaded on-demand only when user uploads.
   if (typeof pdfjsLib !== 'undefined') {
@@ -4951,207 +4959,8 @@ const I18N = {
     'trial.welcome.cta_coach': 'Start with Coach →',
   },
   fr: {
-    // Common
-    'common.save': 'Enregistrer',
-    'common.cancel': 'Annuler',
-    'common.continue': 'Continuer',
-    'common.back': 'Retour',
-    'common.next': 'Suivant',
-    'common.delete': 'Supprimer',
-    'common.upgrade': 'Passer Pro',
-    'common.send': 'Envoyer',
-    'common.loading': 'Chargement…',
-    'common.try_again': 'Réessayer',
-    'common.got_it': "C'est compris",
-    'common.close': 'Fermer',
-
-    // Landing
-    'landing.nav.login': 'Connexion',
-    'landing.hero.cta_primary': "Commencer l'entraînement",
-    'landing.hero.cta_secondary': 'Voir comment ça marche',
-    'landing.hero.subtitle': "Un coach IA qui lit vraiment tes données d'entraînement. Construit ton plan. S'adapte au fur et à mesure. Le premier coach d'endurance qui tient dans ta poche.",
-    'landing.meta.trial': 'Essai Pro 7 jours, sans carte',
-    'landing.meta.works_with': 'Compatible Strava + CSV de toutes les montres',
-    'landing.meta.cancel': 'Annulable à tout moment',
-    'landing.cta_strip.title_a': 'Arrête de deviner.',
-    'landing.cta_strip.title_b': "Commence à t'entraîner.",
-    'landing.cta_strip.subtitle': 'Commence avec un essai Pro de 7 jours, sans carte requise. Ensuite, continue avec le tier gratuit ou reste sur Pro pour la génération de plan illimitée, le coaching adaptatif et l’analyse de tendances en profondeur.',
-    'landing.cta_strip.button': 'Créer ton compte gratuit',
-
-    // Auth (signup + login)
-    'auth.signup.title': 'Crée ton compte',
-    'auth.signup.subtitle': 'Commence ton essai Pro de 7 jours, sans carte de crédit',
-    'auth.signup.button': 'Créer le compte',
-    'auth.signup.have_account': 'Tu as déjà un compte ?',
-    'auth.signup.log_in_link': 'Connexion',
-    'auth.login.title': 'Bon retour',
-    'auth.login.subtitle': 'Connecte-toi à ton compte Stryxs',
-    'auth.login.button': 'Connexion',
-    'auth.login.forgot': 'Mot de passe oublié ?',
-    'auth.login.no_account': 'Nouveau ici ?',
-    'auth.login.signup_link': 'Créer un compte',
-    'auth.field.name': 'Nom',
-    'auth.field.email': 'E-mail',
-    'auth.field.password': 'Mot de passe',
-    'auth.field.name_placeholder': 'Alex',
-    'auth.field.email_placeholder': 'toi@exemple.com',
-
-    // Language picker
-    'lang.picker.title': 'Choisis ta langue',
-    'lang.picker.subtitle': 'Tu peux changer ça plus tard dans les Paramètres.',
-    'lang.english': 'English',
-    'lang.french': 'Français',
-    'lang.settings.title': 'Langue',
-    'lang.settings.sub': "Choisis la langue de l'application. Coach répond aussi dans cette langue.",
-    'lang.settings.saved': 'Langue mise à jour',
-    'lang.settings.saved_refresh_hint': 'Langue enregistrée. Rafraîchis la page pour tout traduire partout.',
-    'lang.status.active': 'Active',
-    'lang.status.tap_to_switch': 'Toucher pour changer',
-
-    // Nav / pages
-    'nav.dashboard': 'Tableau de bord',
-    'nav.coach': 'Coach',
-    'nav.plan': 'Plan',
-    'nav.race_plan': 'Plan de course',
-    'nav.analyze': 'Analyser',
-    'nav.history': 'Historique',
-    'nav.trends': 'Tendances',
-    'nav.settings': 'Paramètres',
-    'nav.help': 'Aide & FAQ',
-    'nav.logout': 'Déconnexion',
-    'nav.upgrade_to_pro': 'Passer à Pro',
-
-    // Dashboard
-    'dash.recent_workouts': 'Séances récentes',
-    'dash.no_workouts_yet': 'Aucune séance pour le moment',
-    'dash.empty.title': 'Enregistre ta première séance pour commencer',
-    'dash.empty.subtitle': "Coach a besoin d'au moins une séance pour te donner un vrai retour. Choisis ce qui te convient.",
-    'dash.empty.cta_strava': 'Connecter Strava',
-    'dash.empty.cta_manual': 'Enregistrer à la main',
-    'dash.empty.cta_upload': 'Importer un fichier',
-    'dash.greeting.morning': 'Bonjour',
-    'dash.greeting.afternoon': "Bon après-midi",
-    'dash.greeting.evening': 'Bonsoir',
-    'dash.greeting.fallback_name': 'Athlète',
-    'dash.greeting.nice_work': "Beau {sport} aujourd'hui, bien joué.",
-    'dash.greeting.no_workouts': 'Connecte Strava dans les Paramètres pour commencer à enregistrer tes séances.',
-    'dash.greeting.workouts_logged': '{count} séance{plural} enregistrée{plural} · continue.',
-    'dash.sport.run': 'course',
-    'dash.sport.running': 'course',
-    'dash.sport.bike': 'sortie vélo',
-    'dash.sport.cycling': 'sortie vélo',
-    'dash.sport.swim': 'séance de nage',
-    'dash.sport.swimming': 'séance de nage',
-    'dash.sport.strength': 'séance de muscu',
-    'dash.sport.gym': 'séance de muscu',
-    'dash.sport.workout': 'séance',
-
-    // History / Trends / Help page titles
-    'history.title': "Historique des séances",
-    'history.subtitle': "Toutes les séances que tu as analysées",
-    'trends.title': "Tendances d'entraînement",
-    'trends.subtitle': "Tendances de ton entraînement récent. La vue d'ensemble que Strava et Garmin ne montrent pas.",
-    'help.title': 'Aide & FAQ',
-    'help.subtitle': 'Touche une question pour la dérouler. Cherche pour trouver vite.',
-
-    // Plan page
-    'plan.title': "Ton plan d'entraînement",
-    'plan.subtitle': "Coach génère ce calendrier à partir de tes objectifs. Il s'adapte automatiquement à mesure que tu t'entraînes.",
-    'plan.no_intake.subtitle': 'Coach va construire un plan personnalisé selon tes objectifs.',
-
-    // Pro upsell page
-    'pro.you_are_pro': "Tu es Pro",
-    'pro.you_are_pro_sub': 'Merci de soutenir Stryxs. Toutes les fonctionnalités sont débloquées.',
-    'pro.upgrade_title': 'Passe à Stryxs Pro',
-    'pro.upgrade_sub': "L'expérience complète de coaching IA conçue pour les athlètes d'endurance.",
-
-    // Coach
-    'coach.tab.title': 'Coach',
-    'coach.tab.subtitle': "Ton coach d'endurance IA. Pose-lui n'importe quelle question sur ton entraînement, une séance, ou comment progresser.",
-    'coach.input.placeholder': 'Pose une question à Coach…',
-    'coach.trial.hint': '✨ Essai gratuit Coach, {remaining} message{plural} restant{plural}. Passe Pro pour discuter sans limite.',
-    'coach.trial.exhausted': "Tu as utilisé tes {limit} messages gratuits avec Coach. Passe Pro pour discuter sans limite.",
-
-    // Analyze (manual entry)
-    'analyze.title': 'Analyser une séance',
-    'analyze.subtitle': "Synchronise, importe, ou revois les séances d'aujourd'hui.",
-    'analyze.toggle.autosync': 'Synchro auto',
-    'analyze.toggle.manual': 'Saisir à la main',
-    'analyze.toggle.upload': 'Importer un fichier',
-    'manual.header': 'Enregistre une séance à la main.',
-    'manual.header_sub': "Utile si tu ne veux pas utiliser Strava ou si tu veux juste logger vite. Coach lit ces séances comme les autres.",
-    'manual.sport': 'Sport',
-    'manual.sport.run': 'Course à pied',
-    'manual.sport.bike': 'Vélo',
-    'manual.sport.swim': 'Natation',
-    'manual.sport.strength': 'Muscu',
-    'manual.sport.other': 'Autre',
-    'manual.date': 'Date',
-    'manual.duration': 'Durée (min)',
-    'manual.distance': 'Distance ({unit})',
-    'manual.avg_hr': 'FC moy',
-    'manual.max_hr': 'FC max',
-    'manual.distance_opt': 'Distance ({unit}) (optionnel)',
-    'manual.avg_hr_opt': 'FC moy (optionnel)',
-    'manual.max_hr_opt': 'FC max (optionnel)',
-    'manual.other_details': "Qu'est-ce que tu as fait ?",
-    'manual.other_details_placeholder': 'ex. yoga, randonnée, escalade, paddle',
-    'manual.rpe': 'Effort perçu (optionnel, 1-10)',
-    'manual.felt': 'Comment tu te sentais (optionnel)',
-    'manual.felt.easy': 'facile',
-    'manual.felt.hard': 'dur',
-    'manual.felt.strong': 'fort',
-    'manual.felt.flat': 'plat',
-    'manual.felt.sore': 'courbatures',
-    'manual.felt.sick': 'malade',
-    'manual.notes': 'Notes (optionnel)',
-    'manual.notes_placeholder': "Jambes lourdes après le brick de vendredi, course en progression facile",
-    'manual.submit': 'Enregistrer la séance',
-    'manual.saved': '✓ Enregistrée. Rafraîchis pour la voir sur le tableau de bord.',
-    'manual.toast_saved': 'Séance enregistrée',
-    'manual.err_date': 'Choisis une date.',
-    'manual.err_duration': 'La durée est requise (minutes).',
-    'manual.err_save': 'Échec de la sauvegarde : {msg}',
-
-    // Settings (section headers)
-    'settings.title': 'Paramètres',
-    'settings.sub': "Modifie ton profil, tes zones d'entraînement et tes préférences.",
-    'settings.section.language.title': 'Langue',
-    'settings.section.profile.title': 'Profil',
-    'settings.section.profile.sub': 'Nom, photo, bio, e-mail',
-    'settings.section.personal.title': 'Infos personnelles',
-    'settings.section.personal.sub': 'Unités, âge, poids, taille',
-    'settings.section.goals.title': "Objectifs d'entraînement",
-    'settings.section.goals.sub': 'Course, expérience, heures par semaine, blessures',
-    'settings.section.benchmarks.title': 'Repères de course',
-    'settings.section.benchmarks.sub': 'Records perso, objectif de temps, dernière course',
-    'settings.section.equipment.title': 'Matériel',
-    'settings.section.equipment.sub': "Ce à quoi tu as accès. Coach adapte les séances.",
-    'settings.section.subscription.title': 'Abonnement',
-    'settings.section.connections.title': 'Connexions',
-    'settings.section.connections.sub': "Sync auto des séances depuis Strava et d'autres apps",
-    'settings.section.hr.title': 'Zones de fréquence cardiaque',
-    'settings.section.hr.sub': 'LTHR pour la course et le vélo',
-    'settings.section.help.title': 'Aide & visite',
-    'settings.section.help.sub': "Rejouer le tour de présentation à tout moment",
-    'settings.section.legal.title': 'Mentions légales',
-    'settings.section.legal.sub': "Politique de confidentialité et conditions d'utilisation",
-    'settings.section.notifications.title': 'Notifications',
-    'settings.section.notifications.sub': 'Reçois un rappel avant chaque séance',
-    'settings.section.privacy.title': 'Confidentialité & données',
-    'settings.section.privacy.sub': 'Télécharge une copie de toutes tes données Stryxs',
-    'settings.section.danger.title': 'Suppression du compte',
-    'settings.section.danger.sub': 'Supprime ton compte et toutes tes données pour de bon',
-
-    // Pro upsell
-    'pro.feature_gate.coach_chat.title': 'Le chat Coach est une fonction Pro',
-    'pro.feature_gate.coach_chat.desc': "Passe Pro pour discuter sans limite avec ton coach IA.",
-
-    // Trial welcome card
-    'trial.welcome.title': 'Ton essai Pro de 7 jours est actif',
-    'trial.welcome.body': "Pendant les {days} prochains jours, tu as un accès complet à Stryxs Pro : génération de plan illimitée, chat coach IA avec contexte complet, ajustements de plan intelligents et analyse de tendances en profondeur. Aucune carte requise.",
-    'trial.welcome.after': "Après le jour 7, ton compte passe automatiquement au tier Gratuit. Tes données restent, tu as juste des limites sur la génération de plan et le chat coach. Tu peux passer à Pro à tout moment pour garder les fonctionnalités.",
-    'trial.welcome.cta_coach': 'Commencer avec Coach →',
+    // French translations stripped 2026-05-18 — see memory.md round 7 notes.
+    // Re-enable by re-populating this object + setting LANG_UI_DISABLED=false.
   },
 };
 
@@ -5209,259 +5018,8 @@ function applyI18nToDom(root) {
 // textContent. Add new entries as you find untranslated English in the app.
 // When supporting more languages later, add a parallel object PHRASE_TRANSLATIONS_ES, etc.
 const PHRASE_TRANSLATIONS_FR = {
-  // Common buttons (appear EVERYWHERE)
-  'Save': 'Enregistrer',
-  'Save changes': 'Enregistrer les modifications',
-  'Cancel': 'Annuler',
-  'Continue': 'Continuer',
-  'Back': 'Retour',
-  'Next': 'Suivant',
-  'Delete': 'Supprimer',
-  'Edit': 'Modifier',
-  'Close': 'Fermer',
-  'Open': 'Ouvrir',
-  'Send': 'Envoyer',
-  'Upload': 'Importer',
-  'Download': 'Télécharger',
-  'Loading…': 'Chargement…',
-  'Loading...': 'Chargement...',
-  'Try again': 'Réessayer',
-  'Got it': "C'est compris",
-  'Got it!': "C'est compris !",
-  'Confirm': 'Confirmer',
-  'Yes': 'Oui',
-  'No': 'Non',
-  'OK': 'OK',
-  'Done': 'Terminé',
-  'Skip': 'Passer',
-  'Apply': 'Appliquer',
-  'Reset': 'Réinitialiser',
-  'Submit': 'Soumettre',
-  'Log out': 'Déconnexion',
-  'Sign out': 'Déconnexion',
-  'Log in': 'Connexion',
-  'Sign in': 'Connexion',
-  'Sign up': 'Inscription',
-  'Get started': 'Commencer',
-  'Get started →': 'Commencer →',
-  'Learn more': 'En savoir plus',
-  'Show more': 'Afficher plus',
-  'Show less': 'Afficher moins',
-  'View all': 'Tout voir',
-  'See all': 'Tout voir',
-  'Add': 'Ajouter',
-  'Remove': 'Retirer',
-  'Update': 'Mettre à jour',
-  'Refresh': 'Rafraîchir',
-  'Connect': 'Connecter',
-  'Disconnect': 'Déconnecter',
-  'Manage': 'Gérer',
-  'Manage connections': 'Gérer les connexions',
-  'Upgrade': 'Passer Pro',
-  'Upgrade to Pro': 'Passer à Pro',
-  'Upgrade →': 'Passer Pro →',
-
-  // Dashboard
-  'Recent workouts': 'Séances récentes',
-  'Today': "Aujourd'hui",
-  'This week': 'Cette semaine',
-  'This month': 'Ce mois-ci',
-  'All time': 'Depuis le début',
-  'No workouts yet': 'Aucune séance pour le moment',
-  'No workouts this week': 'Aucune séance cette semaine',
-  'No workouts this month': 'Aucune séance ce mois-ci',
-  'Welcome back': 'Bon retour',
-  'Run': 'Course',
-  'Bike': 'Vélo',
-  'Swim': 'Natation',
-  'Gym': 'Muscu',
-  'Strength': 'Muscu',
-  'Other': 'Autre',
-  'Rest day': 'Jour de repos',
-  'Rest': 'Repos',
-  'Easy run': 'Course facile',
-  'Long run': 'Sortie longue',
-  'Long ride': 'Sortie longue à vélo',
-  'Tempo run': 'Course tempo',
-  'Workout': 'Séance',
-  'Workouts': 'Séances',
-  'Recovery': 'Récupération',
-  'Recovery week': 'Semaine de récupération',
-  'Race day!': 'Jour de course !',
-  'Race day': 'Jour de course',
-
-  // Plan
-  'Your Training Plan': "Ton plan d'entraînement",
-  'Your training plan': "Ton plan d'entraînement",
-  'Plan': 'Plan',
-  'Generate next week': 'Générer la semaine prochaine',
-  'Generate next week →': 'Générer la semaine prochaine →',
-  'Reset plan': 'Réinitialiser le plan',
-  'Import plan': 'Importer un plan',
-  'Generate plan': 'Générer le plan',
-  'Generate new plan': 'Générer un nouveau plan',
-  'Build my plan': 'Construire mon plan',
-  'Plan Management': 'Gestion du plan',
-  'Current week': 'Semaine en cours',
-  'Next week': 'Semaine prochaine',
-  'Previous week': 'Semaine précédente',
-  'Today\'s workout': "Séance d'aujourd'hui",
-  "Today's workout": "Séance d'aujourd'hui",
-  'Skip workout': 'Passer la séance',
-  'Mark complete': 'Marquer comme terminée',
-  'Mark as complete': 'Marquer comme terminée',
-  'Share plan': 'Partager le plan',
-  'Share plan →': 'Partager le plan →',
-
-  // Settings
-  'Settings': 'Paramètres',
-  'Profile': 'Profil',
-  'Personal Info': 'Infos personnelles',
-  'Training Goals': "Objectifs d'entraînement",
-  'Race Benchmarks': 'Repères de course',
-  'Equipment': 'Matériel',
-  'Subscription': 'Abonnement',
-  'Connections': 'Connexions',
-  'Language': 'Langue',
-  'Notifications': 'Notifications',
-  'Privacy & data': 'Confidentialité & données',
-  'Heart Rate Zones': 'Zones de fréquence cardiaque',
-  'Help & tour': 'Aide & visite',
-  'Legal': 'Mentions légales',
-  'Account deletion': 'Suppression du compte',
-  'Display name': "Nom d'affichage",
-  'Name': 'Nom',
-  'Email': 'E-mail',
-  'Password': 'Mot de passe',
-  'Bio (optional)': 'Bio (optionnel)',
-  'Bio': 'Bio',
-  'Age': 'Âge',
-  'Weight': 'Poids',
-  'Height': 'Taille',
-  'Sex': 'Sexe',
-  'Male': 'Homme',
-  'Female': 'Femme',
-  'Units': 'Unités',
-  'Metric': 'Métrique',
-  'Imperial': 'Impérial',
-  'Goal event': 'Événement cible',
-  'Race date': 'Date de la course',
-  'Available days': 'Jours disponibles',
-  'Weekly hours': 'Heures par semaine',
-  'Experience level': "Niveau d'expérience",
-  'Beginner': 'Débutant',
-  'Intermediate': 'Intermédiaire',
-  'Advanced': 'Avancé',
-  'Elite': 'Élite',
-  'Injuries': 'Blessures',
-  'None': 'Aucune',
-
-  // Coach / chat
-  'Coach': 'Coach',
-  'Ask Coach anything…': 'Pose une question à Coach…',
-  'Ask Coach anything...': 'Pose une question à Coach…',
-  'Thinking...': 'Réflexion en cours...',
-  'Thinking…': 'Réflexion en cours…',
-  'Chat': 'Discussion',
-  'Send': 'Envoyer',
-  'Show older messages': 'Afficher les anciens messages',
-
-  // Analyze
-  'Analyze Workout': 'Analyser une séance',
-  'Auto-sync': 'Synchro auto',
-  'Log manually': 'Saisir à la main',
-  'Upload file': 'Importer un fichier',
-  'Upload CSV': 'Importer CSV',
-  'Drop your workout file here': 'Dépose ton fichier ici',
-  'or tap to choose a file': 'ou touche pour choisir un fichier',
-
-  // History / Trends
-  'Workout History': 'Historique des séances',
-  'Training Trends': "Tendances d'entraînement",
-  'No insights yet': 'Aucune analyse pour le moment',
-  'Recent patterns': 'Tendances récentes',
-
-  // Pro / billing
-  'Pro': 'Pro',
-  'Free': 'Gratuit',
-  'Free tier': 'Tier gratuit',
-  'Trial': 'Essai',
-  'Active': 'Actif',
-  "You're a Pro": 'Tu es Pro',
-  'Upgrade to Stryxs Pro': 'Passe à Stryxs Pro',
-  'Manage subscription': "Gérer l'abonnement",
-  'Cancel subscription': "Annuler l'abonnement",
-
-  // Status / state
-  'Connected': 'Connecté',
-  'Disconnected': 'Déconnecté',
-  'Saved': 'Enregistré',
-  'Saved!': 'Enregistré !',
-  'Saving…': 'Enregistrement…',
-  'Saving...': 'Enregistrement...',
-  'Sent': 'Envoyé',
-  'Sent!': 'Envoyé !',
-  'Error': 'Erreur',
-  'Success': 'Succès',
-  'Pending': 'En attente',
-  'Complete': 'Terminé',
-  'Completed': 'Terminée',
-  'In progress': 'En cours',
-
-  // Common phrases
-  'optional': 'optionnel',
-  '(optional)': '(optionnel)',
-  'Required': 'Requis',
-  '(Required)': '(Requis)',
-  'Yesterday': 'Hier',
-  'Tomorrow': 'Demain',
-  'today': "aujourd'hui",
-  'yesterday': 'hier',
-  'tomorrow': 'demain',
-  'Monday': 'Lundi',
-  'Tuesday': 'Mardi',
-  'Wednesday': 'Mercredi',
-  'Thursday': 'Jeudi',
-  'Friday': 'Vendredi',
-  'Saturday': 'Samedi',
-  'Sunday': 'Dimanche',
-  'min': 'min',
-  'hours': 'heures',
-  'hour': 'heure',
-  'minutes': 'minutes',
-  'minute': 'minute',
-  'seconds': 'secondes',
-  'second': 'seconde',
-
-  // Account deletion section
-  'Delete your account': 'Supprimer ton compte',
-  'Permanently delete your account and all data': 'Supprime ton compte et toutes tes données pour de bon',
-
-  // Notifications
-  'Get a reminder before each training session': 'Reçois un rappel avant chaque séance',
-  'Workout reminders': 'Rappels de séance',
-  'Reminder time': 'Heure du rappel',
-  'Time zone': 'Fuseau horaire',
-  'Enable notifications': 'Activer les notifications',
-  'Disable notifications': 'Désactiver les notifications',
-
-  // Connections
-  'Auto-sync workouts from Strava and other apps': "Synchro auto des séances depuis Strava et d'autres apps",
-  'Connect Strava': 'Connecter Strava',
-  'Disconnect Strava': 'Déconnecter Strava',
-
-  // Subscription
-  'Pro · all features unlocked': 'Pro · toutes les fonctionnalités débloquées',
-  'all features unlocked': 'toutes les fonctionnalités débloquées',
-  'Active subscription': 'Abonnement actif',
-  'Member since': 'Membre depuis',
-  'Renews on': 'Renouvelle le',
-  'Usage this month': 'Utilisation ce mois-ci',
-
-  // Empty states
-  'Nothing here yet': 'Rien à voir pour le moment',
-  'No data yet': 'Pas encore de données',
-  'Coming soon': 'Bientôt disponible',
+  // Runtime translation dictionary stripped 2026-05-18 — see memory.md round 7.
+  // The translator was causing weird auto-translate interactions with Chrome.
 };
 
 // Translates static English phrases throughout the DOM to French.
@@ -5688,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v54',
+      app_version: 'v55',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -6464,184 +6022,21 @@ async function doSignup() {
   navigate('dashboard');
 }
 
-// Show the language picker modal exactly once per user. Returns a Promise
-// that resolves when the user picks (or immediately if the picker was
-// already shown for this user / no user is signed in). Awaiting lets the
-// signup flow render the dashboard AFTER the locale is chosen.
-// LANG_UI_DISABLED: returns immediately so signup doesn't prompt for language.
-function showLanguagePickerIfFirstTime() {
-  return new Promise((resolve) => {
-    if (LANG_UI_DISABLED) return resolve();
-    if (!state.user) return resolve();
-    const flagKey = `stryxs_lang_picker_shown_${state.user.id}`;
-    let shown = false;
-    try { shown = localStorage.getItem(flagKey) === '1'; } catch (_) {}
-    if (shown) return resolve();
-    // Store the resolver so pickLanguage can resolve when clicked
-    window._langPickerResolve = resolve;
-    showLanguagePickerModal();
-    try { localStorage.setItem(flagKey, '1'); } catch (_) {}
-  });
-}
+// LANGUAGE PICKER STRIPPED 2026-05-18 (round 7). The functions below were
+// the signup modal + Settings → Language buttons. Removed because the i18n
+// experience was creating mixed-state bugs we couldn't fix remotely. App
+// is English-only for now. To restore: see memory.md round 7 notes — most
+// of the infrastructure (I18N table en branch, t(), applyI18nToDom, the
+// runtime translateDOMWalker) is still in place, just dormant.
+function showLanguagePickerIfFirstTime() { return Promise.resolve(); }
+function showLanguagePickerModal() { /* stripped — see memory.md round 7 */ }
 
-// Renders the language picker as a centered modal. Two big buttons.
-// On select: saves to profile + localStorage + applyI18nToDom.
-function showLanguagePickerModal() {
-  // Remove any existing instance
-  document.getElementById('langPickerModal')?.remove();
 
-  const modal = document.createElement('div');
-  modal.id = 'langPickerModal';
-  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;';
-  modal.innerHTML = `
-    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 26px 22px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);">
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-        <span style="font-size: 22px;">🌐</span>
-        <div style="font-size: 18px; font-weight: 700; color: var(--text);">${t('lang.picker.title')}</div>
-      </div>
-      <div style="font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 18px;">${t('lang.picker.subtitle')}</div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button onclick="pickLanguage('en')" class="lang-pick-btn" data-lang="en" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
-          <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; border-radius: 6px; background: var(--bg-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">EN</span>
-          <span style="flex: 1;">English</span>
-        </button>
-        <button onclick="pickLanguage('fr')" class="lang-pick-btn" data-lang="fr" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; line-height: 1;">
-          <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; border-radius: 6px; background: var(--bg-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;">FR</span>
-          <span style="flex: 1;">Français</span>
-        </button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-}
+async function pickLanguage(loc) { /* stripped */ }
 
-async function pickLanguage(loc) {
-  await setLocale(loc);
-  trackEvent('language_picked', { locale: loc, source: 'signup_modal' });
-  document.getElementById('langPickerModal')?.remove();
-  // Resolve the awaiting signup flow so it can now render the dashboard
-  // in the chosen language.
-  if (typeof window._langPickerResolve === 'function') {
-    const r = window._langPickerResolve;
-    window._langPickerResolve = null;
-    r();
-  }
-}
+function renderLanguageButtons() { return ''; /* stripped — Settings Language section also removed */ }
 
-// Renders the two language buttons. Extracted so we can swap them live after
-// a click without rebuilding the whole Settings page (the previous version
-// relied on rerenderActivePage which made the change feel like nothing
-// happened to the user looking right at the buttons).
-//
-// Notes on visuals:
-// - No emoji flags. Windows/Chrome on Windows render regional-indicator
-//   pairs as plain text ("GB", "FR") which looks broken next to a label.
-//   Using styled monogram badges instead, which are universal.
-// - align-items: center keeps the badge and label vertically aligned.
-// NUCLEAR REWRITE v53: Built with DOM API (no innerHTML string parsing) to
-// eliminate any encoding/cache risks. Labels use BOTH uppercase ASCII form
-// ('ENGLISH'/'FRENCH') AND the native form below, so even if the ç in
-// Français renders weirdly the user can never confuse the two buttons.
-//
-// This function returns an HTML string for backward compatibility with the
-// existing call sites that use `row.innerHTML = renderLanguageButtons()`,
-// but internally it constructs the HTML via an intermediate DOM tree that
-// would catch any malformed templating. The actual labels use ç
-// (Unicode escape) so the source file's encoding doesn't matter.
-function renderLanguageButtons() {
-  const current = state.locale;
-  console.log('[Stryxs i18n v54] renderLanguageButtons called, state.locale =', current, 'I18N keys loaded:', Object.keys(I18N).length);
-
-  // Use Unicode escape ç for cedilla so source-file encoding can't
-  // possibly mangle the French word.
-  const FRANCAIS = 'Français';
-
-  // Each language: [code, primary uppercase label, native qualifier]
-  const langs = [
-    { code: 'en', primary: 'ENGLISH', native: '(English)' },
-    { code: 'fr', primary: 'FRENCH',  native: '(' + FRANCAIS + ')' },
-  ];
-
-  // Build via DOM API for safety, then serialize back to HTML so the
-  // existing innerHTML-replacement call sites work unchanged.
-  const container = document.createElement('div');
-  container.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
-
-  langs.forEach(l => {
-    const active = current === l.code;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    btn.setAttribute('data-lang-code', l.code);
-    btn.setAttribute('onclick', "pickLanguageFromSettings('" + l.code + "')");
-    btn.style.cssText = 'display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: ' + (active ? 'rgba(0, 229, 160, 0.12)' : 'var(--bg-3)') + '; border: 2px solid ' + (active ? 'var(--accent)' : 'var(--border)') + '; border-radius: 12px; cursor: pointer; width: 100%; text-align: left; font-family: inherit; transition: all 0.15s;';
-
-    // Dot indicator
-    const dot = document.createElement('span');
-    if (active) {
-      dot.style.cssText = 'width: 18px; height: 18px; border-radius: 50%; background: var(--accent); display: inline-block; flex-shrink: 0; box-shadow: inset 0 0 0 4px var(--bg);';
-    } else {
-      dot.style.cssText = 'width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); display: inline-block; flex-shrink: 0; background: transparent; box-sizing: border-box;';
-    }
-    btn.appendChild(dot);
-
-    // Label block: uppercase primary on top, native qualifier below
-    const labelBlock = document.createElement('span');
-    labelBlock.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 2px;';
-
-    const primary = document.createElement('span');
-    primary.style.cssText = 'font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 0.3px;';
-    primary.textContent = l.primary;  // textContent never has parsing issues
-    labelBlock.appendChild(primary);
-
-    const native = document.createElement('span');
-    native.style.cssText = 'font-size: 12px; color: var(--text-dim); font-weight: 500;';
-    native.textContent = l.native;
-    labelBlock.appendChild(native);
-
-    btn.appendChild(labelBlock);
-
-    // Status text on the right
-    const status = document.createElement('span');
-    if (active) {
-      status.style.cssText = 'font-size: 12px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;';
-      status.textContent = state.locale === 'fr' ? 'ACTIVE' : 'ACTIVE';
-    } else {
-      status.style.cssText = 'font-size: 12px; color: var(--text-mute); font-weight: 500;';
-      status.textContent = state.locale === 'fr' ? 'Toucher' : 'Tap';
-    }
-    btn.appendChild(status);
-
-    container.appendChild(btn);
-  });
-
-  // Tiny diagnostic showing the deployed build + current state so we can
-  // verify the user is seeing the latest code (helps debug cache issues).
-  const diag = document.createElement('div');
-  diag.style.cssText = 'margin-top: 12px; padding: 8px 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; color: var(--text-mute); font-family: monospace;';
-  diag.textContent = 'build: v54 · state.locale: ' + current + ' · if both buttons look identical, your browser cached old code — uninstall + reinstall the PWA';
-  container.appendChild(diag);
-
-  return container.innerHTML;
-}
-
-// Called from Settings → Language buttons. Switches locale + retranslates
-// the entire app (data-i18n elements + active page rerender) + swaps the
-// button styling in place so the user gets immediate visible feedback.
-async function pickLanguageFromSettings(loc) {
-  if (loc === state.locale) return; // already on this language, no-op
-  await setLocale(loc);
-  trackEvent('language_picked', { locale: loc, source: 'settings' });
-  // Swap the language buttons in place so the user SEES the change land.
-  // Then re-translate ALL data-i18n elements (already done by setLocale,
-  // but safe to repeat). Toast the confirmation + nudge to refresh for
-  // full effect (because many dynamic-rendered pages don't reflow until
-  // user navigates away and back).
-  const row = document.getElementById('languageButtonsRow');
-  if (row) row.innerHTML = renderLanguageButtons();
-  toast(t('lang.settings.saved_refresh_hint'), 4500);
-}
+async function pickLanguageFromSettings(loc) { /* stripped */ }
 
 // Toggle password input visibility. Swaps the input's type between password
 // and text, and swaps the eye icon between "open" and "slashed" SVGs.
@@ -9341,46 +8736,125 @@ function decodePolyline(str) {
 
 // SVG-only route preview, no tile service / API key needed. Just the
 // route shape on a flat background. Cheap and reliable.
+// REAL MAP via Leaflet + OpenStreetMap tiles. Returns a placeholder div with
+// a unique ID; the actual map is mounted in a microtask once the div is in
+// the DOM (renderRun/renderBike use innerHTML which means the div doesn't
+// exist yet when this template literal runs). The mount uses a MutationObserver
+// fallback in case the parent gets re-rendered.
+let _stryxsMapCounter = 0;
 function renderGpsMapPreview(polyline) {
   if (!polyline) return '';
   const coords = decodePolyline(polyline);
   if (coords.length < 2) return '';
 
-  let minLat = coords[0][0], maxLat = coords[0][0];
-  let minLng = coords[0][1], maxLng = coords[0][1];
-  for (const [lat, lng] of coords) {
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-  }
-  const padLat = (maxLat - minLat) * 0.05 || 0.001;
-  const padLng = (maxLng - minLng) * 0.05 || 0.001;
-  minLat -= padLat; maxLat += padLat; minLng -= padLng; maxLng += padLng;
+  // Unique ID per render so multiple workouts on the same page each get
+  // their own map (e.g. todaysAnalyses showing 2+ activities)
+  const mapId = 'stryxsMap_' + (++_stryxsMapCounter) + '_' + Date.now();
+  // Stash the coords on window so the mount handler can find them by id
+  window._stryxsPendingMaps = window._stryxsPendingMaps || {};
+  window._stryxsPendingMaps[mapId] = coords;
 
-  const W = 320, H = 180;
-  const sx = W / (maxLng - minLng);
-  const sy = H / (maxLat - minLat);
-  const scale = Math.min(sx, sy);
-  const offsetX = (W - (maxLng - minLng) * scale) / 2;
-  const offsetY = (H - (maxLat - minLat) * scale) / 2;
-
-  const points = coords.map(([lat, lng]) => {
-    const x = (lng - minLng) * scale + offsetX;
-    const y = H - ((lat - minLat) * scale + offsetY);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const d = `M ${points.join(' L ')}`;
-  const startPt = points[0].split(',');
-  const endPt = points[points.length - 1].split(',');
+  // Try to mount immediately + on next animation frame (covers both cases:
+  // template inserted synchronously, and template inserted on next tick).
+  setTimeout(() => mountStryxsMap(mapId), 0);
+  setTimeout(() => mountStryxsMap(mapId), 60);
 
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; margin-top: 14px;">
       <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Route</div>
-      <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="display: block;">
-        <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="${startPt[0]}" cy="${startPt[1]}" r="4" fill="var(--accent)" />
-        <circle cx="${endPt[0]}" cy="${endPt[1]}" r="4" fill="#fff" stroke="var(--accent)" stroke-width="2" />
+      <div id="${mapId}" style="width: 100%; height: 240px; border-radius: 8px; background: var(--bg-3); overflow: hidden;"></div>
+    </div>
+  `;
+}
+
+// Mounts a Leaflet map into the placeholder div if Leaflet is loaded and
+// the div is in the DOM. Idempotent: safe to call multiple times.
+function mountStryxsMap(mapId) {
+  if (typeof L === 'undefined') return; // Leaflet not loaded yet
+  const el = document.getElementById(mapId);
+  if (!el) return;
+  if (el.dataset.mounted === '1') return; // already mounted
+  const coords = (window._stryxsPendingMaps || {})[mapId];
+  if (!coords || coords.length < 2) return;
+  el.dataset.mounted = '1';
+  try {
+    // OpenStreetMap "Carto Dark" tiles — fit our dark theme much better than
+    // standard OSM (which is bright). Falls back to OSM if Carto blocks us.
+    const map = L.map(mapId, {
+      zoomControl: true,
+      attributionControl: true,
+      scrollWheelZoom: false,
+      dragging: true,
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }).addTo(map);
+    // Draw the polyline route
+    const latlngs = coords.map(c => [c[0], c[1]]);
+    const route = L.polyline(latlngs, {
+      color: '#00e5a0',
+      weight: 3,
+      opacity: 0.95,
+      lineJoin: 'round',
+    }).addTo(map);
+    // Start (green dot) + end (white-with-green-border)
+    L.circleMarker(latlngs[0], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#00e5a0', fillOpacity: 1 }).addTo(map).bindTooltip('Start');
+    L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: '#00e5a0', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }).addTo(map).bindTooltip('End');
+    map.fitBounds(route.getBounds(), { padding: [12, 12] });
+    // Clear from the pending bucket so we don't leak memory
+    delete window._stryxsPendingMaps[mapId];
+  } catch (err) {
+    console.warn('[Stryxs map] Leaflet mount failed:', err);
+    el.dataset.mounted = '0';
+  }
+}
+
+// Inline SVG sparkline-style time-series chart for a downsampled series.
+// `series` is an array of numbers (e.g. 60 points). `label` is the chart
+// title. `unit` is the value suffix (bpm, rpm, km/h, w). Color is the
+// stroke. Returns empty string if series is missing or too short.
+function renderTimeSeriesChart(series, label, unit, color) {
+  if (!Array.isArray(series) || series.length < 4) return '';
+  const W = 600, H = 110;
+  const pad = { top: 10, right: 10, bottom: 18, left: 32 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+  const values = series.map(Number).filter(n => Number.isFinite(n));
+  if (values.length < 4) return '';
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  if (lo === hi) hi = lo + 1; // avoid divide by zero
+  // 5% headroom top/bottom for breathing room
+  const range = hi - lo;
+  lo -= range * 0.05;
+  hi += range * 0.05;
+  const step = innerW / (values.length - 1);
+  const pts = values.map((v, i) => {
+    const x = pad.left + i * step;
+    const y = pad.top + innerH - ((v - lo) / (hi - lo)) * innerH;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  const d = 'M ' + pts.join(' L ');
+  // Fill area under the line for visual weight
+  const fillD = d + ' L ' + (pad.left + innerW).toFixed(1) + ',' + (pad.top + innerH).toFixed(1) + ' L ' + pad.left.toFixed(1) + ',' + (pad.top + innerH).toFixed(1) + ' Z';
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length * 10) / 10;
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label}</div>
+        <div style="font-size: 11px; color: var(--text-dim);">avg ${avg}${unit ? ' ' + unit : ''} · max ${Math.round(hi)} · min ${Math.round(lo)}</div>
+      </div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block;">
+        <defs>
+          <linearGradient id="grad_${color.replace('#','')}" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${fillD}" fill="url(#grad_${color.replace('#','')})" stroke="none"/>
+        <path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
     </div>
   `;
@@ -9422,22 +8896,29 @@ function renderHrZoneBars(zd) {
 // long workouts to avoid scroll bloat. Free-tier feature.
 function renderSplitsTable(splits, sport) {
   if (!splits || splits.length === 0) return '';
+  // 4-column grid if any split has elevation data, otherwise 3
+  const hasElev = splits.some(s => typeof s.elevation === 'number' || typeof s.elevationGain === 'number');
   const rows = splits.slice(0, 20).map(s => {
-    const paceOrTime = s.pace || (s.elapsedSec ? Math.floor(s.elapsedSec / 60) + ':' + String(s.elapsedSec % 60).padStart(2, '0') : '-');
+    const paceOrTime = s.pace || (s.elapsedSec ? Math.floor(s.elapsedSec / 60) + ':' + String(s.elapsedSec % 60).padStart(2, '0') : '—');
+    const elev = (typeof s.elevation === 'number') ? s.elevation : (typeof s.elevationGain === 'number' ? s.elevationGain : null);
+    const elevCell = hasElev ? `<div style="color: var(--text-dim); padding: 4px 0; text-align: right;">${elev != null ? (elev > 0 ? '+' : '') + Math.round(elev) + ' m' : '—'}</div>` : '';
     return `
       <div style="color: var(--text-dim); padding: 4px 0;">${s.km}</div>
       <div style="color: var(--text); padding: 4px 0;">${paceOrTime}</div>
       <div style="color: var(--text); padding: 4px 0;">${s.avgHr ? s.avgHr + ' bpm' : '—'}</div>
+      ${elevCell}
     `;
   }).join('');
   const truncated = splits.length > 20 ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">+${splits.length - 20} more splits</div>` : '';
+  const cols = hasElev ? '40px 1fr 1fr 1fr' : '40px 1fr 1fr';
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
       <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">${sport === 'run' ? 'Per-km Splits' : 'Splits'}</div>
-      <div style="display: grid; grid-template-columns: 40px 1fr 1fr; gap: 0 12px; font-size: 12px;">
+      <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
         <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">KM</div>
         <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">${sport === 'run' ? 'Pace' : 'Time'}</div>
         <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>
+        ${hasElev ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: right;">Elev</div>' : ''}
         ${rows}
       </div>
       ${truncated}
@@ -9998,6 +9479,15 @@ function renderRun(a) {
 
         ${renderSplitsTable(a.splits, 'run')}
 
+        <!-- Per-second time-series charts (downsampled to ~60 points by the
+             strava edge function and stored on the workout as hrSeries /
+             paceSeries / cadenceSeries). Each is independent — only renders
+             if the data is there. -->
+        ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444')}
+        ${renderTimeSeriesChart(a.paceSeries, 'Pace over time', 'min/km', '#00e5a0')}
+        ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', 'spm', '#5082ff')}
+        ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa')}
+
         ${isPro ? `
         <div class="chart-section">
           <div class="chart-label">Cardiac Drift</div>
@@ -10075,6 +9565,13 @@ function renderBike(a) {
 
         ${renderPowerStats(a)}
         ${renderSplitsTable(a.splits, 'bike')}
+
+        <!-- Per-second time-series charts for cycling -->
+        ${renderTimeSeriesChart(a.hrSeries, 'Heart Rate over time', 'bpm', '#ef4444')}
+        ${renderTimeSeriesChart(a.speedSeries, 'Speed over time', 'km/h', '#00e5a0')}
+        ${renderTimeSeriesChart(a.powerSeries, 'Power over time', 'w', '#fbbf24')}
+        ${renderTimeSeriesChart(a.cadenceSeries, 'Cadence over time', 'rpm', '#5082ff')}
+        ${renderTimeSeriesChart(a.elevationSeries, 'Elevation profile', 'm', '#a78bfa')}
 
         ${isPro ? `
         <div class="chart-section">
@@ -19720,30 +19217,7 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- Language Section (LANG_UI_DISABLED — hidden until language switcher is re-enabled).
-         All the markup + i18n functions are kept in the codebase so we can flip it back
-         on by removing the surrounding template-literal comment block. -->
-    ${LANG_UI_DISABLED ? '' : `
-    <div class="settings-section" id="section-language">
-      <div class="settings-section-header" onclick="toggleSettingsSection('language')">
-        <div class="settings-section-header-left">
-          <div class="settings-section-icon">🌐</div>
-          <div class="settings-section-text">
-            <div class="settings-section-title" data-i18n="lang.settings.title">${t('lang.settings.title')}</div>
-            <div class="settings-section-sub" data-i18n="lang.settings.sub">${t('lang.settings.sub')}</div>
-          </div>
-        </div>
-        <div class="settings-section-chevron">›</div>
-      </div>
-      <div class="settings-section-body">
-        <div class="settings-section-inner">
-          <div id="languageButtonsRow" style="display: flex; flex-direction: column; gap: 10px;">
-            ${renderLanguageButtons()}
-          </div>
-        </div>
-      </div>
-    </div>
-    `}
+    <!-- Language section removed (round 7) — restore from memory.md if needed -->
 
     <!-- HR Zones Section -->
     <div class="settings-section" id="section-hr">
