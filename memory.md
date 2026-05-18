@@ -2,7 +2,7 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-18 (round 6 = nuclear i18n approach + Strava 403 awareness). **Frontend v54**, Service worker v4 (deletes all caches on activate + force-reload on navigations), `migrate_v6.sql` RUN, profiles.locale column live. Now ships a runtime DOM translation walker that translates ~200 hardcoded English phrases to French automatically without per-element tagging. **NEW BLOCKER:** Beta tester hit Strava 403 "Limit of connected athletes exceeded" — Noah needs to file a Strava API quota increase request at strava.com/settings/api (takes 2-7 days approval).
+> Last updated: 2026-05-18 (round 7 = English-only retreat + real Leaflet maps + time-series charts). **Frontend v55**, Strava edge refreshed (captures downsampled streams + per-split elevation), Service worker v4. **Language UI fully stripped** (was creating mixed-state bugs we couldn't fix remotely). App is English-only with `<meta name="google" content="notranslate">` to prevent Chrome auto-translate chaos. Workout views now have **real OpenStreetMap tiles via Leaflet** + per-second time-series charts (HR, pace/speed, cadence, power, elevation) when streams are available. Noah filed Strava API quota increase form, awaiting reply (2-7 days).
 
 ---
 
@@ -295,7 +295,39 @@ If any of those fail, fix before shipping.
 
 ## 10. What we just did (so context lives across sessions)
 
-### 🔜 NEXT SESSION PRIORITIES (round 7+)
+### What 2026-05-18 round 7 delivered (English-only retreat + Strava view upgrades)
+
+After 6 rounds couldn't fix Noah's PWA-cache-bound language picker bug, Noah called the right shot and asked to rip out the language code entirely. Done. Plus shipped the Strava view improvements he wanted (real maps + graphs).
+
+**Language code stripped:**
+- Added `<meta name="google" content="notranslate">` in head — biggest single fix. Chrome's auto-translate was the root cause of bizarre English-back-from-French gibberish ("Strava" → "Diet", "Log manually" → "Grasping by hand", etc.).
+- Emptied `I18N.fr` dict (~200 strings) and `PHRASE_TRANSLATIONS_FR` dict (~200 phrases). Kept structure dormant — `t()` falls back to `I18N.en`, runtime walker gated on `locale !== 'fr'`.
+- Stripped picker functions to no-op stubs: `showLanguagePickerModal`, `pickLanguage`, `renderLanguageButtons`, `pickLanguageFromSettings`.
+- Removed Settings → Language section markup entirely.
+- `state.locale` forced to 'en' on init via existing `LANG_UI_DISABLED` const.
+- To restore language UI later: re-populate the two dicts, restore the function bodies (in git history at commit 22fabc0~1), unhide the Settings section, set LANG_UI_DISABLED=false.
+
+**Real maps via Leaflet:**
+- Added Leaflet 1.9.4 via CDN (CSS + JS in head)
+- New `renderGpsMapPreview` returns a placeholder div; `mountStryxsMap()` mounts a real Leaflet map with Carto Dark OSM tiles + polyline route + start/end markers. Auto-fits bounds. No API key.
+- One placeholder per workout (unique ID via `_stryxsMapCounter`), mounted via setTimeout for both sync and microtask-deferred insertions.
+
+**Time-series mini-charts:**
+- New `renderTimeSeriesChart(series, label, unit, color)` helper renders an SVG sparkline with gradient fill + avg/min/max stats. No-ops on missing/short series.
+- `renderRun` now shows: HR, pace, cadence, elevation charts after splits
+- `renderBike` now shows: HR, speed, power, cadence, elevation charts after splits + power stats
+- All gracefully empty when the data isn't there.
+
+**Strava edge function — capture stream data for charts:**
+- `enrichWithDeepAnalysis` downsamples per-second streams to 80 points each: `hrSeries`, `paceSeries` (run), `speedSeries` (bike), `cadenceSeries`, `powerSeries`, `elevationSeries`. Stored on `workout_data`. ~2.5KB extra per workout.
+- `stravaActivityToWorkout` now captures `elevation_difference` per split into the splits array, so the renderSplitsTable elevation column populates.
+- Existing workouts won't have the new series until re-synced. Going forward, all new imports get the full data.
+
+**Caveats:**
+- Existing Strava workouts in DB don't have the new series fields. Backfill option: re-trigger sync, or wait for the next sync naturally. Noah's "Refresh older workouts" button in Settings → Strava already exists and will re-fetch with the new data.
+- Leaflet tiles load from cartocdn.com — first visit on a slow connection takes ~1s for tiles. Acceptable.
+
+### 🔜 NEXT SESSION PRIORITIES (round 8+)
 
 **1. STRAVA 403 — beta blocker.** Noah needs to file the Strava API quota increase request at strava.com/settings/api. Form is on his app's developer page. Until approved (~2-7 days), beta testers beyond user #1 must use Manual Entry (Analyze → Log manually). Remind him on next session start if he hasn't filed it.
 
