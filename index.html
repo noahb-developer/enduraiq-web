@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v57',
+      app_version: 'v58',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8778,9 +8778,11 @@ const STRYXS_TILE_PROVIDERS = {
     maxZoom: 19,
   },
   color: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
+    // Classic OpenStreetMap — much more saturated than Carto Voyager,
+    // easy to read roads/parks/water at a glance.
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
     maxZoom: 19,
   },
 };
@@ -9060,9 +9062,10 @@ function renderDualLineChart(seriesA, seriesB, labelA, labelB, unitA, unitB, col
   `;
 }
 
-// Tiny note shown when the workout is missing rich data (no GPS map, no
-// per-km splits, no per-second streams). Tells the user honestly that not
-// every session captures the full picture — Coach still counts the volume.
+// Note shown when the workout is missing rich data (no GPS map, no
+// per-km splits, no per-second streams). For Strava workouts, also offers
+// a "Refresh data" button — re-pulls from Strava with the latest enrichment
+// (newer code captures splits/charts even from no-HR runs).
 function renderDataAvailabilityHint(a) {
   if (!a) return '';
   if (a.source === 'manual') return ''; // manual entries already have their own softening
@@ -9076,9 +9079,17 @@ function renderDataAvailabilityHint(a) {
   if (!hasSplits) missing.push('splits');
   if (!hasStreams) missing.push('per-second charts');
   if (missing.length === 0) return ''; // full data, no hint
+  const isStrava = a.source === 'strava';
+  const refreshBtn = (isStrava && a._dbId)
+    ? `<button id="refreshDataBtn-${a._dbId}" class="btn" style="margin-top: 10px; font-size: 12px; padding: 6px 12px;" onclick="refreshStravaWorkout('${a._dbId}')">↻ Refresh this workout's data</button>`
+    : '';
+  const intro = isStrava
+    ? `No ${missing.join(' / ')} stored for this workout yet. If it was synced before the latest update, refreshing will pull splits and per-second charts from Strava when available.`
+    : `No ${missing.join(' / ')} for this workout — some sessions just don't capture everything.`;
   return `
-    <div style="padding: 10px 14px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-top: 14px;">
-      No ${missing.join(' / ')} for this workout — some sessions just don't capture everything. Coach still counts it for your weekly volume.
+    <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.04); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; color: var(--text-mute); line-height: 1.5; margin-top: 14px;">
+      ${intro} Coach still counts it for your weekly volume.
+      ${refreshBtn}
     </div>
   `;
 }
@@ -9545,12 +9556,11 @@ function renderSummaryWorkout(a) {
         Deep analysis (cardiac drift, zones) is available for runs and rides. Coach still counts this for weekly volume.
       </div>`;
   } else if (isStrava && (a._streams_failed || a._too_short || a.summary_only)) {
-    const reanalyzeBtn = dbId && isUserPro()
-      ? `<button class="btn" id="reanalyzeBtn-${dbId}" onclick="reanalyzeStravaWorkout('${dbId}')" style="font-size: 12px; padding: 6px 12px;">🔄 Re-analyze with HR data</button>`
-      : '';
+    // Refresh button is offered by renderDataAvailabilityHint below — no need
+    // to duplicate it here.
     diagnostic = `
       <div style="padding: 12px 14px; background: rgba(80, 130, 255, 0.05); border: 1px solid rgba(80, 130, 255, 0.18); border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
-        Deep analysis didn't complete on this sync. ${reanalyzeBtn}
+        Some data didn't come through on the original sync.
       </div>`;
   }
 
@@ -9597,13 +9607,11 @@ function renderSummaryWorkout(a) {
 // - Inline status messages (not just toasts) so user sees the result clearly
 window._reanalyzingWorkouts = window._reanalyzingWorkouts || {};
 
+// Public alias — "refresh this workout's data" is the new framing, available
+// to everyone (re-pulling your own data isn't a premium feature).
+window.refreshStravaWorkout = function(dbId) { return reanalyzeStravaWorkout(dbId); };
+
 async function reanalyzeStravaWorkout(dbId) {
-  // Defense in depth, should never happen via UI, but block if a free user somehow triggers
-  if (!isUserPro()) {
-    toast('Deep analysis is a Pro feature. Upgrade to unlock.', 5000);
-    navigate('upgrade');
-    return;
-  }
   // Block double-clicks per workout
   if (window._reanalyzingWorkouts[dbId]) {
     console.log('[Stryxs] Re-analysis already in progress for', dbId);
@@ -9611,7 +9619,9 @@ async function reanalyzeStravaWorkout(dbId) {
   }
   window._reanalyzingWorkouts[dbId] = true;
 
-  const btn = document.getElementById(`reanalyzeBtn-${dbId}`);
+  // Accept either button id — the new "Refresh data" hint button or the
+  // legacy "Re-analyze" button in older code paths.
+  const btn = document.getElementById(`refreshDataBtn-${dbId}`) || document.getElementById(`reanalyzeBtn-${dbId}`);
   const setBtnState = (html, disabled = true) => {
     if (btn && btn.parentElement) { // ensure button still in DOM
       btn.disabled = disabled;
@@ -9620,7 +9630,7 @@ async function reanalyzeStravaWorkout(dbId) {
     }
   };
 
-  setBtnState('<span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Fetching heart rate data...', true);
+  setBtnState('<span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 8px;"></span>Refreshing from Strava...', true);
 
   // Helper: re-render the workout's full analysis view by calling the same path
   // History uses (which navigates to the Upload page and renders into analysisOutput).
@@ -9644,16 +9654,24 @@ async function reanalyzeStravaWorkout(dbId) {
       throw new Error(result?.error || 'Re-analysis failed');
     }
 
-    // SUCCESS, deep analysis available
-    if (result.has_deep_analysis) {
-      toast('✓ Deep analysis ready', 4000);
+    // NO HR DATA — but with the new enrichment path we still pulled splits
+    // and per-second charts. Tell the user honestly.
+    if (result.no_hr_data) {
+      const wd = result.workout_data || {};
+      const gotExtras = (Array.isArray(wd.splits) && wd.splits.length > 0)
+        || (Array.isArray(wd.paceSeries) && wd.paceSeries.length > 0)
+        || (Array.isArray(wd.cadenceSeries) && wd.cadenceSeries.length > 0);
+      toast(gotExtras
+        ? '✓ Refreshed. No HR on this activity, but splits and charts updated.'
+        : 'Refreshed. No heart rate / splits / streams available for this activity.',
+        6000);
       await rerenderWorkout();
       return;
     }
 
-    // NO HR DATA, won't help to retry, show explanation
-    if (result.no_hr_data) {
-      toast('No heart rate data found in this activity. Wear a HR monitor next time.', 6000);
+    // SUCCESS — full deep analysis (HR + splits + charts)
+    if (result.has_deep_analysis) {
+      toast('✓ Workout refreshed with full analysis', 4000);
       await rerenderWorkout();
       return;
     }
