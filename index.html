@@ -590,13 +590,17 @@ body.on-landing .container {
 
 .page { display: none; animation: fadeIn 0.25s ease-out; width: 100%; max-width: 100%; position: relative; overflow-x: hidden; }
 .page.active { display: block; }
-/* Padding on the in-app content pages (NOT landing/login/signup which have their own layouts) */
+/* Padding on the in-app content pages (NOT landing/login/signup which have their own layouts).
+   IMPORTANT: the parent .container already supplies the horizontal gutter
+   (20px desktop / 16px mobile). These pages must NOT add their own side
+   padding or it doubles up and squeezes content into a narrow column on
+   phones (the "restricted on the sides" feel). Vertical padding only. */
 #page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
-  padding: 24px 20px 40px;
+  padding: 24px 0 40px;
 }
 @media (max-width: 720px) {
   #page-coach.active, #page-plan.active, #page-race-planner.active, #page-dashboard.active, #page-upload.active, #page-history.active, #page-settings.active {
-    padding: 16px 14px 90px;
+    padding: 12px 0 90px;
   }
 }
 
@@ -2714,16 +2718,24 @@ select option {
 /* MOBILE */
 @media (max-width: 720px) {
   .nav { padding: 10px 14px; }
-  .container { padding: 16px 14px 80px; }
+  /* Single consistent mobile gutter (16px). In-app pages no longer add
+     their own side padding, so this is the only horizontal inset. Keep
+     safe-area awareness for notched phones. */
+  .container {
+    padding: 16px 16px 90px;
+    padding-left: max(16px, var(--safe-left));
+    padding-right: max(16px, var(--safe-right));
+  }
   .landing-hero { padding: 40px 12px 30px; }
   .donut-wrap { flex-direction: column; align-items: stretch; }
   .donut { margin: 0 auto; }
-  .analysis-hero, .analysis-body { padding: 20px; }
+  .analysis-hero, .analysis-body { padding: 18px; }
   .workout-name { font-size: 20px; }
   .stat-value { font-size: 22px; }
   .showcase-stats { grid-template-columns: 1fr; }
   .showcase { padding: 18px; margin-bottom: 40px; }
   .compare { grid-template-columns: 1fr 1fr; }
+  .section-sub { margin-bottom: 18px; font-size: 14px; }
   /* dash-header now handled in main .dash-header block, kept side-by-side on mobile too */
 }
 
@@ -4525,7 +4537,7 @@ body.on-auth .container {
 <!-- HISTORY -->
 <div class="page" id="page-history">
   <div class="section-title" data-i18n="history.title">Workout History</div>
-  <p class="section-sub" id="historyCount" data-i18n="history.subtitle">Your recent workouts</p>
+  <p class="section-sub" id="historyCount">Your recent workouts</p>
   <div id="historyList"></div>
 </div>
 
@@ -5146,12 +5158,33 @@ function toast(msg, durationMs = 2800) {
 function showFeedbackWidget() {
   // Don't show twice
   if (document.getElementById('feedbackFab')) return;
-  // Skip if user dismissed within last 7 days
+
+  // Don't crowd the onboarding experience. The floating button overlaps the
+  // welcome tour + getting-started checklist, so we hold it back until:
+  //   1) no tour / tour-offer modal is on screen, AND
+  //   2) the account is at least 2 days old (gives new users room to settle
+  //      in before we ask them to rate the app).
+  // We re-attempt on the next showApp()/navigation once those clear.
+  try {
+    if (typeof _spotlightState !== 'undefined' && _spotlightState && _spotlightState.active) return;
+    if (document.getElementById('tourOfferModal')) return;
+  } catch (_) {}
   try {
     const uid = state.user?.id;
     if (uid) {
+      // Snooze (user dismissed) — 7 days
       const snoozed = localStorage.getItem(`stryxs_feedback_snoozed_${uid}`);
       if (snoozed && Date.now() - parseInt(snoozed, 10) < 7 * 24 * 60 * 60 * 1000) return;
+      // First-2-days hold. Seed the eligibility timestamp the first time we'd
+      // consider showing it; only reveal once 2 days have elapsed.
+      const FEEDBACK_HOLD_MS = 2 * 24 * 60 * 60 * 1000;
+      const key = `stryxs_feedback_eligible_at_${uid}`;
+      let eligibleAt = parseInt(localStorage.getItem(key) || '', 10);
+      if (!eligibleAt || isNaN(eligibleAt)) {
+        eligibleAt = Date.now() + FEEDBACK_HOLD_MS;
+        localStorage.setItem(key, String(eligibleAt));
+      }
+      if (Date.now() < eligibleAt) return;
     }
   } catch (_) {}
 
@@ -5251,7 +5284,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v65',
+      app_version: 'v66',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
