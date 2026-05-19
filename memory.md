@@ -2,7 +2,9 @@
 
 > **Read this first in every fresh chat. It captures everything you need to be productive immediately.**
 >
-> Last updated: 2026-05-18 (round 8 = rich workout data + interactive chart toolkit + map color toggle + auto-refresh). **Frontend v61**, Strava edge refreshed (captures kilojoules + maxes + distanceM per split, splits-from-streams synthesis, HR-independent enrichment path), Coach edge refreshed (richer per-workout context + workoutCommentary compacts heavy series), Service worker v4. App still English-only. Workout views now have: dark/color map toggle (saved per device), per-km split bar charts (line chart for >25 splits), Pace-vs-Cadence + Speed-vs-Cadence + Power-vs-HR dual-line overlays, smooth Catmull-Rom curves with interactive crosshair + tooltip on hover/touch, calories/kilojoules/max-speed/max-cadence chips, "Refresh this workout's data" button (auto-fires for workouts missing data). Strava API quota request still pending.
+> Last updated: 2026-05-19 (round 9 = lots of bug fixes on the round-8 features). **Frontend v65**, Strava edge refreshed (swim per-lap capture, classification race fix via re-read-before-update, distanceM per split). App still English-only. Round 8 shipped the rich workout views + interactive charts + map toggle + auto-refresh. Round 9 fixed: a TDZ crash that broke ALL line charts ("Could not render analysis"), history opening the wrong workout (now uses stable _dbId), classification reset on refresh, intensity-distribution dropdown overflow, sync-now stuck button, swim per-lap data + chart, chart axis labels (X+Y) + overlap fixes, history limit text. **Strava confirmed they'll respond to the quota increase request soon (awaiting).**
+>
+> **🔜 NEXT BIG TASK (round 10, started): MOBILE-FIRST REDESIGN.** Noah says the app looks good on PC/tablet but is "squished / overlapping / restricted on the sides" on phones. He wants a modern, clean, Apple-like feel — benchmark competitor is **RestOrTrain** (clean card-based layout, generous spacing, big touch targets). Keep Stryxs colors + brand + dark theme, just make the mobile layout breathe. This is a large multi-pass job — likely needs its own fresh session. Also: hide the floating feedback/rate widget during the onboarding tour (it overlaps). See round 10 section below.
 
 ---
 
@@ -171,7 +173,7 @@ Whenever Noah re-downloads a file from chat, it lands in Downloads as `name (1).
 ## 6. Current state — what's deployed RIGHT NOW
 
 ### Versions
-- **Frontend:** `index.html` v61 — ~1,034,575 bytes. Round 8 added: interactive chart toolkit (Catmull-Rom smoothing + hover/touch crosshair + tooltip, mobile-friendly), per-split bar chart (single accent color, height inverted for runs so "taller = faster" reads consistently across sports, line/area chart fallback when >25 splits), dual-line overlay charts (Pace+Cadence run, Speed+Cadence + Power+HR bike), map dark/color toggle (Carto Dark vs classic OSM, persisted in localStorage), auto-refresh hook for Strava workouts missing splits/streams (throttled per-session via sessionStorage), inline "↻ Refresh this workout's data" button (un-gated from Pro), live usage bars refresh hooked into callCoach. Plus all the workout meta chips: calories, kilojoules, max speed, max cadence, PR count, indoor flag.
+- **Frontend:** `index.html` v65 — ~1,054,000 bytes. Round 8 added the interactive chart toolkit + map toggle + auto-refresh + workout meta chips (calories/kilojoules/max-speed/max-cadence/PR/indoor). Round 9 fixed all the bugs: TDZ chart crash, history wrong-workout (now _dbId-based via `_resolveWorkoutRef`), classification race (backend re-reads before write), intensity dropdown (position:fixed), sync-now stuck button, swim per-lap table + chart, chart X/Y axis labels with bare-tick formatter to avoid overlap, history display caps (30 Pro / 5 free) with honest count text. KNOWN: history subtitle data-i18n still overrides the static text (round 10 todo).
 - **Service worker:** `sw.js` v4 — unchanged from round 7.
 - **Coach edge function:** ~167,563 bytes. Round 8 added: chat()'s "Recent (last 7 completed)" context line now includes cadence, power, NP, calories, elevation, RPE, suffer score, indoor flag, PR count, splits range (fastest/slowest km), gear name, description excerpt. `workoutCommentary` calls compactWorkoutForCoach() to strip the heavy per-second series arrays and replace with avg/min/max summary lines — saves 600-1200 tokens per call without losing reasoning value.
 - **send-reminders:** 8,433 bytes, unchanged.
@@ -294,6 +296,35 @@ If any of those fail, fix before shipping.
 ---
 
 ## 10. What we just did (so context lives across sessions)
+
+### 🔜 ROUND 10 — MOBILE-FIRST REDESIGN (the current big task)
+
+Noah's verdict after using the app on his phone: PC/tablet looks good, but **mobile is cramped — things overlap, go off-screen, are mis-sized relative to neighbors, and feel restricted on the sides.** He wants a modern, clean, Apple-like redesign. Benchmark: **RestOrTrain** app (clean white card stack, generous padding, big legible type, clear touch targets, calendar-style plan view). Keep Stryxs's dark theme + accent green (#00e5a0) + Instrument Serif wordmark — just make the mobile layout breathe and look premium.
+
+**Approach (multi-pass, probably needs a fresh session for the deep work):**
+1. **Global shell**: audit `body` / app-container / `.page` horizontal padding on mobile. Noah says it feels "restricted on the sides" — likely too much or inconsistent side padding, or fixed-width elements overflowing. Establish a consistent mobile gutter (~16px) and max-width.
+2. **Cards (`.panel`, `.analysis-card`, stat cards)**: consistent radius, padding, spacing. On mobile they should stack full-width with breathing room, not squish side-by-side.
+3. **Grids that don't stack**: find every `display: grid`/`flex` row that keeps 2-3 columns on mobile and make them stack or scale. The Trends cards (Training Mix / Cardiac Drift / Intensity) and dashboard stat rows are suspects.
+4. **Typography scale**: set up a mobile type ramp so headings aren't oversized next to body text. Noah specifically called out "too big compared to things right next to it".
+5. **Touch targets**: buttons/chips ≥ 44px tap height on mobile.
+6. **Charts**: already responsive (viewBox), but verify the new axis gutters don't crowd on narrow screens.
+7. **Onboarding tour + feedback widget**: the floating 💬 feedback/rate button overlaps the welcome tour. Hide it during the tour and for ~1-2 days after signup (then let it appear).
+
+**Files**: all in `index.html` (single file). Most of the work is in the `<style>` block (CSS) + some structural HTML. No build step — test by hard-refresh. Validate JS after any script touch.
+
+**Mindset Noah asked for**: "adopt the mind of the best app developer in the world, reimagine the app to today's standards." He's OK with big changes / temporary breakage if the end result is materially better on mobile. Original brand + colors stay.
+
+### What 2026-05-19 round 9 delivered (bug-fix sweep on round-8 features)
+
+Frontend v61 → v65, Strava edge refreshed several times. All the round-8 features had bugs that surfaced once Noah used them on real data.
+
+**Round 9a (v62, strava edge):** (1) Classification reset on refresh — `handleReanalyzeActivity` / `handleBackfillDetails` only read/wrote `workout_data`, never the `activity_classification` COLUMN, so they drifted. (2) Swim per-lap data — `stravaActivityToWorkout` now captures `pool_length` + `swim_laps` (per-lap distance, elapsed, pace/100m, HR, isRest flag for 0-distance rest laps). New `renderSwimLapsTable` + `renderSwimPaceChart`, wired into `renderSummaryWorkout` for swims. `renderDataAvailabilityHint` treats swim_laps as rich data.
+
+**Round 9b (v63, strava edge):** (1) Classification RACE — auto-refresh fires +600ms after view; if user clicks Planned before the refresh write lands, the stale read clobbered it. (2) Chart axes — added X+Y axis labels via HTML overlay (SVG text stretches with preserveAspectRatio=none). (3) Sync-now stuck button — wrapped in try/finally so it always resets (renderConnections only re-renders the Settings panel, not the Analyze button). (4) Manage-connections target — new `openSettingsSection(id)` helper retries until the section mounts, force-expands, scrolls into view. (5) Intensity dropdown — removed max-height/overflow that forced a permanent scrollbar gutter.
+
+**Round 9c (v64, strava edge):** THE BIG ONE — (1) **TDZ crash**: `renderStryxsLineChart` referenced `yGutter` in its data-cache object BEFORE the `const yGutter` declaration → ReferenceError that threw on EVERY line chart (all time-series, dual-line, swim pace, long-split lines). This is why the swim "Could not render analysis". Moved declaration up; verified all renderers via an extracted node harness. (2) **History wrong-workout**: items baked array INDEX into onclick; indices shift when loadWorkouts() rebuilds state.workouts (after auto-refresh). Switched to stable `_dbId` via new `_resolveWorkoutRef()`. viewHistoryDetail / classifyWorkout / showClassificationOptions all resolve by _dbId now. (3) Classification race — backend now RE-READS the row right before update (captures user clicks during in-flight enrichment), writes only workout_data (column = source of truth, never overwritten). (4) Today's-analysis inline refresh re-renders in place (dataset.dbid) instead of yanking to history detail. (5) Intensity dropdown — switched to position:fixed (was growing the document on the last card, spawning a stray scrollbar), closes on scroll.
+
+**Round 9d (v65):** (1) Chart axis label overlap — Y-axis ticks showed value+unit ("2:27/100m") overflowing into the rotated title. Added `_stryxsBareFormatter` so ticks show value only ("2:27"), title carries the unit. Gutter 46→52px, fixed 16px title column with overflow:hidden, white-space:nowrap. (2) History limit text — subtitle "Every workout you've analyzed" → "Your recent workouts"; renderHistory caps display at 30 (Pro) / 5 (free), count line states "Showing your 30 most recent · N saved" + footer "All N saved and used by Coach". **NOTE: Noah reports the subtitle text still didn't change — likely because `data-i18n="history.subtitle"` re-applies the old I18N value over the static text. Round 10 fix: remove the data-i18n attr or update I18N.** (3) Data-preservation audit — confirmed regenerate plan deletes only planned_workouts + training_plans (keeps workouts + intake + profile); full reset also clears coach_messages + marks intake incomplete but KEEPS workouts + profile; no code path anywhere deletes workouts/profiles/athlete_intake (only account deletion does). Logged history + settings survive plan recreation. ✅
 
 ### What 2026-05-18 round 8 delivered (rich workout data + interactive chart toolkit + map color toggle + auto-refresh)
 
