@@ -1334,8 +1334,12 @@ select option {
   top: calc(100% + 6px);
   right: 0;
   min-width: 130px;
-  max-height: min(280px, 50vh);
-  overflow-y: auto;
+  /* No max-height / overflow-y: auto on the default — our pickers have
+     at most 4 options (~150px), so a forced auto scrollbar was showing
+     a permanent gutter on Windows and making the menu feel "chat-like".
+     We only enable scroll if the menu is so long it would clip the
+     viewport, which is handled in JS positioning logic below. */
+  max-height: none;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1344,6 +1348,7 @@ select option {
   display: none;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 255, 163, 0.08);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .stat-picker-menu.open { display: block; }
 .stat-picker-option {
@@ -5246,7 +5251,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v62',
+      app_version: 'v63',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7755,7 +7760,7 @@ async function renderAutoSyncPanel() {
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <button class="btn ghost" style="font-size: 13px; padding: 10px 14px; justify-content: center;" onclick="syncStravaNow(this)">↻ Sync now</button>
-          <button class="btn ghost" style="font-size: 13px; padding: 10px 14px; justify-content: center;" onclick="navigate('settings'); setTimeout(() => toggleSettingsSection('connections'), 100);">⚙ Manage connections</button>
+          <button class="btn ghost" style="font-size: 13px; padding: 10px 14px; justify-content: center;" onclick="openSettingsSection('connections')">⚙ Manage connections</button>
         </div>
       `;
     } else {
@@ -9029,6 +9034,10 @@ function renderStryxsLineChart(opts) {
     labelA: opts.labelA, labelB: opts.labelB,
     hasB: !!ptsB,
     isSplits: false,
+    // Left gutter of the wrap div in pixels — needed for tooltip positioning
+    // since tip's `left` is measured from the wrap's padding edge (which is
+    // OUTSIDE the gutter), but our SVG-pixel x starts at gutter (inside).
+    leftGutter: yGutter,
   };
   setTimeout(() => _stryxsAttachChartHover(chartId), 0);
   setTimeout(() => _stryxsAttachChartHover(chartId), 80);
@@ -9040,13 +9049,62 @@ function renderStryxsLineChart(opts) {
        </div>`
     : `<div style="font-size: 11px; color: var(--text-dim);">avg ${fmtA(avgA)} · min ${fmtA(minA)} · max ${fmtA(maxA)}</div>`;
 
+  // X-axis tick labels (start / middle / end). Caller can pass an explicit
+  // array of 3 strings via opts.xAxisLabels — useful for splits ("km 1" /
+  // "km 5" / "km 10"). Default: "start" / "middle" / "end" for time series.
+  const xLabels = (Array.isArray(opts.xAxisLabels) && opts.xAxisLabels.length === 3)
+    ? opts.xAxisLabels
+    : ['start', 'middle', 'end'];
+  // Axis title (the metric name + unit). Y-axis title rotates 90°.
+  const yAxisTitle = (opts.yAxisTitle != null)
+    ? opts.yAxisTitle
+    : (opts.labelA + (opts.unitA ? ' (' + opts.unitA + ')' : ''));
+  const yAxisTitleB = validB
+    ? ((opts.yAxisTitleB != null) ? opts.yAxisTitleB : (opts.labelB + (opts.unitB ? ' (' + opts.unitB + ')' : '')))
+    : '';
+  const xAxisTitle = opts.xAxisTitle || '';
+  // Inner-chart percent offsets so axis ticks line up with the SVG plot
+  // area inside its padded viewBox. pad.top/H is the top of the plot;
+  // (pad.top + innerH)/H is the bottom.
+  const yTopPct = (pad.top / H) * 100;
+  const yBottomPct = ((pad.top + innerH) / H) * 100;
+
+  // Width of the left Y-axis label gutter, in pixels. Wider when the
+  // metric name is shown (e.g. "Pace (min/km)") to give it breathing room.
+  const yGutter = 46;
+  const yGutterR = validB ? 46 : 0;
+
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${opts.title}</div>
         ${headerSub}
       </div>
-      <div id="${chartId}_wrap" style="position: relative;">
+      <div id="${chartId}_wrap" style="position: relative; padding-left: ${yGutter}px; padding-right: ${yGutterR}px; padding-bottom: 26px;">
+        <!-- Left Y-axis labels (and rotated axis title) -->
+        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; display: flex; align-items: stretch;">
+          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-right: 2px;">
+            <div style="transform: rotate(-90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitle}</div>
+          </div>
+          <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
+            <div style="position: absolute; right: 6px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right;">${fmtA(hiA)}</div>
+            <div style="position: absolute; right: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7;">${fmtA((hiA + loA) / 2)}</div>
+            <div style="position: absolute; right: 6px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right;">${fmtA(loA)}</div>
+          </div>
+        </div>
+        ${validB ? `
+        <!-- Right Y-axis labels (for the second series) -->
+        <div style="position: absolute; right: 0; top: 0; bottom: 26px; width: ${yGutterR}px; pointer-events: none; display: flex; align-items: stretch;">
+          <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
+            <div style="position: absolute; left: 6px; top: ${yTopPct}%; transform: translateY(-50%);">${fmtB(hiB)}</div>
+            <div style="position: absolute; left: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); opacity: 0.7;">${fmtB((hiB + loB) / 2)}</div>
+            <div style="position: absolute; left: 6px; top: ${yBottomPct}%; transform: translateY(-50%);">${fmtB(loB)}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-left: 2px;">
+            <div style="transform: rotate(90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitleB}</div>
+          </div>
+        </div>` : ''}
+        <!-- SVG chart -->
         <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
           <defs>
             <linearGradient id="${gradId}" x1="0" x2="0" y1="0" y2="1">
@@ -9064,6 +9122,13 @@ function renderStryxsLineChart(opts) {
             ${ptsB ? `<circle class="dotB" cx="0" cy="0" r="4.5" fill="${opts.colorB}" stroke="#0a0e1a" stroke-width="2"/>` : ''}
           </g>
         </svg>
+        <!-- X-axis ticks + title -->
+        <div style="position: absolute; left: ${yGutter}px; right: ${yGutterR}px; bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-mute); pointer-events: none; font-variant-numeric: tabular-nums;">
+          <span>${xLabels[0]}</span>
+          <span>${xLabels[1]}</span>
+          <span>${xLabels[2]}</span>
+        </div>
+        ${xAxisTitle ? `<div style="position: absolute; left: ${yGutter}px; right: ${yGutterR}px; bottom: -8px; text-align: center; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px; pointer-events: none;">${xAxisTitle}</div>` : ''}
         <div class="stryxs-tooltip" style="position: absolute; pointer-events: none; opacity: 0; padding: 6px 10px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.55; white-space: nowrap; color: var(--text); transform: translate(-50%, -120%); transition: opacity 0.12s; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
       </div>
     </div>
@@ -9133,16 +9198,22 @@ function _stryxsAttachChartHover(chartId) {
       html = parts.join('<br>');
     }
     tip.innerHTML = html;
-    const tipX = (pA.x / data.W) * rect.width;
+    // Tooltip is inside the wrap (which has padding-left for axis labels).
+    // Absolute children are positioned from the wrap's PADDING-BOX edge,
+    // which is OUTSIDE the gutter — so we need to add the gutter offset
+    // to land the tip in the SVG's pixel coord system.
+    const gutter = data.leftGutter || 0;
+    const tipX = (pA.x / data.W) * rect.width + gutter;
     const tipY = (pA.y / data.H) * rect.height;
     tip.style.left = tipX + 'px';
     tip.style.top = tipY + 'px';
     tip.style.opacity = '1';
-    // Keep tooltip on-screen near edges
+    // Keep tooltip on-screen near edges (measured against the wrap, not svg)
+    const wrapWidth = wrap.getBoundingClientRect().width;
     const tipWidth = tip.offsetWidth || 100;
     let anchorX = '-50%';
     if (tipX - tipWidth / 2 < 6) anchorX = '0%';
-    else if (tipX + tipWidth / 2 > rect.width - 6) anchorX = '-100%';
+    else if (tipX + tipWidth / 2 > wrapWidth - 6) anchorX = '-100%';
     tip.style.transform = `translate(${anchorX}, -120%)`;
   }
   function hide() {
@@ -9224,6 +9295,7 @@ function renderSplitsBarChart(splits, sport) {
 
   // Long workout → line/area chart (bars at 60+ splits are illegible)
   if (values.length > 25) {
+    const n = values.length;
     return renderStryxsLineChart({
       title: label,
       seriesA: values.map(v => v.val),
@@ -9232,6 +9304,8 @@ function renderSplitsBarChart(splits, sport) {
       colorA: color,
       formatterA: fmt,
       height: 170,
+      xAxisLabels: [`km ${values[0].km}`, `km ${values[Math.floor(n / 2)].km}`, `km ${values[n - 1].km}`],
+      xAxisTitle: 'Distance',
     });
   }
 
@@ -9296,13 +9370,30 @@ function renderSplitsBarChart(splits, sport) {
   const bestVal = sport === 'run' ? lo : hi;
   const worstVal = sport === 'run' ? hi : lo;
 
+  // Tell hover handler this chart has a left gutter for axes
+  window._stryxsChartData[chartId].leftGutter = 46;
+  const yAxisTitle = (sport === 'run' ? 'Pace' : 'Speed') + (sport === 'run' ? ' (min/km)' : ' (km/h)');
+  const n = values.length;
+  const xLabels = [`km ${values[0].km}`, `km ${values[Math.floor(n / 2)].km}`, `km ${values[n - 1].km}`];
+
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label}</div>
         <div style="font-size: 11px; color: var(--text-dim);">avg ${fmt(avg)} · best ${fmt(bestVal)} · worst ${fmt(worstVal)}</div>
       </div>
-      <div id="${chartId}_wrap" style="position: relative;">
+      <div id="${chartId}_wrap" style="position: relative; padding-left: 46px; padding-bottom: 26px;">
+        <!-- Left Y-axis labels (best at top for run pace = faster up; for bike higher speed at top) -->
+        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: 46px; pointer-events: none; display: flex; align-items: stretch;">
+          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-right: 2px;">
+            <div style="transform: rotate(-90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitle}</div>
+          </div>
+          <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
+            <div style="position: absolute; right: 6px; top: ${(pad.top / H) * 100}%; transform: translateY(-50%); text-align: right;">${fmt(bestVal)}</div>
+            <div style="position: absolute; right: 6px; top: ${((pad.top + innerH / 2) / H) * 100}%; transform: translateY(-50%); text-align: right; opacity: 0.7;">${fmt(avg)}</div>
+            <div style="position: absolute; right: 6px; top: ${((pad.top + innerH) / H) * 100}%; transform: translateY(-50%); text-align: right;">${fmt(worstVal)}</div>
+          </div>
+        </div>
         <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
           ${bars}
           ${avgLine}
@@ -9311,6 +9402,9 @@ function renderSplitsBarChart(splits, sport) {
             <circle class="dotA" cx="0" cy="0" r="4" fill="#fff" stroke="#0a0e1a" stroke-width="1.5"/>
           </g>
         </svg>
+        <div style="position: absolute; left: 46px; right: 0; bottom: 8px; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mute); pointer-events: none; font-variant-numeric: tabular-nums;">
+          <span>${xLabels[0]}</span><span>${xLabels[1]}</span><span>${xLabels[2]}</span>
+        </div>
         <div class="stryxs-tooltip" style="position: absolute; pointer-events: none; opacity: 0; padding: 6px 10px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.55; white-space: nowrap; color: var(--text); transform: translate(-50%, -120%); transition: opacity 0.12s; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
       </div>
     </div>
@@ -20287,27 +20381,26 @@ async function disconnectStrava(btn) {
 }
 
 async function syncStravaNow(btn) {
+  // Capture the original label so we can restore it even if a re-render
+  // doesn't replace this exact button (the analyze page's sync button isn't
+  // covered by renderConnections, which only re-renders the Settings panel).
+  const originalLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Syncing...';
 
   try {
-    // Free users sync only the last 7 days. Pro users get full 30 days.
     const syncDays = isUserPro() ? 30 : 7;
     const result = await callStrava('sync_recent', { days: syncDays });
     if (result.imported > 0) {
       toast(`Synced ${result.imported} new workout${result.imported === 1 ? '' : 's'}`);
-      // Refresh state.workouts so dashboard reflects new data
       await loadWorkouts();
-      // Real-time anomaly check on the most recent imported workout (async, non-blocking)
       setTimeout(() => {
         if (typeof runAnomalyCheckIfNeeded === 'function') {
           runAnomalyCheckIfNeeded().catch(err => console.error('[Stryxs] Anomaly check error:', err));
         }
-        // Refresh today's-analyses if user is on Analyze page
         if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
           renderTodaysAnalyses().catch(() => {});
         }
-        // Refresh dashboard if user is on Dashboard
         if (typeof renderDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) {
           renderDashboard().catch(() => {});
         }
@@ -20319,10 +20412,47 @@ async function syncStravaNow(btn) {
   } catch (err) {
     console.error('Sync failed:', err);
     toast('Sync failed: ' + err.message);
-    btn.disabled = false;
-    btn.textContent = '🔄 Sync now';
+  } finally {
+    // Always restore the button — even on success — so the analyze-page
+    // copy (which renderConnections doesn't replace) doesn't get stuck
+    // showing "Syncing..." forever.
+    if (btn && btn.parentElement) {
+      btn.disabled = false;
+      btn.textContent = originalLabel || '↻ Sync now';
+    }
   }
 }
+
+// Open a specific Settings section reliably from anywhere in the app.
+// Navigates to settings, waits for the page transition, then makes sure
+// the requested section is expanded and scrolled into view. Use this in
+// place of `navigate('settings'); setTimeout(() => toggleSettingsSection(...))`
+// to avoid race conditions where the section was already open (toggle would
+// close it) or the timeout fired before the page swap completed.
+function openSettingsSection(id) {
+  if (typeof navigate === 'function') navigate('settings');
+  const tryOpen = (attempt = 0) => {
+    const section = document.getElementById('section-' + id);
+    if (!section) {
+      // Page may not have rendered yet — retry up to ~600ms
+      if (attempt < 6) return setTimeout(() => tryOpen(attempt + 1), 100);
+      return;
+    }
+    if (!section.classList.contains('expanded')) section.classList.add('expanded');
+    // Fire any per-section dynamic content the toggleSettingsSection path uses
+    try {
+      if (id === 'notifications' && typeof renderNotifSettings === 'function') renderNotifSettings();
+      if (id === 'subscription' && typeof renderProUsageBars === 'function') renderProUsageBars();
+      if (id === 'connections' && typeof renderConnections === 'function') renderConnections();
+    } catch (_) {}
+    setTimeout(() => {
+      try { section.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      catch (_) { section.scrollIntoView(); }
+    }, 80);
+  };
+  setTimeout(() => tryOpen(0), 120);
+}
+window.openSettingsSection = openSettingsSection;
 
 // Backfill older Strava workouts with the detail-endpoint fields that
 // weren't captured pre-2026-05-17 (polyline, RPE, suffer score, gear,
