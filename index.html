@@ -4525,7 +4525,7 @@ body.on-auth .container {
 <!-- HISTORY -->
 <div class="page" id="page-history">
   <div class="section-title" data-i18n="history.title">Workout History</div>
-  <p class="section-sub" id="historyCount" data-i18n="history.subtitle">Every workout you've analyzed</p>
+  <p class="section-sub" id="historyCount" data-i18n="history.subtitle">Your recent workouts</p>
   <div id="historyList"></div>
 </div>
 
@@ -5251,7 +5251,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v64',
+      app_version: 'v65',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -8944,6 +8944,21 @@ function _stryxsPickFormatter(unit) {
   return v => Math.round(v * 10) / 10 + ' ' + unit;
 }
 
+// Bare formatter for Y-axis TICK labels — value only, no unit (the rotated
+// axis title carries the unit). Keeps tick labels short so they never
+// overlap the axis title in the narrow left gutter.
+function _stryxsBareFormatter(unit) {
+  if (unit && String(unit).includes('min/')) {
+    return v => {
+      if (!Number.isFinite(v) || v <= 0) return '—';
+      const m = Math.floor(v);
+      const s = Math.round((v - m) * 60);
+      return `${m}:${String(s).padStart(2, '0')}`;
+    };
+  }
+  return v => String(Math.round(v));
+}
+
 // Core line/area chart with optional second series. Returns HTML string.
 // All cosmetic and behavioral knobs live in opts. Sized so the host can
 // pin width via CSS; we set a viewBox so it scales to any container width
@@ -9029,8 +9044,12 @@ function renderStryxsLineChart(opts) {
 
   // Width of the left Y-axis label gutter, in pixels (declared up here so the
   // data-cache below can reference it without hitting a temporal dead zone).
-  const yGutter = 46;
-  const yGutterR = validB ? 46 : 0;
+  // Wide enough to hold the rotated title column (16px) + the value labels.
+  const yGutter = 52;
+  const yGutterR = validB ? 52 : 0;
+  // Bare tick formatters (value only, no unit) for the Y-axis labels.
+  const tickA = opts.tickFormatterA || _stryxsBareFormatter(opts.unitA);
+  const tickB = opts.tickFormatterB || _stryxsBareFormatter(opts.unitB);
 
   window._stryxsChartData[chartId] = {
     W, H, pad, innerW, innerH, len, step,
@@ -9083,26 +9102,26 @@ function renderStryxsLineChart(opts) {
       </div>
       <div id="${chartId}_wrap" style="position: relative; padding-left: ${yGutter}px; padding-right: ${yGutterR}px; padding-bottom: 26px;">
         <!-- Left Y-axis labels (and rotated axis title) -->
-        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; display: flex; align-items: stretch;">
-          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-right: 2px;">
-            <div style="transform: rotate(-90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitle}</div>
+        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: ${yGutter}px; pointer-events: none; display: flex; align-items: stretch; overflow: hidden;">
+          <div style="flex: 0 0 16px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <div style="transform: rotate(-90deg); white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.3px;">${yAxisTitle}</div>
           </div>
           <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
-            <div style="position: absolute; right: 6px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right;">${fmtA(hiA)}</div>
-            <div style="position: absolute; right: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7;">${fmtA((hiA + loA) / 2)}</div>
-            <div style="position: absolute; right: 6px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right;">${fmtA(loA)}</div>
+            <div style="position: absolute; right: 5px; top: ${yTopPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(hiA)}</div>
+            <div style="position: absolute; right: 5px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); text-align: right; opacity: 0.7; white-space: nowrap;">${tickA((hiA + loA) / 2)}</div>
+            <div style="position: absolute; right: 5px; top: ${yBottomPct}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tickA(loA)}</div>
           </div>
         </div>
         ${validB ? `
         <!-- Right Y-axis labels (for the second series) -->
-        <div style="position: absolute; right: 0; top: 0; bottom: 26px; width: ${yGutterR}px; pointer-events: none; display: flex; align-items: stretch;">
+        <div style="position: absolute; right: 0; top: 0; bottom: 26px; width: ${yGutterR}px; pointer-events: none; display: flex; align-items: stretch; overflow: hidden;">
           <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
-            <div style="position: absolute; left: 6px; top: ${yTopPct}%; transform: translateY(-50%);">${fmtB(hiB)}</div>
-            <div style="position: absolute; left: 6px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); opacity: 0.7;">${fmtB((hiB + loB) / 2)}</div>
-            <div style="position: absolute; left: 6px; top: ${yBottomPct}%; transform: translateY(-50%);">${fmtB(loB)}</div>
+            <div style="position: absolute; left: 5px; top: ${yTopPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(hiB)}</div>
+            <div style="position: absolute; left: 5px; top: ${(yTopPct + yBottomPct) / 2}%; transform: translateY(-50%); opacity: 0.7; white-space: nowrap;">${tickB((hiB + loB) / 2)}</div>
+            <div style="position: absolute; left: 5px; top: ${yBottomPct}%; transform: translateY(-50%); white-space: nowrap;">${tickB(loB)}</div>
           </div>
-          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-left: 2px;">
-            <div style="transform: rotate(90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitleB}</div>
+          <div style="flex: 0 0 16px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <div style="transform: rotate(90deg); white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.3px;">${yAxisTitleB}</div>
           </div>
         </div>` : ''}
         <!-- SVG chart -->
@@ -9372,8 +9391,10 @@ function renderSplitsBarChart(splits, sport) {
   const worstVal = sport === 'run' ? hi : lo;
 
   // Tell hover handler this chart has a left gutter for axes
-  window._stryxsChartData[chartId].leftGutter = 46;
-  const yAxisTitle = (sport === 'run' ? 'Pace' : 'Speed') + (sport === 'run' ? ' (min/km)' : ' (km/h)');
+  window._stryxsChartData[chartId].leftGutter = 52;
+  const yAxisTitle = (sport === 'run' ? 'Pace (min/km)' : 'Speed (km/h)');
+  // Bare tick labels (no unit) so they fit beside the rotated title.
+  const tick = sport === 'run' ? _stryxsBareFormatter('min/km') : (v => v.toFixed(1));
   const n = values.length;
   const xLabels = [`km ${values[0].km}`, `km ${values[Math.floor(n / 2)].km}`, `km ${values[n - 1].km}`];
 
@@ -9383,16 +9404,16 @@ function renderSplitsBarChart(splits, sport) {
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">${label}</div>
         <div style="font-size: 11px; color: var(--text-dim);">avg ${fmt(avg)} · best ${fmt(bestVal)} · worst ${fmt(worstVal)}</div>
       </div>
-      <div id="${chartId}_wrap" style="position: relative; padding-left: 46px; padding-bottom: 26px;">
+      <div id="${chartId}_wrap" style="position: relative; padding-left: 52px; padding-bottom: 26px;">
         <!-- Left Y-axis labels (best at top for run pace = faster up; for bike higher speed at top) -->
-        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: 46px; pointer-events: none; display: flex; align-items: stretch;">
-          <div style="display: flex; flex-direction: column; justify-content: center; width: 14px; padding-right: 2px;">
-            <div style="transform: rotate(-90deg); transform-origin: center; white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.5px;">${yAxisTitle}</div>
+        <div style="position: absolute; left: 0; top: 0; bottom: 26px; width: 52px; pointer-events: none; display: flex; align-items: stretch; overflow: hidden;">
+          <div style="flex: 0 0 16px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <div style="transform: rotate(-90deg); white-space: nowrap; font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.3px;">${yAxisTitle}</div>
           </div>
           <div style="flex: 1; position: relative; font-size: 10px; color: var(--text-mute); font-variant-numeric: tabular-nums;">
-            <div style="position: absolute; right: 6px; top: ${(pad.top / H) * 100}%; transform: translateY(-50%); text-align: right;">${fmt(bestVal)}</div>
-            <div style="position: absolute; right: 6px; top: ${((pad.top + innerH / 2) / H) * 100}%; transform: translateY(-50%); text-align: right; opacity: 0.7;">${fmt(avg)}</div>
-            <div style="position: absolute; right: 6px; top: ${((pad.top + innerH) / H) * 100}%; transform: translateY(-50%); text-align: right;">${fmt(worstVal)}</div>
+            <div style="position: absolute; right: 5px; top: ${(pad.top / H) * 100}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tick(bestVal)}</div>
+            <div style="position: absolute; right: 5px; top: ${((pad.top + innerH / 2) / H) * 100}%; transform: translateY(-50%); text-align: right; opacity: 0.7; white-space: nowrap;">${tick(avg)}</div>
+            <div style="position: absolute; right: 5px; top: ${((pad.top + innerH) / H) * 100}%; transform: translateY(-50%); text-align: right; white-space: nowrap;">${tick(worstVal)}</div>
           </div>
         </div>
         <svg id="${chartId}" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none;">
@@ -9403,7 +9424,7 @@ function renderSplitsBarChart(splits, sport) {
             <circle class="dotA" cx="0" cy="0" r="4" fill="#fff" stroke="#0a0e1a" stroke-width="1.5"/>
           </g>
         </svg>
-        <div style="position: absolute; left: 46px; right: 0; bottom: 8px; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mute); pointer-events: none; font-variant-numeric: tabular-nums;">
+        <div style="position: absolute; left: 52px; right: 0; bottom: 8px; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mute); pointer-events: none; font-variant-numeric: tabular-nums;">
           <span>${xLabels[0]}</span><span>${xLabels[1]}</span><span>${xLabels[2]}</span>
         </div>
         <div class="stryxs-tooltip" style="position: absolute; pointer-events: none; opacity: 0; padding: 6px 10px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.55; white-space: nowrap; color: var(--text); transform: translate(-50%, -120%); transition: opacity 0.12s; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
@@ -11225,27 +11246,46 @@ function _resolveWorkoutRef(ref) {
 // ═══════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════
+// Display caps. We KEEP every workout in the database (Coach uses the full
+// history for trends/insights) — these only limit how many rows the list
+// renders so it stays fast and readable. Free users get a shorter window
+// with a Pro upsell; Pro sees a generous recent window.
+const FREE_HISTORY_LIMIT = 5;
+const PRO_HISTORY_LIMIT = 30;
+
 function renderHistory() {
   const list = document.getElementById('historyList');
+  const countEl = document.getElementById('historyCount');
   const totalCount = state.workouts.length;
-  document.getElementById('historyCount').textContent = totalCount === 0 ? 'No workouts yet' : `${totalCount} workout${totalCount>1?'s':''} analyzed`;
   if (totalCount === 0) {
+    if (countEl) countEl.textContent = 'No workouts yet';
     list.innerHTML = `<div class="empty"><div class="empty-icon">📂</div><div class="empty-title">No workouts yet</div><div class="empty-desc">Upload your first workout to build your training history</div></div>`;
     return;
   }
-  const sorted = [...state.workouts].reverse();
-
-  // Free users see only the 5 most recent. Pro = unlimited.
-  const FREE_HISTORY_LIMIT = 5;
+  const sorted = [...state.workouts].reverse(); // newest first
   const userIsPro = isUserPro();
+
   if (!userIsPro && sorted.length > FREE_HISTORY_LIMIT) {
     const visible = sorted.slice(0, FREE_HISTORY_LIMIT);
     const hiddenCount = sorted.length - FREE_HISTORY_LIMIT;
-    list.innerHTML = visible.map((w, i) => renderHistoryItem(w, totalCount - 1 - i)).join('') +
-      renderUpgradeInline(`<strong style="color: var(--text);">${hiddenCount} more workout${hiddenCount === 1 ? '' : 's'} hidden.</strong> Upgrade to Pro for unlimited history.`);
+    if (countEl) countEl.textContent = `Showing your ${FREE_HISTORY_LIMIT} most recent of ${totalCount}`;
+    list.innerHTML = visible.map(w => renderHistoryItem(w, 0)).join('') +
+      renderUpgradeInline(`<strong style="color: var(--text);">${hiddenCount} more workout${hiddenCount === 1 ? '' : 's'} saved.</strong> Upgrade to Pro for your full history. Coach still uses all of them.`);
     return;
   }
-  list.innerHTML = sorted.map((w, i) => renderHistoryItem(w, totalCount - 1 - i)).join('');
+
+  // Pro: show the most-recent PRO_HISTORY_LIMIT. Everything is still saved
+  // and used by Coach — we just don't render an endless list.
+  if (sorted.length > PRO_HISTORY_LIMIT) {
+    const visible = sorted.slice(0, PRO_HISTORY_LIMIT);
+    if (countEl) countEl.textContent = `Showing your ${PRO_HISTORY_LIMIT} most recent · ${totalCount} saved`;
+    list.innerHTML = visible.map(w => renderHistoryItem(w, 0)).join('') +
+      `<div style="text-align: center; font-size: 12px; color: var(--text-mute); padding: 16px 0 4px;">Showing your ${PRO_HISTORY_LIMIT} most recent workouts. All ${totalCount} are saved and used by Coach for trends and insights.</div>`;
+    return;
+  }
+
+  if (countEl) countEl.textContent = `${totalCount} workout${totalCount > 1 ? 's' : ''} · all saved`;
+  list.innerHTML = sorted.map(w => renderHistoryItem(w, 0)).join('');
 }
 
 // Show a confirm dialog with classification options (called from "misclick? change" link)
