@@ -5246,7 +5246,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v61',
+      app_version: 'v62',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -9324,15 +9324,21 @@ function renderSplitsBarChart(splits, sport) {
 function renderDataAvailabilityHint(a) {
   if (!a) return '';
   if (a.source === 'manual') return ''; // manual entries already have their own softening
+  const isSwim = a.sport === 'swim';
   const hasMap = !!a.polyline;
   const hasSplits = Array.isArray(a.splits) && a.splits.length > 0;
   const hasStreams = (Array.isArray(a.hrSeries) && a.hrSeries.length > 0)
     || (Array.isArray(a.paceSeries) && a.paceSeries.length > 0)
     || (Array.isArray(a.speedSeries) && a.speedSeries.length > 0);
+  const hasSwimLaps = Array.isArray(a.swim_laps) && a.swim_laps.length > 0;
+  // For swims, lap data IS the rich data — if we have it, no hint needed.
+  if (isSwim && hasSwimLaps) return '';
   const missing = [];
-  if (!hasMap) missing.push('route');
-  if (!hasSplits) missing.push('splits');
-  if (!hasStreams) missing.push('per-second charts');
+  // Swims happen indoors usually — don't tell the user "no route" is missing
+  if (!hasMap && !isSwim) missing.push('route');
+  if (!hasSplits && !isSwim) missing.push('splits');
+  if (isSwim && !hasSwimLaps) missing.push('per-lap breakdown');
+  if (!hasStreams && !isSwim) missing.push('per-second charts');
   if (missing.length === 0) return ''; // full data, no hint
   const isStrava = a.source === 'strava';
   const refreshBtn = (isStrava && a._dbId)
@@ -9413,6 +9419,86 @@ function renderSplitsTable(splits, sport) {
       ${truncated}
     </div>
   `;
+}
+
+// Per-lap pool view for swims. Strava reports each set/rep as a lap with
+// distance, elapsed time, avg HR. Distance=0 laps are rest intervals — we
+// render those as a thin separator row so the user sees the structure of
+// their session (warmup / set / rest / set / rest …). Pace is per 100m
+// (the swim convention), not per km.
+function renderSwimLapsTable(laps, poolLength) {
+  if (!Array.isArray(laps) || laps.length === 0) return '';
+  // Filter out leading/trailing 0-distance laps that aren't real rest
+  // (Strava sometimes inserts an empty lap at the very start/end).
+  const trimmed = [...laps];
+  while (trimmed.length > 0 && trimmed[0].distanceM === 0 && trimmed[0].elapsedSec < 3) trimmed.shift();
+  while (trimmed.length > 0 && trimmed[trimmed.length - 1].distanceM === 0 && trimmed[trimmed.length - 1].elapsedSec < 3) trimmed.pop();
+  if (trimmed.length === 0) return '';
+  const hasHr = trimmed.some(l => l.avgHr && l.avgHr > 0);
+  const cols = hasHr ? '36px 1fr 1fr 1fr 1fr' : '36px 1fr 1fr 1fr';
+  const rows = trimmed.slice(0, 50).map(l => {
+    if (l.isRest || l.distanceM === 0) {
+      // Rest interval — single muted row
+      const restTime = l.elapsedSec >= 60
+        ? Math.floor(l.elapsedSec / 60) + ':' + String(l.elapsedSec % 60).padStart(2, '0')
+        : l.elapsedSec + 's';
+      return `
+        <div style="grid-column: 1 / -1; padding: 6px 0; font-size: 11px; color: var(--text-mute); border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px; opacity: 0.7;">
+          <span style="flex: 0 0 36px; color: var(--text-mute);">${l.lap}</span>
+          <span style="font-style: italic;">rest · ${restTime}</span>
+        </div>
+      `;
+    }
+    const timeStr = l.elapsedSec >= 60
+      ? Math.floor(l.elapsedSec / 60) + ':' + String(l.elapsedSec % 60).padStart(2, '0')
+      : l.elapsedSec + 's';
+    return `
+      <div style="color: var(--text-dim); padding: 4px 0;">${l.lap}</div>
+      <div style="color: var(--text); padding: 4px 0;">${l.distanceM} m</div>
+      <div style="color: var(--text); padding: 4px 0;">${timeStr}</div>
+      <div style="color: var(--text); padding: 4px 0;">${l.pace ? l.pace + '/100m' : '—'}</div>
+      ${hasHr ? `<div style="color: var(--text-dim); padding: 4px 0;">${l.avgHr ? l.avgHr + ' bpm' : '—'}</div>` : ''}
+    `;
+  }).join('');
+  const truncated = trimmed.length > 50 ? `<div style="font-size: 11px; color: var(--text-mute); margin-top: 8px;">+${trimmed.length - 50} more laps</div>` : '';
+  const poolNote = (typeof poolLength === 'number' && poolLength > 0)
+    ? `<span style="font-size: 11px; color: var(--text-dim);">${poolLength}m pool</span>`
+    : '';
+  return `
+    <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px;">Pool laps</div>
+        ${poolNote}
+      </div>
+      <div style="display: grid; grid-template-columns: ${cols}; gap: 0 12px; font-size: 12px;">
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">#</div>
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Dist</div>
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Time</div>
+        <div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">Pace</div>
+        ${hasHr ? '<div style="color: var(--text-mute); font-size: 10px; text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05);">HR</div>' : ''}
+        ${rows}
+      </div>
+      ${truncated}
+    </div>
+  `;
+}
+
+// Per-lap pace bar chart for swims. Uses the same interactive crosshair as
+// the other split charts so the user can tap any bar to see distance + pace.
+// Skips rest laps. Bar height: lower pacePer100m = faster = taller bar.
+function renderSwimPaceChart(laps) {
+  if (!Array.isArray(laps)) return '';
+  const valid = laps.filter(l => !l.isRest && l.distanceM > 0 && typeof l.pacePer100m === 'number' && l.pacePer100m > 0);
+  if (valid.length < 2) return '';
+  return renderStryxsLineChart({
+    title: 'Pace per lap',
+    seriesA: valid.map(l => l.pacePer100m / 60), // convert sec→min for consistent formatter
+    labelA: 'Pace',
+    unitA: 'min/100m',
+    colorA: '#5082ff',
+    formatterA: v => _stryxsFmtPace(v, '100m'),
+    height: 150,
+  });
 }
 
 // Power stats for cyclists. Avg + max are free; normalized power is Pro.
@@ -9843,6 +9929,8 @@ function renderSummaryWorkout(a) {
         ${a.sport === 'bike' ? renderPowerStats(a) : ''}
         ${renderSplitsTable(a.splits, a.sport)}
         ${(a.sport === 'run' || a.sport === 'bike') ? renderSplitsBarChart(a.splits, a.sport) : ''}
+        ${a.sport === 'swim' ? renderSwimLapsTable(a.swim_laps, a.pool_length) : ''}
+        ${a.sport === 'swim' ? renderSwimPaceChart(a.swim_laps) : ''}
         ${renderDataAvailabilityHint(a)}
         ${renderWorkoutFeedbackForm(a._dbId)}
         ${renderProUpsell(a.sport)}
