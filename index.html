@@ -5251,7 +5251,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v63',
+      app_version: 'v64',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7677,6 +7677,7 @@ function toggleTodaysAnalysis(idx, cardEl) {
   // Render the full analysis using existing renderAnalysis
   try {
     detail.innerHTML = renderAnalysis(workout);
+    detail.dataset.dbid = workout._dbId || '';
     detail.style.display = 'block';
     if (chev) chev.style.transform = 'rotate(180deg)';
     cardEl.style.borderColor = 'var(--accent-border)';
@@ -9026,6 +9027,11 @@ function renderStryxsLineChart(opts) {
   const chartId = 'stryxsChart_' + Math.random().toString(36).slice(2, 10);
   const gradId = chartId + '_grad';
 
+  // Width of the left Y-axis label gutter, in pixels (declared up here so the
+  // data-cache below can reference it without hitting a temporal dead zone).
+  const yGutter = 46;
+  const yGutterR = validB ? 46 : 0;
+
   window._stryxsChartData[chartId] = {
     W, H, pad, innerW, innerH, len, step,
     ptsA, ptsB,
@@ -9068,11 +9074,6 @@ function renderStryxsLineChart(opts) {
   // (pad.top + innerH)/H is the bottom.
   const yTopPct = (pad.top / H) * 100;
   const yBottomPct = ((pad.top + innerH) / H) * 100;
-
-  // Width of the left Y-axis label gutter, in pixels. Wider when the
-  // metric name is shown (e.g. "Pace (min/km)") to give it breathing room.
-  const yGutter = 46;
-  const yGutterR = validB ? 46 : 0;
 
   return `
     <div style="background: rgba(80, 130, 255, 0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; margin-top: 14px;">
@@ -10109,14 +10110,20 @@ async function reanalyzeStravaWorkout(dbId) {
   // History uses (which navigates to the Upload page and renders into analysisOutput).
   const rerenderWorkout = async () => {
     await loadWorkouts();
-    const idx = state.workouts.findIndex(w => w._dbId === dbId);
-    if (idx >= 0 && typeof viewHistoryDetail === 'function') {
-      // Stay where we are, viewHistoryDetail re-renders cleanly
-      try { await viewHistoryDetail(idx); } catch (e) { console.warn('[Stryxs] Re-render failed:', e); }
-    }
-    // Also refresh today's-analyses if user is on the Analyze page
-    if (typeof renderTodaysAnalyses === 'function' && document.getElementById('page-upload')?.classList.contains('active')) {
-      renderTodaysAnalyses().catch(() => {});
+    const fresh = state.workouts.find(w => w._dbId === dbId);
+    if (!fresh) return;
+    // If this workout is open as an inline today's-analysis card, re-render
+    // it in place (don't yank the user to the history detail view).
+    let handledInline = false;
+    document.querySelectorAll('.todays-analysis-detail').forEach(detail => {
+      if (detail.dataset.dbid === String(dbId) && detail.style.display && detail.style.display !== 'none') {
+        try { detail.innerHTML = renderAnalysis(fresh); handledInline = true; } catch (e) { console.warn('[Stryxs] inline re-render failed:', e); }
+      }
+    });
+    if (handledInline) return;
+    // Otherwise re-render the history/analysis detail view (resolves by dbId)
+    if (typeof viewHistoryDetail === 'function') {
+      try { await viewHistoryDetail(dbId); } catch (e) { console.warn('[Stryxs] Re-render failed:', e); }
     }
   };
 
@@ -11063,55 +11070,52 @@ function toggleStatPicker(event, id) {
   if (!menu) return;
   const wasOpen = menu.classList.contains('open');
   closeStatPickers();
-  if (!wasOpen) {
-    menu.classList.add('open');
-    btn.classList.add('open');
+  if (wasOpen) return;
+  menu.classList.add('open');
+  btn.classList.add('open');
 
-    // Smart positioning, first measure menu size after it's visible
-    requestAnimationFrame(() => {
-      const btnRect = btn.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
-      const margin = 12;
+  // Position as FIXED in viewport coordinates. Absolute positioning made
+  // the menu part of document flow, so opening it on the LAST card on a page
+  // grew the document height and spawned a stray scrollbar ("page becomes a
+  // scroll thing"). Fixed positioning floats it over everything without
+  // affecting layout, and we clamp it inside the viewport.
+  requestAnimationFrame(() => {
+    const btnRect = btn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const margin = 8;
+    menu.style.position = 'fixed';
+    menu.style.bottom = 'auto';
+    menu.style.right = 'auto';
 
-      // Vertical: flip up if not enough room below
-      const spaceBelow = viewportHeight - btnRect.bottom;
-      const spaceAbove = btnRect.top;
-      if (spaceBelow < menuRect.height + margin && spaceAbove > menuRect.height + margin) {
-        menu.style.top = 'auto';
-        menu.style.bottom = 'calc(100% + 6px)';
-      } else {
-        menu.style.top = 'calc(100% + 6px)';
-        menu.style.bottom = 'auto';
-      }
+    // Vertical: prefer below the button; flip above if it would overflow
+    const spaceBelow = vh - btnRect.bottom;
+    let top;
+    if (spaceBelow >= menuRect.height + margin) {
+      top = btnRect.bottom + 6;
+    } else if (btnRect.top >= menuRect.height + margin) {
+      top = btnRect.top - menuRect.height - 6;
+    } else {
+      // Neither side fits cleanly — pin to whichever has more room, clamped
+      top = spaceBelow >= btnRect.top ? btnRect.bottom + 6 : Math.max(margin, btnRect.top - menuRect.height - 6);
+    }
+    top = Math.max(margin, Math.min(top, vh - menuRect.height - margin));
 
-      // Horizontal: make sure menu doesn't go off the right edge OR get clipped on left
-      // Re-measure after vertical positioning may have shifted things
-      requestAnimationFrame(() => {
-        const updatedMenuRect = menu.getBoundingClientRect();
+    // Horizontal: right-align the menu to the button, clamp into viewport
+    let left = btnRect.right - menuRect.width;
+    left = Math.max(margin, Math.min(left, vw - menuRect.width - margin));
 
-        // Going off right edge?
-        if (updatedMenuRect.right > viewportWidth - margin) {
-          const overflowR = updatedMenuRect.right - (viewportWidth - margin);
-          menu.style.right = (parseFloat(getComputedStyle(menu).right) || 0) + overflowR + 'px';
-          menu.style.left = 'auto';
-        }
-        // Going off left edge?
-        const updatedMenuRect2 = menu.getBoundingClientRect();
-        if (updatedMenuRect2.left < margin) {
-          menu.style.right = 'auto';
-          menu.style.left = (margin - updatedMenuRect2.left + (parseFloat(getComputedStyle(menu).left) || 0)) + 'px';
-        }
-      });
-    });
-  }
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
+  });
 }
 
 function closeStatPickers() {
   document.querySelectorAll('.stat-picker-menu.open').forEach(m => {
     m.classList.remove('open');
-    // Reset positioning so next open recalculates
+    // Reset all positioning so the CSS default (absolute) is restored and
+    // the next open recalculates cleanly.
+    m.style.position = '';
     m.style.top = '';
     m.style.bottom = '';
     m.style.left = '';
@@ -11124,6 +11128,11 @@ function closeStatPickers() {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.stat-picker-wrap')) closeStatPickers();
 });
+// Close pickers on scroll — a fixed-position menu would otherwise float
+// detached from its button as the page scrolls underneath it.
+window.addEventListener('scroll', () => {
+  if (document.querySelector('.stat-picker-menu.open')) closeStatPickers();
+}, true);
 
 function setDashDriftSport(sport) {
   state.dashDriftSport = sport;
@@ -11179,8 +11188,12 @@ function renderHistoryItem(w, idx) {
     classBadge = `<span class="history-badge" style="font-size: 9px; color: var(--accent); margin-left: 6px; padding: 1px 6px; background: rgba(0, 255, 163, 0.08); border: 1px solid rgba(0, 255, 163, 0.25); border-radius: 4px; vertical-align: middle; white-space: nowrap; display: inline-block; flex-shrink: 0;">⚠ Tap to classify</span>`;
   }
 
+  // Use the stable _dbId (uuid) as the click target — array indices go
+  // stale when loadWorkouts() rebuilds state.workouts (e.g. after an
+  // auto-refresh), which was causing the wrong workout to open.
+  const ref = w._dbId ? `'${w._dbId}'` : idx;
   return `
-    <div class="history-item" style="${itemStyle}" onclick="viewHistoryDetail(${idx})">
+    <div class="history-item" style="${itemStyle}" onclick="viewHistoryDetail(${ref})">
       <div class="history-icon">${icon}</div>
       <div class="history-info">
         <div class="history-title-row">
@@ -11192,6 +11205,21 @@ function renderHistoryItem(w, idx) {
       <div class="history-date">${dateStr}</div>
     </div>
   `;
+}
+
+// Resolve a workout reference (either a stable _dbId uuid string OR a
+// legacy numeric array index) to { w, idx } against the CURRENT
+// state.workouts. Always prefer _dbId — indices can shift when the array
+// is rebuilt by loadWorkouts().
+function _resolveWorkoutRef(ref) {
+  if (typeof ref === 'number') return { w: state.workouts[ref], idx: ref };
+  const s = String(ref);
+  if (/^\d+$/.test(s)) {
+    const i = Number(s);
+    return { w: state.workouts[i], idx: i };
+  }
+  const idx = state.workouts.findIndex(x => x._dbId === s);
+  return { w: idx >= 0 ? state.workouts[idx] : null, idx };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -11221,8 +11249,10 @@ function renderHistory() {
 }
 
 // Show a confirm dialog with classification options (called from "misclick? change" link)
-function showClassificationOptions(idx) {
-  const w = state.workouts[idx];
+function showClassificationOptions(ref) {
+  const { w } = _resolveWorkoutRef(ref);
+  if (!w) return;
+  const cref = w._dbId ? `'${w._dbId}'` : `'${ref}'`;
   const cls = w?.activity_classification;
 
   // Pop a simple toast-style menu, using a lightweight modal
@@ -11237,9 +11267,9 @@ function showClassificationOptions(idx) {
       <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">Change classification</div>
       <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">How should Coach treat this workout?</div>
       <div style="display: flex; flex-direction: column; gap: 8px;">
-        <button class="btn ${cls === 'plan' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'plan')">✓ Planned training session</button>
-        <button class="btn ${cls === 'extra_training' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'extra_training')">+ Extra training (not in plan)</button>
-        <button class="btn ${cls === 'daily_activity' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${idx}, 'daily_activity')">Daily activity (commute, walk, etc.)</button>
+        <button class="btn ${cls === 'plan' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${cref}, 'plan')">✓ Planned training session</button>
+        <button class="btn ${cls === 'extra_training' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${cref}, 'extra_training')">+ Extra training (not in plan)</button>
+        <button class="btn ${cls === 'daily_activity' ? '' : 'ghost'}" style="text-align: left;" onclick="document.getElementById('classifyMenu').remove(); classifyWorkout(${cref}, 'daily_activity')">Daily activity (commute, walk, etc.)</button>
       </div>
       <button class="btn ghost" style="width: 100%; margin-top: 14px; font-size: 12px;" onclick="document.getElementById('classifyMenu').remove();">Cancel</button>
     </div>
@@ -11252,8 +11282,8 @@ function showClassificationOptions(idx) {
 }
 
 // Update a workout's activity classification (called from history detail banner)
-async function classifyWorkout(idx, newClassification) {
-  const w = state.workouts[idx];
+async function classifyWorkout(ref, newClassification) {
+  const { w, idx } = _resolveWorkoutRef(ref);
   if (!w || !w._dbId) return;
 
   try {
@@ -11268,21 +11298,29 @@ async function classifyWorkout(idx, newClassification) {
       workout_data: updatedWd,
     }).eq('id', w._dbId);
 
-    state.workouts[idx].activity_classification = newClassification;
+    if (idx >= 0) state.workouts[idx].activity_classification = newClassification;
     toast(newClassification === 'plan' ? 'Marked as planned training' : newClassification === 'daily_activity' ? 'Tagged as daily activity' : 'Marked as extra training');
 
-    // Re-render the detail view with updated classification
-    viewHistoryDetail(idx);
+    // Re-render the detail view with updated classification (by stable _dbId)
+    viewHistoryDetail(w._dbId);
   } catch (err) {
     console.error('Classify failed:', err);
     toast('Failed to update: ' + err.message);
   }
 }
 
-async function viewHistoryDetail(idx) {
-  const w = state.workouts[idx];
+async function viewHistoryDetail(ref) {
+  const { w } = _resolveWorkoutRef(ref);
   navigate('upload');
   const output = document.getElementById('analysisOutput');
+  if (!output) return;
+  if (!w) {
+    output.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px;">Workout not found. It may have just been removed, refresh the page.</div>';
+    return;
+  }
+  // Use the stable _dbId for all banner button refs so classify actions
+  // never act on the wrong workout if the array shifts under us.
+  const cref = w._dbId ? `'${w._dbId}'` : `'${ref}'`;
 
   // Build classification banner (shown above analysis)
   const cls = w.activity_classification || 'unclassified';
@@ -11295,9 +11333,9 @@ async function viewHistoryDetail(idx) {
           Coach uses this to decide whether to include this workout in your training analysis. Daily activities (commutes, walks, casual rides) are tracked but ignored for plan adjustments.
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'plan')">✓ Yes, this was planned</button>
-          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'extra_training')">+ Extra training (not in plan)</button>
-          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${idx}, 'daily_activity')">Just a daily activity</button>
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${cref}, 'plan')">✓ Yes, this was planned</button>
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${cref}, 'extra_training')">+ Extra training (not in plan)</button>
+          <button class="btn ghost" style="font-size: 12px; padding: 8px 12px;" onclick="classifyWorkout(${cref}, 'daily_activity')">Just a daily activity</button>
         </div>
       </div>
     `;
@@ -11310,8 +11348,8 @@ async function viewHistoryDetail(idx) {
           </div>
         </div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as planned training</button>
-          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'extra_training')">Mark as extra training</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${cref}, 'plan')">Mark as planned training</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${cref}, 'extra_training')">Mark as extra training</button>
         </div>
       </div>
     `;
@@ -11322,8 +11360,8 @@ async function viewHistoryDetail(idx) {
           ⭐ Extra training (counted by Coach, but wasn't in your plan).
         </div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'plan')">Mark as planned</button>
-          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${idx}, 'daily_activity')">Daily activity</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${cref}, 'plan')">Mark as planned</button>
+          <button class="btn ghost" style="font-size: 11px; padding: 6px 10px;" onclick="classifyWorkout(${cref}, 'daily_activity')">Daily activity</button>
         </div>
       </div>
     `;
@@ -11331,7 +11369,7 @@ async function viewHistoryDetail(idx) {
     // Show a small unobtrusive "fix categorization" link in case of misclick
     banner = `
       <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 12px;">
-        <a style="font-size: 11px; color: var(--text-mute); cursor: pointer; text-decoration: underline;" onclick="showClassificationOptions(${idx})">Misclick? Change classification</a>
+        <a style="font-size: 11px; color: var(--text-mute); cursor: pointer; text-decoration: underline;" onclick="showClassificationOptions(${cref})">Misclick? Change classification</a>
       </div>
     `;
   }
