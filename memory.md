@@ -332,6 +332,10 @@ Noah's verdict after using the app on his phone: PC/tablet looks good, but **mob
 - **Workout-feedback RPE row** (the effort rating that "went off the page"): buttons changed from `flex:1;min-width:28px` to `flex:1 1 0;min-width:0;padding:9px 0`, gap 4→3px, so 10 buttons always fit narrow phones.
 - **NOT tested live** — the Coach chat is behind auth + Supabase, can't run locally. Validated JS syntax + structure only. Noah verifies on iPhone after deploy (hard-refresh for PWA cache). If the fixed-position layout has an iOS quirk (gap under nav, keyboard covering input), that's the first thing to check.
 
+#### ▶ START HERE NEXT SESSION (2026-05-20+)
+1. **FIRST: ask Noah how the v67 Coach chat looked on his iPhone** (he was going to test after this deploy). It was NOT testable locally (auth + Supabase). Watch specifically for: a gap/overlap under the top nav (the fixed page uses `top: var(--safe-top)+56px` — if the nav isn't exactly 56px tall on his device there'll be a seam), the composer staying above the keyboard, and the latest-300 render not feeling heavy. If broken, that's the first fix.
+2. Then continue the round-10b items below (inline non-stacking grids, type ramp, touch targets, card polish, dashboard, plan calendar).
+
 #### 🔜 Round 10b+ STILL TO DO (the deep redesign — continue here):
 1. **Non-stacking inline grids**: several `grid-template-columns: 1fr 1fr` use INLINE styles (lines ~7909, ~16732, ~16745, ~22025 in v66) that don't stack on narrow phones. Inline styles beat CSS classes, so either convert them to a class (e.g. `.stat-2col` with a `@media(max-width:560px){grid-template-columns:1fr}`) or edit the inline style to be responsive. The `.trends-row` cards ALREADY stack correctly (good reference pattern). Check race-planner + dashboard stat rows + the auto-sync panel grid.
 2. **Type ramp**: establish a coherent mobile type scale. Noah said headings look "too big compared to things right next to it." Audit `.section-title` (clamp 24-34px, fine), card titles, `.stat-value` (22px mobile), and big numeric displays — make sure neighbors are proportional.
