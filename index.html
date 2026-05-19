@@ -90,6 +90,10 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Height of the on-screen keyboard while the Coach chat is open, kept in
+     sync from window.visualViewport so the composer floats above it. */
+  --coach-kb-inset: 0px;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -1238,6 +1242,21 @@ select option {
   background: var(--bg-2);
   color: var(--text);
   padding: 10px;
+}
+
+/* Strip the up/down spinner arrows on number inputs, they render large and
+   awkward on some browsers and we never want them on a phone. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Manual-entry form labels stay on a single line so the input boxes below
+   them line up. (Wrapping labels of different lengths was pushing the Date /
+   Duration / Distance / HR boxes to different heights.) */
+#logManualContent label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .auth-switch {
@@ -2416,6 +2435,69 @@ select option {
   flex-shrink: 0;
   align-self: flex-end;
   height: 44px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COACH FULL-SCREEN CHAT (Claude-style)
+   Active only while the Coach chat is showing (body.coach-chat-active).
+   The Coach page becomes a fixed full-height column pinned under the top
+   nav: messages scroll, the composer floats at the bottom, AI replies are
+   plain text (no bubble) and the athlete's messages keep a bubble.
+   ═══════════════════════════════════════════════════════════ */
+body.coach-chat-active { overflow: hidden; }
+body.coach-chat-active .container { padding: 0; max-width: none; }
+body.coach-chat-active #page-coach.active {
+  position: fixed;
+  top: calc(var(--safe-top) + 56px);   /* sits directly below the sticky top nav */
+  left: 0; right: 0;
+  bottom: var(--coach-kb-inset, 0px);  /* lifts above the keyboard when it opens */
+  padding: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: none;
+}
+body.coach-chat-active #coachContent {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+body.coach-chat-active .coach-chat {
+  flex: 1; min-height: 0 !important; height: auto !important;
+  border: none; border-radius: 0; background: transparent;
+}
+/* Centered reading column on wide screens, full width on phones */
+body.coach-chat-active .chat-messages {
+  max-width: 780px; width: 100%; margin: 0 auto;
+  padding: 22px 20px 28px;
+  gap: 22px;
+}
+body.coach-chat-active .chat-input-row {
+  max-width: 780px; width: 100%; margin: 0 auto;
+  border-top: none; background: transparent;
+  padding: 8px 20px max(14px, var(--safe-bottom));
+}
+/* AI messages: no box, just text */
+body.coach-chat-active .chat-msg .msg-avatar { display: none !important; }
+body.coach-chat-active .chat-msg:not(.user) {
+  display: block; max-width: 100%; gap: 0;
+}
+body.coach-chat-active .chat-msg:not(.user) .msg-bubble {
+  display: block;
+  background: transparent; padding: 0; border-radius: 0;
+  max-width: 100%; font-size: 15.5px; line-height: 1.65;
+}
+/* Athlete messages: keep a bubble, right-aligned, neutral surface */
+body.coach-chat-active .chat-msg.user { align-self: flex-end; max-width: 84%; gap: 0; }
+body.coach-chat-active .chat-msg.user .msg-bubble {
+  background: var(--bg-3); color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px; padding: 11px 15px;
+  font-size: 15.5px; line-height: 1.6; max-width: 100%;
+}
+body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
+@media (max-width: 720px) {
+  body.coach-chat-active .chat-messages { padding: 16px 14px 22px; gap: 20px; }
+  body.coach-chat-active .chat-input-row { padding: 8px 12px max(12px, var(--safe-bottom)); }
+  body.coach-chat-active .chat-msg.user { max-width: 88%; }
 }
 
 /* Coming soon banner inside Coach */
@@ -4909,13 +4991,13 @@ const I18N = {
     'manual.sport.strength': 'Gym',
     'manual.sport.other': 'Other',
     'manual.date': 'Date',
-    'manual.duration': 'Duration (min)',
+    'manual.duration': 'Duration',
     'manual.distance': 'Distance ({unit})',
     'manual.avg_hr': 'Avg HR',
     'manual.max_hr': 'Max HR',
-    'manual.distance_opt': 'Distance ({unit}) (optional)',
-    'manual.avg_hr_opt': 'Avg HR (optional)',
-    'manual.max_hr_opt': 'Max HR (optional)',
+    'manual.distance_opt': 'Distance ({unit})',
+    'manual.avg_hr_opt': 'Avg HR',
+    'manual.max_hr_opt': 'Max HR',
     'manual.other_details': 'What did you do?',
     'manual.other_details_placeholder': 'e.g. yoga, hiking, paddleboarding, climbing',
     'manual.rpe': 'Perceived effort (optional, 1-10)',
@@ -5284,7 +5366,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v66',
+      app_version: 'v67',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7143,6 +7225,9 @@ function navigate(page) {
   document.body.classList.toggle('on-landing', page === 'landing');
   document.body.classList.toggle('on-auth', page === 'login' || page === 'signup');
 
+  // Leaving Coach drops the full-screen chat lock (renderCoachChat re-adds it).
+  if (page !== 'coach') document.body.classList.remove('coach-chat-active');
+
   // Hide old landingNav, auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
   if (landingNav) landingNav.style.display = 'none';
@@ -7911,8 +7996,11 @@ function renderManualEntryForm() {
           <input type="date" id="manualDate" value="${todayStr}" max="${todayStr}" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">${t('manual.duration')}</label>
-          <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="width: 100%; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;" />
+          <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${t('manual.duration')}</label>
+          <div style="display: flex; align-items: stretch;">
+            <input type="number" id="manualDuration" min="1" step="1" inputmode="numeric" placeholder="45" style="flex: 1; min-width: 0; padding: 10px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px 0 0 8px; border-right: none; color: var(--text); font-size: 14px;" />
+            <div style="display: flex; align-items: center; padding: 0 12px; background: var(--bg-4); border: 1px solid var(--border); border-radius: 0 8px 8px 0; color: var(--text-dim); font-size: 13px; font-weight: 600;">min</div>
+          </div>
         </div>
       </div>
 
@@ -9795,7 +9883,7 @@ function buildWorkoutFeedbackFormHtml(workoutId, existing) {
   const rpeButtons = Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
     const active = rpe === n;
     return `
-      <button type="button" data-rpe="${n}" onclick="selectFeedbackRpe(this, ${n})" style="flex: 1; min-width: 28px; padding: 9px 4px; background: ${active ? 'var(--accent)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 6px; color: ${active ? 'var(--bg)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 700; cursor: pointer;">${n}</button>
+      <button type="button" data-rpe="${n}" onclick="selectFeedbackRpe(this, ${n})" style="flex: 1 1 0; min-width: 0; padding: 9px 0; background: ${active ? 'var(--accent)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${active ? 'var(--accent)' : 'var(--border)'}; border-radius: 6px; color: ${active ? 'var(--bg)' : 'var(--text-dim)'}; font-size: 12px; font-weight: 700; cursor: pointer;">${n}</button>
     `;
   }).join('');
 
@@ -9810,7 +9898,7 @@ function buildWorkoutFeedbackFormHtml(workoutId, existing) {
     <div data-workout-id="${workoutId}">
       <div style="margin-bottom: 14px;">
         <div style="font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">Effort (RPE)</div>
-        <div style="display: flex; gap: 4px;">${rpeButtons}</div>
+        <div style="display: flex; gap: 3px;">${rpeButtons}</div>
         <div style="font-size: 10px; color: var(--text-mute); display: flex; justify-content: space-between; margin-top: 4px;">
           <span>1 = very easy</span><span>10 = max effort</span>
         </div>
@@ -13263,6 +13351,8 @@ async function renderCoach() {
 }
 
 function renderIntake(el, existingIntake) {
+  // The intake flow scrolls normally, it must not inherit the full-screen chat lock.
+  document.body.classList.remove('coach-chat-active');
   if (existingIntake) intakeAnswers = { ...existingIntake };
 
   el.innerHTML = `
@@ -14501,50 +14591,48 @@ async function refreshCoachInputRow() {
   row.innerHTML = renderCoachInputRow(gate);
 }
 
+// Keep the Coach composer floating above the on-screen keyboard. Mobile browsers
+// shrink the visual viewport (not the layout viewport) when the keyboard opens, so
+// we measure the gap and expose it as --coach-kb-inset for the full-screen CSS.
+function setupCoachKeyboardInset() {
+  const vv = window.visualViewport;
+  if (!vv || window._coachVVBound) return;
+  window._coachVVBound = true;
+  const update = () => {
+    if (!document.body.classList.contains('coach-chat-active')) {
+      document.documentElement.style.setProperty('--coach-kb-inset', '0px');
+      return;
+    }
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--coach-kb-inset', inset + 'px');
+  };
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  update();
+}
+
 async function renderCoachChat(el, intake) {
-  // Load past messages, pull more so we can compute archived count
+  // Full-screen Claude-style chat: lock the page to the viewport + float the composer.
+  document.body.classList.add('coach-chat-active');
+  setupCoachKeyboardInset();
+
+  // Load the latest 300 messages. Anything older stays in the DB (Coach can still
+  // query it for context) but isn't rendered, so the chat never becomes an endless
+  // scroll. Ordered newest-first then flipped back to chronological for display.
   const { data: history } = await sb.from('coach_messages')
     .select('*')
     .eq('user_id', state.user.id)
-    .order('created_at', { ascending: true })
-    .limit(200);
+    .order('created_at', { ascending: false })
+    .limit(300);
 
   // Free-user Coach chat trial: 3 messages in past 30 days before Pro wall.
   const coachGate = await canSendCoachMsg();
 
-  // ═══ VISUAL ARCHIVE ═══
-  // Only show the last 20 messages by default. Anything older is hidden behind a
-  // "Show older messages" button. Coach still queries the full history for context.
-  const VISIBLE_RECENT_COUNT = 20;
-  const allMessages = history || [];
-  const archivedCount = Math.max(0, allMessages.length - VISIBLE_RECENT_COUNT);
-  const recentMessages = allMessages.slice(-VISIBLE_RECENT_COUNT);
-  const archivedMessages = allMessages.slice(0, archivedCount);
+  const recentMessages = (history || []).slice().reverse();
 
   el.innerHTML = `
-    <div class="coach-hero coach-hero-chat">
-      <div class="coach-hero-mobile-title">${t('coach.tab.title')}</div>
-      <div class="coach-avatar">🧠</div>
-      <div class="coach-intro">
-        <h2>${t('coach.tab.title')}</h2>
-        <p>${t('coach.tab.subtitle')}</p>
-      </div>
-    </div>
-
-    <div id="coachPersonaBadge" style="margin-bottom: 16px;"></div>
-
     <div class="coach-chat">
       <div class="chat-messages" id="chatMessages">
-        ${archivedCount > 0 ? `
-          <div id="archiveToggleWrap" style="display: flex; justify-content: center; margin: 8px 0 12px;">
-            <button id="archiveToggleBtn" onclick="toggleArchivedMessages()" style="background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim); padding: 8px 16px; border-radius: 999px; font-size: 12px; cursor: pointer; transition: all 0.15s;">
-              ⌃ Show older messages (${archivedCount})
-            </button>
-          </div>
-          <div id="archivedMessages" style="display: none;">
-            ${archivedMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id)).join('')}
-          </div>
-        ` : ''}
         ${(recentMessages.length > 0)
           ? recentMessages.map(m => renderMsg(m.role, m.content, m.context_type, m.id)).join('')
           : renderMsg('coach', (() => {
@@ -14559,57 +14647,7 @@ async function renderCoachChat(el, intake) {
         ${renderCoachInputRow(coachGate)}
       </div>
     </div>
-
-    <div class="panel" style="margin-top: 16px; border-color: rgba(239, 68, 68, 0.15);">
-      <div class="panel-header" style="position: relative;">
-        <div>
-          <div class="panel-title">Plan Management</div>
-          <div class="panel-sub">Change or reset your current plan</div>
-        </div>
-        <button onclick="togglePlanMgmtHelp()" id="planMgmtHelpBtn" style="position: absolute; top: 0; right: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="What do these do?">?</button>
-      </div>
-      <div id="planMgmtHelp" style="display: none; padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong>, paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
-        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong>, keeps everything you've told Coach about yourself (intake answers, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
-        <div><strong style="color: var(--text);">🗑 Reset everything</strong>, wipes intake, plan, and chat history. You start over from scratch. Only use this if you want to completely re-do your setup.</div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">📥</span>
-            <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-          </div>
-        </button>
-        <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">🔄</span>
-            <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
-          </div>
-        </button>
-        <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
-          <div class="plan-mgmt-card-head">
-            <span class="plan-mgmt-card-icon">🗑</span>
-            <span class="plan-mgmt-card-title">Reset everything</span>
-          </div>
-          <div class="plan-mgmt-card-body">
-            <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
-            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
-          </div>
-        </button>
-      </div>
-    </div>
   `;
-
-  // Plan Management help auto-open (only on first visit per user)
-  initPlanMgmtHelpAutoOpen();
 
   // Scroll chat —
   //   • First time the user opens Coach this session: scroll so the START of the LAST message
@@ -14676,9 +14714,6 @@ async function renderCoachChat(el, intake) {
       }
     }
   }
-
-  // Load Coach persona badge in background
-  loadCoachPersonaBadge(intake);
 }
 
 // Toggle visibility of archived (older) messages in Coach chat
@@ -19316,9 +19351,58 @@ async function renderPlan() {
         <button class="btn ghost" onclick="openShareModal()" style="width: 100%;">Share plan →</button>
       </div>
     ` : ''}
+
+    <div class="panel" style="margin-top: 14px; border-color: rgba(239, 68, 68, 0.15);">
+      <div class="panel-header" style="position: relative;">
+        <div>
+          <div class="panel-title">Plan Management</div>
+          <div class="panel-sub">Change or reset your current plan</div>
+        </div>
+        <button onclick="togglePlanMgmtHelp()" id="planMgmtHelpBtn" style="position: absolute; top: 0; right: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="What do these do?">?</button>
+      </div>
+      <div id="planMgmtHelp" style="display: none; padding: 14px 16px; background: rgba(0, 255, 163, 0.04); border: 1px solid rgba(0, 255, 163, 0.15); border-radius: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.55;">
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">📥 Import existing plan</strong>, paste in a plan you already have (from a coach, another app, or AI). Coach reads it and loads it into your calendar. Replaces your current plan only.</div>
+        <div style="margin-bottom: 10px;"><strong style="color: var(--text);">🔄 Generate new plan</strong>, keeps everything you've told Coach about yourself (intake answers, profile, chat) but throws away the current plan and builds a fresh one. Use this when starting a new training block.</div>
+        <div><strong style="color: var(--text);">🗑 Reset everything</strong>, wipes intake, plan, and chat history. You start over from scratch. Only use this if you want to completely re-do your setup.</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button class="plan-mgmt-card" onclick="${isUserPro() ? 'openImportModal()' : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">📥</span>
+            <span class="plan-mgmt-card-title">Import existing plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+          </div>
+        </button>
+        <button class="plan-mgmt-card" onclick="${isUserPro() ? "openResetModal('regenerate')" : "navigate('upgrade')"}" ${isUserPro() ? '' : 'style="opacity: 0.65; position: relative;"'}>
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">🔄</span>
+            <span class="plan-mgmt-card-title">Generate new plan ${isUserPro() ? '' : '<span style="font-size: 10px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700;">PRO</span>'}</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-replaces"><span class="plan-mgmt-tag tag-replaces">Replaces</span><span>your current plan calendar</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>intake, profile, chat history</span></div>
+          </div>
+        </button>
+        <button class="plan-mgmt-card plan-mgmt-card-danger" onclick="openResetModal('full')">
+          <div class="plan-mgmt-card-head">
+            <span class="plan-mgmt-card-icon">🗑</span>
+            <span class="plan-mgmt-card-title">Reset everything</span>
+          </div>
+          <div class="plan-mgmt-card-body">
+            <div class="plan-mgmt-line plan-mgmt-line-wipes"><span class="plan-mgmt-tag tag-wipes">Wipes</span><span>intake, plan, chat history</span></div>
+            <div class="plan-mgmt-line plan-mgmt-line-keeps"><span class="plan-mgmt-tag tag-keeps">Keeps</span><span>email, name, completed workouts</span></div>
+          </div>
+        </button>
+      </div>
+    </div>
   `;
 
   renderCalendarGrid(planned || []);
+  // Plan Management help auto-open (only on first visit per user)
+  initPlanMgmtHelpAutoOpen();
 }
 
 let currentPlannedWorkouts = {};
