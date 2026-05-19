@@ -314,6 +314,24 @@ Noah's verdict after using the app on his phone: PC/tablet looks good, but **mob
 
 **Mindset Noah asked for**: "adopt the mind of the best app developer in the world, reimagine the app to today's standards." He's OK with big changes / temporary breakage if the end result is materially better on mobile. Original brand + colors stay.
 
+#### ✅ Round 10a DONE (frontend v66, pushed):
+- **Mobile gutter fix (the big "restricted on the sides" win):** `.container` had 20px (14px mobile) side padding AND every in-app `.page` (#page-dashboard/coach/plan/upload/history/settings/race-planner) added ANOTHER 20px/14px → double padding squeezed content into a narrow column. Removed per-page horizontal padding (now vertical-only: `24px 0 40px` desktop, `12px 0 90px` mobile). `.container` is now the single horizontal gutter: 16px on mobile (was 14px), safe-area aware. Consolidated the two conflicting `.container` mobile rules (one was at ~line 580, canonical one at ~line 2730).
+- Tightened analysis-card padding 20→18px mobile, section-sub margin/size on mobile.
+- History subtitle finally fixed: removed `data-i18n="history.subtitle"` from the `#historyCount` element (the i18n pass was re-applying the old "Every workout…" string over renderHistory's dynamic text). Now renderHistory's count line is the source of truth.
+- Feedback/rate widget held back during onboarding: `showFeedbackWidget()` now skips while `_spotlightState.active` or the `#tourOfferModal` is up, AND for the first 2 days after the account's first app-open (localStorage `stryxs_feedback_eligible_at_<uid>` timestamp). Reappears on a later session.
+
+#### 🔜 Round 10b+ STILL TO DO (the deep redesign — start here in a fresh session):
+1. **Non-stacking inline grids**: several `grid-template-columns: 1fr 1fr` use INLINE styles (lines ~7909, ~16732, ~16745, ~22025 in v66) that don't stack on narrow phones. Inline styles beat CSS classes, so either convert them to a class (e.g. `.stat-2col` with a `@media(max-width:560px){grid-template-columns:1fr}`) or edit the inline style to be responsive. The `.trends-row` cards ALREADY stack correctly (good reference pattern). Check race-planner + dashboard stat rows + the auto-sync panel grid.
+2. **Type ramp**: establish a coherent mobile type scale. Noah said headings look "too big compared to things right next to it." Audit `.section-title` (clamp 24-34px, fine), card titles, `.stat-value` (22px mobile), and big numeric displays — make sure neighbors are proportional.
+3. **Touch targets**: ensure buttons/chips are ≥44px tap height on mobile. Many `.btn ghost` chips are ~28-32px.
+4. **Card system polish**: RestOrTrain look = clean white-ish cards with generous padding, soft shadows, clear hierarchy. Ours are dark — keep dark but add consistent radius (we use 10-16px in different places — standardize), consistent internal padding, and more vertical rhythm between cards.
+5. **Dashboard**: the recent-workouts sport-group cards + Today card + week strip — verify they breathe on mobile and don't overflow.
+6. **Coach chat**: message bubbles + input row on mobile.
+7. **Plan calendar**: RestOrTrain's calendar/day-card layout is a good benchmark for our Plan tab.
+8. Reference screenshots Noah sent: RestOrTrain has a clean day-by-day card stack (date chip on left, white workout card on right with a mini chart + "Review"/"Guide" button), generous whitespace, big bold headings on the onboarding ("The Ultimate AI For Endurance Athletes", "Next Level Planning"). Don't copy — match the cleanliness/spacing.
+
+**Verification**: Noah tests on a real iPhone (the screenshots are iPhone, 1170×2532 → displayed 924×2000). Test at ~390px CSS width. Hard-refresh after each deploy (PWA cache).
+
 ### What 2026-05-19 round 9 delivered (bug-fix sweep on round-8 features)
 
 Frontend v61 → v65, Strava edge refreshed several times. All the round-8 features had bugs that surfaced once Noah used them on real data.
