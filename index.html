@@ -181,22 +181,30 @@ body.share-public::after {
 }
 body.share-public .page#page-share { display: block !important; opacity: 1 !important; padding: 0 !important; min-height: 100vh; position: relative; z-index: 2; }
 body.share-public .app { display: block !important; padding: 0 !important; background: transparent !important; }
-body.app-loading::after {
-  content: '';
+/* Branded boot splash, shown on the initial app load (body.app-loading) instead
+   of a bare spinner, like Strava's launch screen. The small in-app .spinner is
+   kept for loading states once you're already inside the app. */
+#appSplash { display: none; }
+body.app-loading #appSplash {
+  display: flex; align-items: center; justify-content: center;
   position: fixed; inset: 0;
   background: var(--bg);
-  z-index: 9999;
-}
-body.app-loading::before {
-  content: '';
-  position: fixed; top: 50%; left: 50%;
-  width: 32px; height: 32px;
-  margin: -16px 0 0 -16px;
-  border: 3px solid rgba(255, 255, 255, 0.08);
-  border-top-color: var(--accent);
-  border-radius: 50%;
   z-index: 10000;
-  animation: spin 0.7s linear infinite;
+  padding-top: var(--safe-top);
+}
+#appSplash .splash-mark {
+  font-family: 'Instrument Serif', serif;
+  font-weight: 400;
+  font-size: clamp(42px, 13vw, 64px);
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--text);
+  animation: splashPulse 1.5s ease-in-out infinite;
+}
+#appSplash .splash-mark em { font-style: italic; color: var(--accent); }
+@keyframes splashPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.99); }
+  50% { opacity: 1; transform: scale(1.012); }
 }
 
 body {
@@ -309,6 +317,13 @@ body.on-landing #landingNav { display: none !important; }
 }
 @media (max-width: 480px) {
   .logo span { font-size: 20px; }
+}
+
+/* App top bar shows the wordmark only (no logo icon), a notch larger so the
+   brand reads cleanly on its own. Stays tidy down to the smallest phones. */
+.logo-wordmark-only span { font-size: 27px; }
+@media (max-width: 480px) {
+  .logo-wordmark-only span { font-size: 24px; }
 }
 
 .logo-mark {
@@ -2500,6 +2515,47 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   body.coach-chat-active .chat-msg.user { max-width: 88%; }
 }
 
+/* Coach composer: + attach button, drop-up menu, attachment chips, send state */
+.coach-attach-btn {
+  width: 44px; height: 44px; flex-shrink: 0; align-self: flex-end;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text-dim); font-size: 24px; font-weight: 300; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.coach-attach-btn:hover { border-color: var(--border-light); color: var(--text); }
+.coach-attach-menu {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 6px; min-width: 172px; z-index: 50;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  animation: fadeIn 0.12s ease-out;
+}
+.coach-attach-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 12px; background: transparent; border: 0; border-radius: 8px;
+  color: var(--text); font-size: 14px; font-family: inherit; cursor: pointer; text-align: left;
+}
+.coach-attach-menu button:hover { background: var(--bg-3); }
+.coach-attach-menu button span.ico { font-size: 17px; width: 20px; text-align: center; }
+#coachSendBtn:disabled, #coachSendBtn.coach-send-muted {
+  background: var(--bg-4); color: var(--text-mute);
+  cursor: default; box-shadow: none; opacity: 1;
+}
+.coach-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 4px; }
+.coach-attach-chip {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 220px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 6px 5px 11px; font-size: 12px; color: var(--text-dim);
+}
+.coach-attach-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coach-attach-chip button {
+  background: var(--bg-4); border: 0; border-radius: 50%; width: 18px; height: 18px;
+  color: var(--text-dim); cursor: pointer; font-size: 11px; line-height: 1; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.coach-attach-chip button:hover { color: var(--text); }
+
 /* Coming soon banner inside Coach */
 .coach-stub {
   background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(0, 196, 255, 0.04));
@@ -4035,6 +4091,7 @@ body.on-auth .container {
 </head>
 
 <body class="app-loading">
+<div id="appSplash" aria-hidden="true"><span class="splash-mark">Stryx<em>s</em></span></div>
 <script>
   // ═══ CANONICAL HOSTNAME REDIRECT ═══
   // If the user lands on the old Vercel preview URL (or any non-canonical
@@ -4067,8 +4124,7 @@ body.on-auth .container {
       <span></span><span></span><span></span>
       <span class="hamburger-badge" id="hamburgerCoachBadge" style="display: none;"></span>
     </button>
-    <div class="logo" onclick="navigate('dashboard')">
-      <div class="logo-mark"><img src="/favicon.svg" alt="Stryxs"></div>
+    <div class="logo logo-wordmark-only" onclick="navigate('dashboard')">
       <span>Stryx<em>s</em></span>
     </div>
     <button class="nav-user-btn" onclick="toggleAvatarMenu(event)" aria-label="Account menu">
@@ -5366,7 +5422,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v67',
+      app_version: 'v68',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -5448,7 +5504,19 @@ async function loadProfile() {
   if (data.name) state.user.name = data.name;
   if (data.display_name) state.user.name = data.display_name;
   // Apply profile locale (overrides browser/localStorage default) — non-blocking, skip DB write.
-  if (state.profile.locale && state.profile.locale !== state.locale) {
+  // GATED: while the language UI is disabled the app is English-only. A stored 'fr'
+  // from the old language era was leaking back in here, which made callCoach send
+  // userLocale:'fr' so Coach replied in French (and new plans generated in French).
+  // Force English and self-heal the stored value so it never resurfaces.
+  if (LANG_UI_DISABLED) {
+    state.locale = 'en';
+    try { localStorage.setItem('stryxs_locale', 'en'); } catch (_) {}
+    if (state.profile.locale === 'fr' && state.user) {
+      sb.from('profiles').update({ locale: 'en' }).eq('id', state.user.id)
+        .then(() => {}, (e) => console.warn('[Stryxs] locale self-heal failed (non-fatal):', e));
+      state.profile.locale = 'en';
+    }
+  } else if (state.profile.locale && state.profile.locale !== state.locale) {
     setLocale(state.profile.locale, { skipDbWrite: true });
   }
 }
@@ -14566,10 +14634,19 @@ function renderCoachInputRow(gate) {
     return `
       <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
         ${trialHint}
+        <div id="coachAttachPreview"></div>
         <div style="display: flex; gap: 8px; align-items: flex-end;">
-          <textarea id="chatInput" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="autoResizeChatInput(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
-          <button class="btn" onclick="sendChatMsg()">${t('common.send')}</button>
+          <div style="position: relative; flex-shrink: 0;">
+            <button type="button" id="coachAttachBtn" class="coach-attach-btn" onclick="toggleCoachAttachMenu(event)" aria-label="Add a photo or file">+</button>
+            <div id="coachAttachMenu" class="coach-attach-menu" style="display: none;">
+              <button type="button" onclick="coachPickAttachment('photo')"><span class="ico">🖼️</span> Photo</button>
+              <button type="button" onclick="coachPickAttachment('file')"><span class="ico">📄</span> File</button>
+            </div>
+          </div>
+          <textarea id="chatInput" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
+          <button class="btn" id="coachSendBtn" onclick="sendChatMsg()" disabled>${t('common.send')}</button>
         </div>
+        <input type="file" id="coachFileInput" style="display: none;" onchange="onCoachFileChosen(this)" />
       </div>
     `;
   }
@@ -14589,6 +14666,99 @@ async function refreshCoachInputRow() {
   if (!row) return;
   const gate = await canSendCoachMsg();
   row.innerHTML = renderCoachInputRow(gate);
+}
+
+// ═══ COACH COMPOSER, attachments (+) + smart send button ═════════════
+// UI layer for now: a + menu opens a Photo/File picker, attached items show as
+// removable chips, and the Send button stays grey until there's text OR an
+// attachment (then it goes green). Coach actually READING the photo/file is a
+// deliberate next step (needs backend vision support) — on send we clear any
+// attachment with a friendly "coming soon" note so nothing silently no-ops.
+let coachAttachments = [];
+
+function toggleCoachAttachMenu(event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('coachAttachMenu');
+  if (!menu) return;
+  const open = menu.style.display !== 'none';
+  if (open) { menu.style.display = 'none'; return; }
+  menu.style.display = 'block';
+  // Close on the next outside click/scroll
+  setTimeout(() => {
+    const close = (e) => {
+      if (e && e.target && e.target.closest && e.target.closest('#coachAttachMenu, #coachAttachBtn')) return;
+      menu.style.display = 'none';
+      document.removeEventListener('click', close, true);
+    };
+    document.addEventListener('click', close, true);
+  }, 0);
+}
+
+function coachPickAttachment(kind) {
+  const menu = document.getElementById('coachAttachMenu');
+  if (menu) menu.style.display = 'none';
+  const input = document.getElementById('coachFileInput');
+  if (!input) return;
+  input.accept = kind === 'photo' ? 'image/*' : '';
+  input.dataset.kind = kind;
+  input.value = '';
+  input.click();
+}
+
+function onCoachFileChosen(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  coachAttachments.push({
+    name: file.name || (input.dataset.kind === 'photo' ? 'photo.jpg' : 'file'),
+    kind: input.dataset.kind || 'file',
+  });
+  renderCoachAttachPreview();
+  updateCoachSendState();
+}
+
+function removeCoachAttachment(idx) {
+  coachAttachments.splice(idx, 1);
+  renderCoachAttachPreview();
+  updateCoachSendState();
+}
+
+function clearCoachAttachments() {
+  coachAttachments = [];
+  renderCoachAttachPreview();
+}
+
+function renderCoachAttachPreview() {
+  const wrap = document.getElementById('coachAttachPreview');
+  if (!wrap) return;
+  if (!coachAttachments.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="coach-attach-chips">
+      ${coachAttachments.map((a, i) => `
+        <span class="coach-attach-chip">
+          <span class="ico">${a.kind === 'photo' ? '🖼️' : '📄'}</span>
+          <span class="name">${escapeHtml(a.name)}</span>
+          <button type="button" onclick="removeCoachAttachment(${i})" aria-label="Remove">✕</button>
+        </span>
+      `).join('')}
+    </div>
+  `;
+}
+
+// Combined input handler: keep the textarea auto-growing AND update the send button.
+function onChatInputChange(el) {
+  autoResizeChatInput(el);
+  updateCoachSendState();
+}
+
+// Send button is grey/disabled until there's typed text OR an attachment.
+function updateCoachSendState() {
+  const btn = document.getElementById('coachSendBtn');
+  const input = document.getElementById('chatInput');
+  if (!btn) return;
+  const hasText = !!(input && input.value.trim());
+  const active = hasText || coachAttachments.length > 0;
+  btn.disabled = !active;
+  btn.classList.toggle('coach-send-muted', !active);
 }
 
 // Keep the Coach composer floating above the on-screen keyboard. Mobile browsers
@@ -15111,10 +15281,17 @@ async function sendChatMsg() {
   const msgs = document.getElementById('chatMessages');
   if (!input || !msgs) return;
   const text = input.value.trim();
-  if (!text) return;
+  // Attachments are UI-only for now: Coach can't read photos/files yet. Clear
+  // them with a friendly note so a tapped "send" never silently does nothing.
+  if (coachAttachments.length) {
+    clearCoachAttachments();
+    toast("Sharing photos & files with Coach is coming soon.", 4000);
+  }
+  if (!text) { updateCoachSendState(); return; }
   input.value = '';
   // Reset textarea height after clearing so it shrinks back
   input.style.height = 'auto';
+  updateCoachSendState();
   input.disabled = true;
 
   // Append user msg immediately
@@ -16620,16 +16797,23 @@ async function renderProgress() {
   // ─── PLAN ADHERENCE, only count completed workouts that match the planned sport ───
   // Get all planned workouts (not just completed) so we can match
   const { data: allPlanned } = await sb.from('planned_workouts')
-    .select('scheduled_date, sport, completed')
+    .select('scheduled_date, sport, completed, skipped, skip_reason')
     .eq('user_id', state.user.id);
 
   // For plan adherence, we need: completed planned workouts where sport matches actual upload that day
   // Build a map of date → planned sport
   const plannedBySport = {};
+  // Excused days = days the athlete skipped a workout WITH a reason (sick,
+  // injured, etc.). These should NOT break a streak, you don't lose your
+  // streak for being sick. They bridge the streak instead of resetting it.
+  const excusedDays = new Set();
   (allPlanned || []).forEach(p => {
     if (p.completed && p.scheduled_date) {
       if (!plannedBySport[p.scheduled_date]) plannedBySport[p.scheduled_date] = [];
       plannedBySport[p.scheduled_date].push(p.sport);
+    }
+    if (p.skipped && p.skip_reason && p.scheduled_date && !p.completed) {
+      excusedDays.add(p.scheduled_date);
     }
   });
 
@@ -16672,12 +16856,21 @@ async function renderProgress() {
 
   let currentTrainingStreak = 0;
   let cursor = new Date(today);
-  if (!trainingDays.has(todayStr) && trainingDays.has(yesterdayStr)) {
+  if (!trainingDays.has(todayStr) && !excusedDays.has(todayStr) && trainingDays.has(yesterdayStr)) {
     cursor.setDate(cursor.getDate() - 1);
   }
-  while (trainingDays.has(toLocalYMD(cursor))) {
-    currentTrainingStreak++;
-    cursor.setDate(cursor.getDate() - 1);
+  // Walk backwards: count trained days, bridge over excused (sick/injured) days
+  // so being sick doesn't reset the streak, and stop at the first real gap.
+  while (true) {
+    const cur = toLocalYMD(cursor);
+    if (trainingDays.has(cur)) {
+      currentTrainingStreak++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else if (excusedDays.has(cur)) {
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
   }
 
   const sortedDays = Array.from(trainingDays).sort();
@@ -16697,15 +16890,23 @@ async function renderProgress() {
     prevDate = d;
   }
 
-  // Plan adherence streak: consecutive days where matching workout was completed
+  // Plan adherence streak: consecutive days where matching workout was completed.
+  // Excused (sick/injured) days bridge the streak instead of breaking it.
   let currentAdherenceStreak = 0;
   let cursor2 = new Date(today);
-  if (!adherenceDays.has(todayStr) && adherenceDays.has(yesterdayStr)) {
+  if (!adherenceDays.has(todayStr) && !excusedDays.has(todayStr) && adherenceDays.has(yesterdayStr)) {
     cursor2.setDate(cursor2.getDate() - 1);
   }
-  while (adherenceDays.has(toLocalYMD(cursor2))) {
-    currentAdherenceStreak++;
-    cursor2.setDate(cursor2.getDate() - 1);
+  while (true) {
+    const cur = toLocalYMD(cursor2);
+    if (adherenceDays.has(cur)) {
+      currentAdherenceStreak++;
+      cursor2.setDate(cursor2.getDate() - 1);
+    } else if (excusedDays.has(cur)) {
+      cursor2.setDate(cursor2.getDate() - 1);
+    } else {
+      break;
+    }
   }
 
   // ─── This Month + This Year totals ───
@@ -19546,9 +19747,12 @@ function openSkipWorkoutMenu(workoutId) {
   ];
   const modal = document.createElement('div');
   modal.id = 'skipWorkoutModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0, 0, 0, 0.7);z-index:99999;display:flex;align-items:flex-end;justify-content:center;padding:0;';
+  // Bottom-sheet on phones, centered dialog on desktop (the bottom sheet ran
+  // off the bottom of the screen on big monitors). Matches the follow-up modal.
+  const isDesktop = window.innerWidth > 720;
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0, 0, 0, 0.7);z-index:99999;display:flex;align-items:${isDesktop ? 'center' : 'flex-end'};justify-content:center;padding:${isDesktop ? '20px' : '0'};`;
   modal.innerHTML = `
-    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 22px 18px calc(22px + var(--safe-bottom)); max-width: 520px; width: 100%; max-height: 80vh; overflow-y: auto;">
+    <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: ${isDesktop ? '16px' : '20px 20px 0 0'}; padding: 22px 18px ${isDesktop ? '22px' : 'calc(22px + var(--safe-bottom))'}; max-width: 460px; width: 100%; max-height: 80vh; overflow-y: auto;">
       <div style="font-size: 17px; font-weight: 700; margin-bottom: 4px;">Why didn't you do this one?</div>
       <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 16px;">Coach uses this to adapt your plan. No judgment.</div>
       <div style="display: flex; flex-direction: column; gap: 8px;">
