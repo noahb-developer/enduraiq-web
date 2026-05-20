@@ -5440,7 +5440,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v70',
+      app_version: 'v71',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -13391,12 +13391,10 @@ const intakeQuestions = [
         { value: 'open_water', emoji: '🌊', label: 'Open water' },
       ];
       const bikeOptions = [
-        { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
-        { value: 'tt_bike', emoji: '⏱️', label: 'TT/Tri bike or aero bars' },
-        { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+        { value: 'bike', emoji: '🚴', label: 'Bike / cycling setup' },
       ];
       const runOptions = [
-        { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
+        { value: 'run_gear', emoji: '👟', label: 'Running gear' },
       ];
       const gymOptions = [
         { value: 'gym', emoji: '🏋️', label: 'Gym / weights access' },
@@ -20396,14 +20394,15 @@ async function renderSettings() {
       <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 16px; line-height: 1.55;">Toggle on/off any equipment you have access to. Coach will adjust your training plan automatically.</p>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;" id="equipmentToggles">
         ${(() => {
-          const eq = intake?.equipment || [];
+          // Normalize legacy values (road_bike/tt_bike/trainer→bike, treadmill→run_gear)
+          // so existing users see their gear pre-selected under the new simplified options.
+          const eq = normalizeEquipment(intake?.equipment || []);
           const items = [
             { value: 'pool', emoji: '🏊', label: 'Pool' },
             { value: 'open_water', emoji: '🌊', label: 'Open water' },
-            { value: 'road_bike', emoji: '🚴', label: 'Road bike' },
-            { value: 'trainer', emoji: '🏠', label: 'Indoor trainer' },
+            { value: 'bike', emoji: '🚴', label: 'Bike / cycling setup' },
+            { value: 'run_gear', emoji: '👟', label: 'Running gear' },
             { value: 'gym', emoji: '🏋️', label: 'Gym / weights' },
-            { value: 'treadmill', emoji: '🏃', label: 'Treadmill' },
           ];
           return items.map(item => `
             <button class="choice-btn ${eq.includes(item.value) ? 'selected' : ''}" data-equipment="${item.value}" onclick="toggleEquipmentItem(this, '${item.value}')" style="padding: 12px 14px; text-align: left;">
@@ -20772,9 +20771,9 @@ async function renderSettings() {
     if (inp) inp.addEventListener('input', updateZonePreview);
   });
 
-  // Initialize equipment selection set from intake
+  // Initialize equipment selection set from intake (normalized to the new options)
   settingsEquipmentSelected.clear();
-  (intake?.equipment || []).forEach(e => settingsEquipmentSelected.add(e));
+  normalizeEquipment(intake?.equipment || []).forEach(e => settingsEquipmentSelected.add(e));
 
   // Bio character counter
   const bioInput = document.getElementById('settingsBio');
@@ -21528,6 +21527,19 @@ async function saveReminderTime(time) {
     console.warn('[Stryxs] saveReminderTime failed:', e?.message);
     toast('Could not save, try again');
   }
+}
+
+// Map legacy equipment values to the simplified set so existing users keep their
+// selections. road_bike / tt_bike / indoor trainer → 'bike'; treadmill → 'run_gear'.
+// pool / open_water / gym pass through. Coach edge still recognizes the old values too.
+function normalizeEquipment(arr) {
+  const out = new Set();
+  (arr || []).forEach(v => {
+    if (v === 'road_bike' || v === 'tt_bike' || v === 'trainer' || v === 'bike') out.add('bike');
+    else if (v === 'treadmill' || v === 'run_gear') out.add('run_gear');
+    else if (v) out.add(v);
+  });
+  return Array.from(out);
 }
 
 // Equipment selection in Settings, store in a module-level set used at save time
