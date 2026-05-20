@@ -2459,11 +2459,20 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    nav: messages scroll, the composer floats at the bottom, AI replies are
    plain text (no bubble) and the athlete's messages keep a bubble.
    ═══════════════════════════════════════════════════════════ */
-body.coach-chat-active { overflow: hidden; }
+body.coach-chat-active { overflow: hidden; overscroll-behavior: none; }
 body.coach-chat-active .container { padding: 0; max-width: none; }
+/* Pin the top bar so it can NEVER slide off-screen with finger drag / iOS
+   rubber-band while in the chat. Fixed (not sticky) + safe-area padding so it
+   clears the notch / Dynamic Island / Samsung punch-hole on every device. */
+body.coach-chat-active .nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 120;
+  padding-top: calc(12px + var(--safe-top));
+}
 body.coach-chat-active #page-coach.active {
   position: fixed;
-  top: calc(var(--safe-top) + 56px);   /* sits directly below the sticky top nav */
+  /* Sits directly below the fixed top nav. --coach-nav-h is measured in JS so it
+     is exact on any device; the calc() is a safe fallback before measurement. */
+  top: var(--coach-nav-h, calc(var(--safe-top) + 56px));
   left: 0; right: 0;
   bottom: var(--coach-kb-inset, 0px);  /* lifts above the keyboard when it opens */
   padding: 0;
@@ -2471,6 +2480,7 @@ body.coach-chat-active #page-coach.active {
   overflow: hidden;
   animation: none;
 }
+body.coach-chat-active .chat-messages { overscroll-behavior: contain; }
 body.coach-chat-active #coachContent {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
@@ -2515,34 +2525,42 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
   body.coach-chat-active .chat-msg.user { max-width: 88%; }
 }
 
-/* Coach composer: + attach button, drop-up menu, attachment chips, send state */
-.coach-attach-btn {
-  width: 44px; height: 44px; flex-shrink: 0; align-self: flex-end;
-  background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
-  color: var(--text-dim); font-size: 24px; font-weight: 300; line-height: 1;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
+/* ═══ Coach composer ═══ One rounded "pill" that grows with the text (like
+   Claude on mobile): a circular + on the left opens the device's native
+   photo/file picker, the textarea grows in the middle, and a round up-arrow
+   send button appears on the right only once there's something to send. */
+.coach-composer {
+  display: flex; align-items: flex-end; gap: 6px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 24px; padding: 5px;
+  transition: border-color 0.15s;
 }
-.coach-attach-btn:hover { border-color: var(--border-light); color: var(--text); }
-.coach-attach-menu {
-  position: absolute; bottom: calc(100% + 8px); left: 0;
-  background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
-  padding: 6px; min-width: 172px; z-index: 50;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
-  animation: fadeIn 0.12s ease-out;
+.coach-composer:focus-within { border-color: var(--border-light); }
+.coach-composer .composer-plus {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--bg-4); border: none; padding: 0;
+  color: var(--text-dim); font-size: 22px; font-weight: 300; line-height: 1;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
-.coach-attach-menu button {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 11px 12px; background: transparent; border: 0; border-radius: 8px;
-  color: var(--text); font-size: 14px; font-family: inherit; cursor: pointer; text-align: left;
+.coach-composer .composer-plus:hover { background: var(--bg-2); color: var(--text); }
+.coach-composer .composer-input {
+  flex: 1 1 auto; min-width: 0; width: auto;
+  border: none !important; background: transparent !important; box-shadow: none !important;
+  border-radius: 0 !important; resize: none; outline: none; color: var(--text);
+  font-family: inherit; line-height: 1.45;
+  padding: 6px 4px; min-height: 22px; max-height: 140px; overflow-y: auto;
 }
-.coach-attach-menu button:hover { background: var(--bg-3); }
-.coach-attach-menu button span.ico { font-size: 17px; width: 20px; text-align: center; }
-#coachSendBtn:disabled, #coachSendBtn.coach-send-muted {
-  background: var(--bg-4); color: var(--text-mute);
-  cursor: default; box-shadow: none; opacity: 1;
+.coach-composer .composer-send {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; padding: 0;
+  background: var(--accent); color: var(--bg); border: none;
+  font-size: 19px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: transform 0.12s, opacity 0.12s;
 }
-.coach-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 4px; }
+.coach-composer .composer-send:active { transform: scale(0.92); }
+.coach-composer .composer-send:disabled { display: none; }
+.coach-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; }
 .coach-attach-chip {
   display: inline-flex; align-items: center; gap: 8px; max-width: 220px;
   background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;
@@ -5422,7 +5440,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v69',
+      app_version: 'v70',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -11028,7 +11046,7 @@ async function renderDashWeekStrip() {
   let completed = [];
   try {
     const { data: pl } = await sb.from('planned_workouts')
-      .select('scheduled_date, sport')
+      .select('scheduled_date, sport, skipped, skip_reason')
       .eq('user_id', state.user.id)
       .gte('scheduled_date', startStr)
       .lte('scheduled_date', endStr);
@@ -11046,9 +11064,12 @@ async function renderDashWeekStrip() {
 
   // Map: dateStr → { hasPlanned: bool, hasCompleted: bool }
   const dayMap = {};
-  for (const d of days) dayMap[d.dateStr] = { hasPlanned: false, hasCompleted: false };
+  for (const d of days) dayMap[d.dateStr] = { hasPlanned: false, hasCompleted: false, hasSkipped: false };
   for (const p of planned) {
-    if (dayMap[p.scheduled_date]) dayMap[p.scheduled_date].hasPlanned = true;
+    if (dayMap[p.scheduled_date]) {
+      dayMap[p.scheduled_date].hasPlanned = true;
+      if (p.skipped) dayMap[p.scheduled_date].hasSkipped = true;
+    }
   }
   for (const c of completed) {
     // Bucket by LOCAL day (was previously taking the UTC date out of the
@@ -11068,9 +11089,16 @@ async function renderDashWeekStrip() {
           const dm = dayMap[d.dateStr];
           let dotColor = 'rgba(255, 255, 255, 0.08)';
           let dotLabel = '';
+          let darkText = false;
           if (dm.hasCompleted) {
             dotColor = 'var(--accent)';
             dotLabel = '✓';
+            darkText = true;
+          } else if (dm.hasSkipped) {
+            // Excused skip (sick/injured/etc.) gets its own amber state, NOT "missed".
+            dotColor = 'rgba(255, 196, 0, 0.9)';
+            dotLabel = '–';
+            darkText = true;
           } else if (dm.hasPlanned && d.isPast) {
             dotColor = 'rgba(239, 68, 68, 0.6)';
             dotLabel = '·';
@@ -11082,14 +11110,15 @@ async function renderDashWeekStrip() {
           return `
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; ${d.isToday ? 'opacity: 1;' : 'opacity: 0.85;'}">
               <div style="font-size: 10px; color: ${d.isToday ? 'var(--accent)' : 'var(--text-mute)'}; font-weight: ${d.isToday ? '800' : '600'}; text-transform: uppercase;">${d.label}</div>
-              <div style="width: 28px; height: 28px; border-radius: 50%; background: ${dotColor}; display: flex; align-items: center; justify-content: center; ${d.isToday ? 'box-shadow: 0 0 0 2px var(--accent);' : ''} font-size: 10px; color: ${dm.hasCompleted ? 'var(--bg)' : 'var(--text-dim)'}; font-weight: 800;">${dotLabel || dayNum}</div>
+              <div style="width: 28px; height: 28px; border-radius: 50%; background: ${dotColor}; display: flex; align-items: center; justify-content: center; ${d.isToday ? 'box-shadow: 0 0 0 2px var(--accent);' : ''} font-size: 11px; color: ${darkText ? 'var(--bg)' : 'var(--text-dim)'}; font-weight: 800;">${dotLabel || dayNum}</div>
             </div>
           `;
         }).join('')}
       </div>
-      <div style="display: flex; gap: 14px; margin-top: 10px; font-size: 10px; color: var(--text-mute);">
+      <div style="display: flex; gap: 14px; margin-top: 10px; font-size: 10px; color: var(--text-mute); flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></div>Done</div>
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(80, 130, 255, 0.6);"></div>Planned</div>
+        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 196, 0, 0.9);"></div>Skipped</div>
         <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: rgba(239, 68, 68, 0.6);"></div>Missed</div>
       </div>
     </div>
@@ -14635,18 +14664,12 @@ function renderCoachInputRow(gate) {
       <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
         ${trialHint}
         <div id="coachAttachPreview"></div>
-        <div style="display: flex; gap: 8px; align-items: flex-end;">
-          <div style="position: relative; flex-shrink: 0;">
-            <button type="button" id="coachAttachBtn" class="coach-attach-btn" onclick="toggleCoachAttachMenu(event)" aria-label="Add a photo or file">+</button>
-            <div id="coachAttachMenu" class="coach-attach-menu" style="display: none;">
-              <button type="button" onclick="coachPickAttachment('photo')"><span class="ico">🖼️</span> Photo</button>
-              <button type="button" onclick="coachPickAttachment('file')"><span class="ico">📄</span> File</button>
-            </div>
-          </div>
-          <textarea id="chatInput" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)" style="flex: 1;"></textarea>
-          <button class="btn" id="coachSendBtn" onclick="sendChatMsg()" disabled>${t('common.send')}</button>
+        <div class="coach-composer">
+          <button type="button" id="coachAttachBtn" class="composer-plus" onclick="coachPickAttachment()" aria-label="Add a photo or file">+</button>
+          <textarea id="chatInput" class="composer-input" placeholder="${t('coach.input.placeholder')}" rows="1" oninput="onChatInputChange(this)" onkeydown="handleChatInputKeydown(event)"></textarea>
+          <button type="button" id="coachSendBtn" class="composer-send" onclick="sendChatMsg()" aria-label="Send" disabled>↑</button>
         </div>
-        <input type="file" id="coachFileInput" style="display: none;" onchange="onCoachFileChosen(this)" />
+        <input type="file" id="coachFileInput" accept="image/*" style="display: none;" onchange="onCoachFileChosen(this)" />
       </div>
     `;
   }
@@ -14669,38 +14692,18 @@ async function refreshCoachInputRow() {
 }
 
 // ═══ COACH COMPOSER, attachments (+) + smart send button ═════════════
-// UI layer for now: a + menu opens a Photo/File picker, attached items show as
-// removable chips, and the Send button stays grey until there's text OR an
-// attachment (then it goes green). Coach actually READING the photo/file is a
+// The + opens the device's NATIVE picker (iOS shows Photo Library / Take Photo /
+// Choose File; Android shows its gallery/camera/files chooser) — no custom menu.
+// Attached items show as removable chips and the round send arrow appears only
+// when there's text OR an attachment. Coach actually READING the photo/file is a
 // deliberate next step (needs backend vision support) — on send we clear any
 // attachment with a friendly "coming soon" note so nothing silently no-ops.
 let coachAttachments = [];
 
-function toggleCoachAttachMenu(event) {
-  if (event) event.stopPropagation();
-  const menu = document.getElementById('coachAttachMenu');
-  if (!menu) return;
-  const open = menu.style.display !== 'none';
-  if (open) { menu.style.display = 'none'; return; }
-  menu.style.display = 'block';
-  // Close on the next outside click/scroll
-  setTimeout(() => {
-    const close = (e) => {
-      if (e && e.target && e.target.closest && e.target.closest('#coachAttachMenu, #coachAttachBtn')) return;
-      menu.style.display = 'none';
-      document.removeEventListener('click', close, true);
-    };
-    document.addEventListener('click', close, true);
-  }, 0);
-}
-
-function coachPickAttachment(kind) {
-  const menu = document.getElementById('coachAttachMenu');
-  if (menu) menu.style.display = 'none';
+// Tap + → open the OS-native photo/file picker directly.
+function coachPickAttachment() {
   const input = document.getElementById('coachFileInput');
   if (!input) return;
-  input.accept = kind === 'photo' ? 'image/*' : '';
-  input.dataset.kind = kind;
   input.value = '';
   input.click();
 }
@@ -14708,9 +14711,10 @@ function coachPickAttachment(kind) {
 function onCoachFileChosen(input) {
   const file = input.files && input.files[0];
   if (!file) return;
+  const isPhoto = (file.type || '').startsWith('image/');
   coachAttachments.push({
-    name: file.name || (input.dataset.kind === 'photo' ? 'photo.jpg' : 'file'),
-    kind: input.dataset.kind || 'file',
+    name: file.name || (isPhoto ? 'photo.jpg' : 'file'),
+    kind: isPhoto ? 'photo' : 'file',
   });
   renderCoachAttachPreview();
   updateCoachSendState();
@@ -14769,6 +14773,7 @@ function setupCoachKeyboardInset() {
   if (!vv || window._coachVVBound) return;
   window._coachVVBound = true;
   const update = () => {
+    measureCoachNav();
     if (!document.body.classList.contains('coach-chat-active')) {
       document.documentElement.style.setProperty('--coach-kb-inset', '0px');
       return;
@@ -14781,10 +14786,27 @@ function setupCoachKeyboardInset() {
   update();
 }
 
+// Measure the (now fixed) top nav so the chat starts exactly below it on ANY
+// device — iPhone notch, Dynamic Island, Samsung punch-hole all differ.
+function measureCoachNav() {
+  const nav = document.getElementById('mainNav');
+  if (!nav || nav.style.display === 'none') return;
+  const h = Math.round(nav.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--coach-nav-h', h + 'px');
+}
+if (typeof window !== 'undefined' && !window._coachNavResizeBound) {
+  window._coachNavResizeBound = true;
+  window.addEventListener('resize', () => { try { measureCoachNav(); } catch (_) {} });
+  window.addEventListener('orientationchange', () => { setTimeout(() => { try { measureCoachNav(); } catch (_) {} }, 250); });
+}
+
 async function renderCoachChat(el, intake) {
   // Full-screen Claude-style chat: lock the page to the viewport + float the composer.
   document.body.classList.add('coach-chat-active');
   setupCoachKeyboardInset();
+  // Measure the fixed nav once styles have applied (it gains safe-area padding
+  // under .coach-chat-active), so the chat sits flush beneath it.
+  requestAnimationFrame(() => { measureCoachNav(); requestAnimationFrame(measureCoachNav); });
 
   // Load the latest 300 messages. Anything older stays in the DB (Coach can still
   // query it for context) but isn't rendered, so the chat never becomes an endless
