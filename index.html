@@ -5422,7 +5422,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v68',
+      app_version: 'v69',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -14986,6 +14986,18 @@ function renderMsg(role, content, contextType = null, msgId = null) {
     actionsHtml = `
       <div style="margin-top: 12px; font-size: 12px; color: var(--accent); padding: 4px 0;">✓ Plan regenerated</div>
     `;
+  } else if (role === 'coach' && contextType === 'plan_pattern_suggestion') {
+    // Proactive "I noticed you keep moving/skipping X" offer.
+    actionsHtml = `
+      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="applyPlanPatternSuggestion(this)">
+          ✅ Yes, update my plan
+        </button>
+        <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="dismissPlanPatternSuggestion(this)">
+          No, keep as is
+        </button>
+      </div>
+    `;
   }
 
   return `
@@ -19774,17 +19786,25 @@ async function skipWorkout(workoutId, reason) {
   document.getElementById('skipWorkoutModal')?.remove();
   if (!state.user) return;
   try {
-    const { error } = await sb.from('planned_workouts')
+    const { data: updatedRow, error } = await sb.from('planned_workouts')
       .update({
         skipped: true,
         skip_reason: reason,
         skipped_at: new Date().toISOString(),
       })
       .eq('id', workoutId)
-      .eq('user_id', state.user.id);
+      .eq('user_id', state.user.id)
+      .select('sport, scheduled_date')
+      .maybeSingle();
     if (error) throw error;
     trackEvent('workout_skipped', { reason });
     toast('Marked as skipped, Coach knows');
+    // Log for proactive pattern detection (e.g. "always skips Saturday run").
+    if (updatedRow?.scheduled_date) {
+      const wd = new Date(updatedRow.scheduled_date + 'T12:00:00').getDay();
+      logPlanChange({ type: 'skip', sport: updatedRow.sport, fromWeekday: wd, reason, date: updatedRow.scheduled_date, sig: `skip:${updatedRow.sport}:${wd}` });
+      maybeSuggestPlanPattern();
+    }
     closeWorkoutPanel();
     // If user said sick/injured, offer to escalate to a multi-day adjustment
     if (reason === 'sick' || reason === 'injured') {
@@ -19907,27 +19927,38 @@ function openSwapWorkoutMenu(workoutId, currentDate) {
       <input type="date" id="swapDateInput" min="${today}" max="${maxDateStr}" value="${currentDate}" style="width: 100%; padding: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px; margin-bottom: 14px;" />
       <div style="display: flex; gap: 8px;">
         <button onclick="document.getElementById('swapWorkoutModal')?.remove()" style="flex: 1; padding: 12px; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); font-size: 14px; cursor: pointer;">Cancel</button>
-        <button onclick="swapWorkoutDate('${workoutId}')" class="btn" style="flex: 1; padding: 12px; font-size: 14px;">Move</button>
+        <button onclick="swapWorkoutDate('${workoutId}', '${currentDate}')" class="btn" style="flex: 1; padding: 12px; font-size: 14px;">Move</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
 }
 
-async function swapWorkoutDate(workoutId) {
+async function swapWorkoutDate(workoutId, fromDate) {
   const input = document.getElementById('swapDateInput');
   const newDate = input?.value;
   if (!newDate) { toast('Pick a date'); return; }
   document.getElementById('swapWorkoutModal')?.remove();
   if (!state.user) return;
   try {
-    const { error } = await sb.from('planned_workouts')
+    const { data: movedRow, error } = await sb.from('planned_workouts')
       .update({ scheduled_date: newDate })
       .eq('id', workoutId)
-      .eq('user_id', state.user.id);
+      .eq('user_id', state.user.id)
+      .select('sport')
+      .maybeSingle();
     if (error) throw error;
     trackEvent('workout_moved', { new_date: newDate });
     toast('Workout moved');
+    // Log for proactive pattern detection (e.g. "always moves Saturday → Monday").
+    if (movedRow && fromDate) {
+      const fromWd = new Date(fromDate + 'T12:00:00').getDay();
+      const toWd = new Date(newDate + 'T12:00:00').getDay();
+      if (fromWd !== toWd) {
+        logPlanChange({ type: 'move', sport: movedRow.sport, fromWeekday: fromWd, toWeekday: toWd, date: fromDate, sig: `move:${movedRow.sport}:${fromWd}->${toWd}` });
+        maybeSuggestPlanPattern();
+      }
+    }
     closeWorkoutPanel();
     if (typeof renderPlan === 'function') renderPlan();
     if (typeof renderDashTodayCard === 'function') {
@@ -19938,6 +19969,132 @@ async function swapWorkoutDate(workoutId) {
     console.error('[Stryxs] swapWorkoutDate failed:', err);
     toast('Could not move, try again');
   }
+}
+
+// ═══ PLAN-CHANGE PATTERN DETECTION ═══════════════════════════════════
+// Coach already sees the current plan + skip flags in chat context, so it
+// always "knows what's going on" without a message per change. On top of that,
+// we keep a small local log of skips/moves: when the SAME change repeats across
+// ≥3 distinct weeks (e.g. "Saturday long run → Monday" every week), Coach
+// proactively offers to make it permanent. One suggestion per pattern, easily
+// dismissed. No spam for one-off changes.
+const PLAN_PATTERN_MIN_WEEKS = 3;
+const _WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function _planChangeKey() { return state.user ? `stryxs_plan_changes_${state.user.id}` : null; }
+function _planPatternDoneKey() { return state.user ? `stryxs_plan_pattern_done_${state.user.id}` : null; }
+function _planPatternPendingKey() { return state.user ? `stryxs_plan_pattern_pending_${state.user.id}` : null; }
+
+function _weekKeyOf(dateStr) {
+  // Monday-anchored week bucket for a YYYY-MM-DD date
+  const d = new Date(dateStr + 'T12:00:00');
+  const mondayOffset = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - mondayOffset);
+  return toLocalYMD(d);
+}
+
+function logPlanChange(entry) {
+  const key = _planChangeKey();
+  if (!key || !entry || !entry.date || !entry.sig) return;
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
+  log.push({ ...entry, ts: Date.now() });
+  const cutoff = Date.now() - 70 * 24 * 60 * 60 * 1000; // ~10 weeks
+  log = log.filter(e => e && e.ts >= cutoff).slice(-50);
+  try { localStorage.setItem(key, JSON.stringify(log)); } catch (_) {}
+}
+
+function detectPlanChangePattern() {
+  const key = _planChangeKey();
+  if (!key) return null;
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
+  if (log.length < PLAN_PATTERN_MIN_WEEKS) return null;
+  const groups = {};
+  for (const e of log) {
+    if (!e || !e.sig || !e.date) continue;
+    if (!groups[e.sig]) groups[e.sig] = { weeks: new Set(), sample: e };
+    groups[e.sig].weeks.add(_weekKeyOf(e.date));
+  }
+  let best = null;
+  for (const sig in groups) {
+    const weeks = groups[sig].weeks.size;
+    if (weeks >= PLAN_PATTERN_MIN_WEEKS && (!best || weeks > best.weeks)) {
+      best = { sig, weeks, sample: groups[sig].sample };
+    }
+  }
+  return best;
+}
+
+function _markPlanPatternDone(sig) {
+  try { localStorage.removeItem(_planPatternPendingKey()); } catch (_) {}
+  if (!sig) return;
+  const k = _planPatternDoneKey();
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem(k) || '[]'); } catch (_) {}
+  if (!done.includes(sig)) done.push(sig);
+  try { localStorage.setItem(k, JSON.stringify(done)); } catch (_) {}
+}
+
+async function maybeSuggestPlanPattern() {
+  if (!state.user) return;
+  const pattern = detectPlanChangePattern();
+  if (!pattern) return;
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem(_planPatternDoneKey()) || '[]'); } catch (_) {}
+  if (done.includes(pattern.sig)) return;
+  try { if (localStorage.getItem(_planPatternPendingKey())) return; } catch (_) {}
+
+  const s = pattern.sample;
+  const sportLabel = s.sport || 'workout';
+  let message, requestText;
+  if (s.type === 'move') {
+    const fromDay = _WEEKDAY_NAMES[s.fromWeekday];
+    const toDay = _WEEKDAY_NAMES[s.toWeekday];
+    message = `I noticed you've been moving your ${fromDay} ${sportLabel} to ${toDay} for the last few weeks. Want me to make ${toDay} the regular day for it across the rest of your plan? I'd keep the training load the same.`;
+    requestText = `I keep moving my ${fromDay} ${sportLabel} to ${toDay}. Please update my plan so it's scheduled on ${toDay} going forward, keeping the same training load.`;
+  } else {
+    const fromDay = _WEEKDAY_NAMES[s.fromWeekday];
+    message = `I noticed you've skipped your ${fromDay} ${sportLabel} for the last few weeks. Want me to rework that day for the rest of your plan, for example move it to a day that works better or make it lighter?`;
+    requestText = `I keep skipping my ${fromDay} ${sportLabel}. Please rework my plan so that day works better for me going forward.`;
+  }
+
+  try {
+    await sb.from('coach_messages').insert({
+      user_id: state.user.id, role: 'coach', content: message, context_type: 'plan_pattern_suggestion',
+    });
+    try { localStorage.setItem(_planPatternPendingKey(), JSON.stringify({ sig: pattern.sig, requestText })); } catch (_) {}
+    setCoachUnread(true);
+  } catch (e) {
+    console.warn('[Stryxs] plan pattern suggestion insert failed (non-fatal):', e);
+  }
+}
+
+// User accepted the proactive suggestion: route the request through the normal
+// Coach chat so Coach proposes/adjusts the plan with full context.
+async function applyPlanPatternSuggestion(btn) {
+  const wrap = btn.closest('.msg-actions-wrap');
+  if (wrap) wrap.remove();
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem(_planPatternPendingKey()) || 'null'); } catch (_) {}
+  _markPlanPatternDone(pending?.sig);
+  const msgEl = btn.closest('.chat-msg');
+  const msgId = msgEl?.getAttribute('data-msg-id');
+  if (msgId) { try { await sb.from('coach_messages').update({ context_type: 'plan_pattern_suggestion_done' }).eq('id', msgId); } catch (_) {} }
+  const requestText = pending?.requestText || "Please update my plan based on the changes I've been making.";
+  const input = document.getElementById('chatInput');
+  if (input) { input.value = requestText; if (typeof updateCoachSendState === 'function') updateCoachSendState(); }
+  sendChatMsg();
+}
+
+async function dismissPlanPatternSuggestion(btn) {
+  const wrap = btn.closest('.msg-actions-wrap');
+  if (wrap) wrap.remove();
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem(_planPatternPendingKey()) || 'null'); } catch (_) {}
+  _markPlanPatternDone(pending?.sig);
+  const msgEl = btn.closest('.chat-msg');
+  const msgId = msgEl?.getAttribute('data-msg-id');
+  if (msgId) { try { await sb.from('coach_messages').update({ context_type: 'plan_pattern_suggestion_done' }).eq('id', msgId); } catch (_) {} }
 }
 
 function askCoachAboutWorkout(workoutId) {
