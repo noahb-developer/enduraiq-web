@@ -2460,6 +2460,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    plain text (no bubble) and the athlete's messages keep a bubble.
    ═══════════════════════════════════════════════════════════ */
 body.coach-chat-active { overflow: hidden; overscroll-behavior: none; }
+/* Lock the document itself so iOS can't rubber-band / pull the whole page up or
+   down behind the fixed bars while you drag inside the chat. */
+html.coach-html-lock { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html.coach-html-lock body { overflow: hidden; }
 body.coach-chat-active .container { padding: 0; max-width: none; }
 /* Pin the top bar so it can NEVER slide off-screen with finger drag / iOS
    rubber-band while in the chat. Fixed (not sticky) + safe-area padding so it
@@ -2509,6 +2513,21 @@ body.coach-chat-active .chat-msg:not(.user) .msg-bubble {
   display: block;
   background: transparent; padding: 0; border-radius: 0;
   max-width: 100%; font-size: 15.5px; line-height: 1.65;
+}
+/* Per-turn "Coach" label, marks the start of each AI message so two replies in
+   a row (e.g. an intro then a follow-up) read as separate, not one wall of text. */
+.msg-turn-head { display: none; }
+body.coach-chat-active .chat-msg:not(.user) .msg-turn-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+  color: var(--text-mute); margin-bottom: 9px;
+}
+body.coach-chat-active .chat-msg:not(.user) .msg-turn-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0;
+}
+/* A hairline divider where two Coach messages meet, extra separation. */
+body.coach-chat-active .chat-msg:not(.user) + .chat-msg:not(.user) {
+  border-top: 1px solid var(--border); padding-top: 22px;
 }
 /* Athlete messages: keep a bubble, right-aligned, neutral surface */
 body.coach-chat-active .chat-msg.user { align-self: flex-end; max-width: 84%; gap: 0; }
@@ -2561,6 +2580,10 @@ body.coach-chat-active .chat-msg.user .msg-bubble strong { color: var(--text); }
 .coach-composer .composer-send:active { transform: scale(0.92); }
 .coach-composer .composer-send:disabled { display: none; }
 .coach-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; }
+.coach-attach-chip .chip-thumb { width: 24px; height: 24px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+/* Photo the athlete sent, shown in their chat bubble */
+.msg-photo { display: block; max-width: 230px; width: 100%; border-radius: 10px; margin-bottom: 6px; }
+.chat-msg.user .msg-bubble:last-child .msg-photo:only-child { margin-bottom: 0; }
 .coach-attach-chip {
   display: inline-flex; align-items: center; gap: 8px; max-width: 220px;
   background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;
@@ -5440,7 +5463,7 @@ async function submitFeedback() {
       message: text || null,
       page,
       user_agent: (navigator.userAgent || '').slice(0, 200),
-      app_version: 'v71',
+      app_version: 'v72',
     });
     if (error) throw error;
     trackEvent('feedback_submitted', { rating: _feedbackRating, message_length: text.length });
@@ -7312,7 +7335,10 @@ function navigate(page) {
   document.body.classList.toggle('on-auth', page === 'login' || page === 'signup');
 
   // Leaving Coach drops the full-screen chat lock (renderCoachChat re-adds it).
-  if (page !== 'coach') document.body.classList.remove('coach-chat-active');
+  if (page !== 'coach') {
+    document.body.classList.remove('coach-chat-active');
+    document.documentElement.classList.remove('coach-html-lock');
+  }
 
   // Hide old landingNav, auth pages now have their own embedded nav
   const landingNav = document.getElementById('landingNav');
@@ -13448,6 +13474,7 @@ async function renderCoach() {
 function renderIntake(el, existingIntake) {
   // The intake flow scrolls normally, it must not inherit the full-screen chat lock.
   document.body.classList.remove('coach-chat-active');
+  document.documentElement.classList.remove('coach-html-lock');
   if (existingIntake) intakeAnswers = { ...existingIntake };
 
   el.innerHTML = `
@@ -14692,10 +14719,8 @@ async function refreshCoachInputRow() {
 // ═══ COACH COMPOSER, attachments (+) + smart send button ═════════════
 // The + opens the device's NATIVE picker (iOS shows Photo Library / Take Photo /
 // Choose File; Android shows its gallery/camera/files chooser) — no custom menu.
-// Attached items show as removable chips and the round send arrow appears only
-// when there's text OR an attachment. Coach actually READING the photo/file is a
-// deliberate next step (needs backend vision support) — on send we clear any
-// attachment with a friendly "coming soon" note so nothing silently no-ops.
+// Photos are resized + base64-encoded and sent to Coach as a vision block so it
+// can actually READ and analyze them (a watch screenshot, a stats page, a plan).
 let coachAttachments = [];
 
 // Tap + → open the OS-native photo/file picker directly.
@@ -14706,14 +14731,50 @@ function coachPickAttachment() {
   input.click();
 }
 
-function onCoachFileChosen(input) {
+// Downscale + JPEG-compress an image file so the base64 payload stays small
+// enough to POST to the edge function and to Claude's vision API.
+function readImageResized(file, maxDim = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({ dataUrl, base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onCoachFileChosen(input) {
   const file = input.files && input.files[0];
   if (!file) return;
   const isPhoto = (file.type || '').startsWith('image/');
-  coachAttachments.push({
-    name: file.name || (isPhoto ? 'photo.jpg' : 'file'),
-    kind: isPhoto ? 'photo' : 'file',
-  });
+  if (isPhoto) {
+    try {
+      const im = await readImageResized(file);
+      coachAttachments.push({ name: file.name || 'photo.jpg', kind: 'photo', dataUrl: im.dataUrl, base64: im.base64, mediaType: im.mediaType });
+    } catch (e) {
+      console.warn('[Stryxs] image read failed:', e);
+      toast('Could not read that image, try another.');
+      return;
+    }
+  } else {
+    coachAttachments.push({ name: file.name || 'file', kind: 'file' });
+  }
   renderCoachAttachPreview();
   updateCoachSendState();
 }
@@ -14737,7 +14798,9 @@ function renderCoachAttachPreview() {
     <div class="coach-attach-chips">
       ${coachAttachments.map((a, i) => `
         <span class="coach-attach-chip">
-          <span class="ico">${a.kind === 'photo' ? '🖼️' : '📄'}</span>
+          ${a.kind === 'photo' && a.dataUrl
+            ? `<img class="chip-thumb" src="${a.dataUrl}" alt="" />`
+            : `<span class="ico">📄</span>`}
           <span class="name">${escapeHtml(a.name)}</span>
           <button type="button" onclick="removeCoachAttachment(${i})" aria-label="Remove">✕</button>
         </span>
@@ -14763,6 +14826,58 @@ function updateCoachSendState() {
   btn.classList.toggle('coach-send-muted', !active);
 }
 
+// Save a workout that Coach extracted from a photo (a session that never synced).
+// Sets created_at to the workout's actual DATE so it lands on the right day for
+// streaks / this-week / adherence (saveWorkout alone defaults created_at to now).
+async function logWorkoutFromPhoto(btn, encoded) {
+  if (!state.user) return;
+  let d;
+  try { d = JSON.parse(decodeURIComponent(encoded)); } catch (_) { toast('Could not read those workout details.'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  const date = (d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date)) ? d.date : getClientToday();
+  const sport = (d.sport || 'run').toLowerCase();
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : null; };
+
+  // Match to a planned workout that day → counts toward adherence; else extra.
+  let classification = 'extra_training';
+  try {
+    const { data: pw } = await sb.from('planned_workouts').select('sport').eq('user_id', state.user.id).eq('scheduled_date', date).limit(5);
+    if (pw && pw.some(p => (p.sport || '').toLowerCase() === sport)) classification = 'plan';
+  } catch (_) {}
+
+  const workout = {
+    sport, date,
+    duration: num(d.duration_minutes),
+    distance: num(d.distance_km),
+    avgHr: parseInt(d.avg_hr) || null,
+    maxHr: parseInt(d.max_hr) || null,
+    description: (d.notes || 'Logged from a photo via Coach').slice(0, 300),
+    source: 'photo',
+    activity_classification: classification,
+    _logged_at: new Date().toISOString(),
+  };
+  try {
+    const { error } = await sb.from('workouts').insert({
+      user_id: state.user.id,
+      sport,
+      workout_data: workout,
+      source: 'photo',
+      activity_classification: classification,
+      created_at: new Date(date + 'T12:00:00').toISOString(),
+    });
+    if (error) throw error;
+    try { await loadWorkouts(); } catch (_) {}
+    try { trackEvent('workout_logged_from_photo', { sport }); } catch (_) {}
+    const wrap = btn?.closest('[data-photo-log]');
+    if (wrap) wrap.innerHTML = `<div class="msg-bubble" style="background: rgba(0,229,160,0.06); border: 1px solid var(--accent-border); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--accent);">✓ Added to your log</div>`;
+    toast('Workout added to your log');
+  } catch (err) {
+    console.error('[Stryxs] logWorkoutFromPhoto failed:', err);
+    if (btn) { btn.disabled = false; btn.textContent = '➕ Add it'; }
+    toast('Could not add the workout, try again.');
+  }
+}
+
 // Keep the Coach composer floating above the on-screen keyboard. Mobile browsers
 // shrink the visual viewport (not the layout viewport) when the keyboard opens, so
 // we measure the gap and expose it as --coach-kb-inset for the full-screen CSS.
@@ -14771,16 +14886,18 @@ function setupCoachKeyboardInset() {
   if (!vv || window._coachVVBound) return;
   window._coachVVBound = true;
   const update = () => {
-    measureCoachNav();
     if (!document.body.classList.contains('coach-chat-active')) {
       document.documentElement.style.setProperty('--coach-kb-inset', '0px');
       return;
     }
-    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // Keyboard height = layout viewport minus the (shrunk) visual viewport.
+    // We deliberately ignore vv.offsetTop and only listen to "resize" (NOT
+    // "scroll"): listening to scroll made the fixed bars slide up/down as the
+    // user dragged/over-scrolled the chat (offsetTop changes during the bounce).
+    const inset = Math.max(0, window.innerHeight - vv.height);
     document.documentElement.style.setProperty('--coach-kb-inset', inset + 'px');
   };
   vv.addEventListener('resize', update);
-  vv.addEventListener('scroll', update);
   update();
 }
 
@@ -14801,6 +14918,7 @@ if (typeof window !== 'undefined' && !window._coachNavResizeBound) {
 async function renderCoachChat(el, intake) {
   // Full-screen Claude-style chat: lock the page to the viewport + float the composer.
   document.body.classList.add('coach-chat-active');
+  document.documentElement.classList.add('coach-html-lock');
   setupCoachKeyboardInset();
   // Measure the fixed nav once styles have applied (it gains safe-area padding
   // under .coach-chat-active), so the chat sits flush beneath it.
@@ -14984,9 +15102,10 @@ async function loadCoachPersonaBadge(intake) {
   }
 }
 
-function renderMsg(role, content, contextType = null, msgId = null) {
+function renderMsg(role, content, contextType = null, msgId = null, imageUrl = null) {
   const avatar = role === 'coach' ? '🧠' : (state.user?.name?.[0]?.toUpperCase() || 'A');
   const formatted = role === 'coach' ? formatMarkdown(content) : escapeHtml(content);
+  const imgHtml = imageUrl ? `<img class="msg-photo" src="${imageUrl}" alt="attached photo" />` : '';
 
   // Special button for settings_change_reactive context (only show if NOT already applied)
   let actionsHtml = '';
@@ -15020,10 +15139,17 @@ function renderMsg(role, content, contextType = null, msgId = null) {
     `;
   }
 
+  // Small turn label above each Coach message so consecutive boxless replies are
+  // clearly separated (you can see where one message ends and the next begins).
+  const turnHead = role === 'coach'
+    ? `<div class="msg-turn-head"><span class="msg-turn-dot"></span>Coach</div>`
+    : '';
   return `
     <div class="chat-msg ${role === 'coach' ? '' : 'user'}"${msgId ? ` data-msg-id="${msgId}"` : ''}>
+      ${turnHead}
       <div class="msg-avatar">${avatar}</div>
       <div class="msg-bubble">
+        ${imgHtml}
         ${formatted}
         ${actionsHtml ? `<div class="msg-actions-wrap">${actionsHtml}</div>` : ''}
       </div>
@@ -15313,28 +15439,33 @@ async function sendChatMsg() {
   const msgs = document.getElementById('chatMessages');
   if (!input || !msgs) return;
   const text = input.value.trim();
-  // Attachments are UI-only for now: Coach can't read photos/files yet. Clear
-  // them with a friendly note so a tapped "send" never silently does nothing.
-  if (coachAttachments.length) {
-    clearCoachAttachments();
-    toast("Sharing photos & files with Coach is coming soon.", 4000);
+  // Capture an attached photo for Coach vision (one-shot, not persisted). Other
+  // file types aren't analyzable yet.
+  const photo = coachAttachments.find(a => a.kind === 'photo' && a.base64);
+  if (coachAttachments.some(a => a.kind !== 'photo') && !photo) {
+    toast('Coach can read photos for now, not other file types yet.', 4000);
   }
-  if (!text) { updateCoachSendState(); return; }
+  const photoForApi = photo ? { base64: photo.base64, mediaType: photo.mediaType } : null;
+  const photoThumb = photo?.dataUrl || null;
+  clearCoachAttachments();
+  if (!text && !photoForApi) { updateCoachSendState(); return; }
   input.value = '';
   // Reset textarea height after clearing so it shrinks back
   input.style.height = 'auto';
   updateCoachSendState();
   input.disabled = true;
 
-  // Append user msg immediately
-  msgs.innerHTML += renderMsg('user', text);
+  // Append user msg immediately (with the photo thumbnail if present)
+  msgs.innerHTML += renderMsg('user', text, null, null, photoThumb);
   msgs.scrollTop = msgs.scrollHeight;
 
-  // Save user msg to db. Wrap in try/catch so a transient RLS or network
-  // error doesn't leave the input permanently disabled with no error UI.
+  // Save user msg to db (text + a marker if a photo was attached; the image is a
+  // one-shot for analysis and isn't stored). Wrap in try/catch so a transient
+  // RLS or network error doesn't leave the input permanently disabled.
+  const dbContent = text || (photoForApi ? '📷 Photo' : '');
   try {
     const { error: insertErr } = await sb.from('coach_messages').insert({
-      user_id: state.user.id, role: 'user', content: text, context_type: 'general_chat',
+      user_id: state.user.id, role: 'user', content: dbContent, context_type: 'general_chat',
     });
     if (insertErr) throw insertErr;
   } catch (saveErr) {
@@ -15346,7 +15477,7 @@ async function sendChatMsg() {
   }
 
   // Append thinking indicator
-  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">Thinking...</span></div></div>`;
+  msgs.innerHTML += `<div class="chat-msg" id="thinkingMsg"><div class="msg-avatar">🧠</div><div class="msg-bubble"><span style="opacity:0.6;">${photoForApi ? 'Analyzing your photo…' : 'Thinking...'}</span></div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
 
   try {
@@ -15399,6 +15530,17 @@ async function sendChatMsg() {
       content: h.content,
     }));
 
+    // If a photo was attached, replace the current (last) user turn's content
+    // with a Claude vision block so Coach can actually see + analyze the image.
+    if (photoForApi && messages.length) {
+      const last = messages[messages.length - 1];
+      last.role = 'user';
+      last.content = [
+        { type: 'text', text: text || "Here's a photo. Read it carefully, tell me exactly what it shows, give me your analysis, and take any action that makes sense (e.g. log a workout that didn't sync)." },
+        { type: 'image', source: { type: 'base64', media_type: photoForApi.mediaType, data: photoForApi.base64 } },
+      ];
+    }
+
     // Round 1 audit fix: pass active insights into chat context so Coach is
     // aware of patterns it has flagged. Without this, Coach gives generic
     // answers to questions like "how am I doing?" while ignoring the very
@@ -15443,8 +15585,34 @@ async function sendChatMsg() {
     const thinking = document.getElementById('thinkingMsg');
     if (thinking) thinking.remove();
 
+    // Coach may emit a structured "log this workout" block when it reads a
+    // workout photo that didn't sync. Strip it from the visible text and offer
+    // a one-tap "Add this workout" button (the user confirms before it's saved).
+    let displayReply = reply;
+    let logWorkoutJson = null;
+    const logMatch = reply.match(/```stryxs:log_workout\s*([\s\S]*?)```/);
+    if (logMatch) {
+      displayReply = reply.replace(logMatch[0], '').trim();
+      try { logWorkoutJson = JSON.parse(logMatch[1].trim()); } catch (_) { logWorkoutJson = null; }
+    }
+
     // Append reply
-    msgs.innerHTML += renderMsg('coach', reply);
+    msgs.innerHTML += renderMsg('coach', displayReply);
+    if (logWorkoutJson && logWorkoutJson.sport) {
+      const enc = encodeURIComponent(JSON.stringify(logWorkoutJson));
+      const summary = [logWorkoutJson.sport, logWorkoutJson.date, (logWorkoutJson.duration_minutes ? logWorkoutJson.duration_minutes + ' min' : ''), (logWorkoutJson.distance_km ? logWorkoutJson.distance_km + ' km' : '')].filter(Boolean).join(' · ');
+      msgs.innerHTML += `
+        <div class="chat-msg" data-photo-log>
+          <div class="msg-bubble" style="background: rgba(0,229,160,0.06); border: 1px solid var(--accent-border); border-radius: 12px; padding: 12px 14px;">
+            <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">Add this workout to your log?</div>
+            <div style="font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 10px;">${escapeHtml(summary)}</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn" style="font-size: 13px; padding: 8px 14px;" onclick="logWorkoutFromPhoto(this, '${enc}')">➕ Add it</button>
+              <button class="btn ghost" style="font-size: 13px; padding: 8px 14px;" onclick="this.closest('[data-photo-log]')?.remove()">No thanks</button>
+            </div>
+          </div>
+        </div>`;
+    }
 
     // ═══ SMART SCROLL ═══
     // Always scroll so the TOP of the new Coach message aligns with the top of
